@@ -229,7 +229,8 @@ export function PaginatedTable({
   headers: string[];
   rows: (string | ReactNode)[][];
   /** Mesma ordem de `rows`: exibe coluna Controle com o número do registro. */
-  recordItems?: { controlNumber?: number | null }[];
+  /** Itens alinhados a `rows`; coluna Controle só aparece se tiver `controlNumber`. */
+  recordItems?: unknown[];
   page: number;
   totalPages: number;
   total: number;
@@ -238,7 +239,10 @@ export function PaginatedTable({
   const showControl = recordItems != null && recordItems.length === rows.length;
   const tableHeaders = showControl ? ['Controle', ...headers] : headers;
   const tableRows = showControl
-    ? rows.map((row, i) => [formatRecordControl(recordItems[i]?.controlNumber), ...row])
+    ? rows.map((row, i) => {
+        const cn = (recordItems[i] as { controlNumber?: number | null } | undefined)?.controlNumber;
+        return [formatRecordControl(cn), ...row];
+      })
     : rows;
 
   return (
