@@ -1,0 +1,18 @@
+ALERTAS GERENCIAIS
+
+Por exemplo:
+
+* ⚠️ caixa projetado abaixo do limite;
+* ⚠️ aumento anormal de determinada despesa;
+* ⚠️ fornecedor com aumento de preço;
+* ⚠️ contas a receber atrasadas;
+* ⚠️ compra futura com impacto elevado no caixa;
+* ⚠️ orçamento próximo do limite;
+* ⚠️ custo de produção aumentando;
+* ⚠️ manutenção consumindo mais que o previsto.
+
+⸻
+
+E tem uma coisa ainda mais importante para você
+
+Eu faria o financeiro conversar com todas as outras áreas.

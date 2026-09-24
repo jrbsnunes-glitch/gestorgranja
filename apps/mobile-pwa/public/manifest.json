@@ -1,0 +1,9 @@
+{
+  "name": "GestorGranja Campo",
+  "short_name": "GG Campo",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ecfdf5",
+  "theme_color": "#047857",
+  "icons": []
+}

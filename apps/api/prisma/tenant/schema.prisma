@@ -1,0 +1,1259 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/tenant-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("TENANT_DATABASE_URL")
+}
+
+// --- Platform / RBAC ---
+
+model Role {
+  id          String               @id @default(uuid())
+  name        String               @unique
+  permissions RolePermission[]
+  assignments UserRoleAssignment[]
+}
+
+model Permission {
+  id       String           @id @default(uuid())
+  code     String           @unique
+  module   String
+  action   String
+  roles    RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id              String               @id @default(uuid())
+  controlNumber   Int                  @unique @default(autoincrement())
+  /// Login na tela (slug + username + senha). E-mail é cadastro interno.
+  username        String               @unique
+  email           String               @unique
+  passwordHash    String
+  name            String
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  roleAssignments UserRoleAssignment[]
+  auditLogs       AuditLog[]
+  employees       Employee[]
+  cashSessions    CashRegisterSession[] @relation("CashSessionUser")
+  reconciledCashSessions CashRegisterSession[] @relation("CashSessionReconciledBy")
+}
+
+model UserRoleAssignment {
+  id           String  @id @default(uuid())
+  userId       String
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId       String
+  role         Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  barnId       String?
+  barn         Barn?   @relation(fields: [barnId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([barnId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entity     String
+  entityId   String?
+  beforeJson Json?
+  afterJson  Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model DocumentAttachment {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  fileName   String
+  mimeType   String?
+  storageKey String
+  uploadedAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
+
+enum AlertType {
+  LICENSE_EXPIRY
+  WITHDRAWAL_PERIOD
+  LOW_STOCK
+  PAYMENT_DUE
+  SYNC_CONFLICT
+  RECEIVABLE_OVERDUE
+  CASH_PROJECTION_BELOW_LIMIT
+  BUDGET_PACE_WARNING
+  PURCHASE_CASH_IMPACT
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Alert {
+  id            String      @id @default(uuid())
+  controlNumber Int         @unique @default(autoincrement())
+  type        AlertType
+  status      AlertStatus @default(OPEN)
+  title       String
+  message     String
+  referenceId String?
+  dueAt       DateTime?
+  createdAt   DateTime    @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status, type])
+}
+
+model SyncConflict {
+  id            String   @id @default(uuid())
+  operationId   String   @unique
+  entityType    String
+  entityId      String?
+  clientPayload Json
+  serverPayload Json?
+  resolved      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model ProcessedSyncOperation {
+  operationId String   @id
+  type        String
+  processedAt DateTime @default(now())
+}
+
+// --- Cadastros ---
+
+model Company {
+  id           String  @id @default(uuid())
+  legalName    String
+  tradeName    String?
+  cnpj         String  @unique
+  stateReg     String?
+  address      String?
+  city         String?
+  state        String?
+  zipCode      String?
+  phone        String?
+  email        String?
+  logoUrl      String?
+  fiscalIssuerSettings FiscalIssuerSettings?
+}
+
+model HrSettings {
+  id                             String  @id @default("default")
+  /// Aviso quando retiradas pendentes na competência ultrapassarem este % do salário base (referência OJ 18 SDC/TST).
+  productWithdrawalWarnPct       Decimal @default(70) @db.Decimal(5, 2)
+  requireWithdrawalPayrollAuth   Boolean @default(true)
+  /// true: cada retirada (RET_PROD) em linha no holerite; false: uma linha consolidada + anexo detalhado na impressão.
+  detailWithdrawalsOnPayslip     Boolean @default(true)
+  /// Campos opcionais do holerite (merge com defaults no HrSettingsService).
+  payslipFields                  Json    @default("{}")
+}
+
+model FinanceAlertSettings {
+  id                        String  @id @default("default")
+  minCashBalance            Decimal @default(0) @db.Decimal(14, 2)
+  enableReceivableOverdue   Boolean @default(true)
+  enablePaymentDue          Boolean @default(true)
+  enableBudgetPace          Boolean @default(true)
+  enablePurchaseImpact      Boolean @default(true)
+  purchaseImpactThresholdPct Decimal @default(25) @db.Decimal(5, 2)
+  budgetPaceWarningPct      Decimal @default(85) @db.Decimal(5, 2)
+}
+
+model BudgetLine {
+  id             String       @id @default(uuid())
+  yearMonth      String
+  chartAccountId String
+  chartAccount   ChartAccount @relation(fields: [chartAccountId], references: [id])
+  amountPlanned  Decimal      @db.Decimal(14, 2)
+
+  @@unique([yearMonth, chartAccountId])
+}
+
+model Barn {
+  id              String               @id @default(uuid())
+  controlNumber   Int                  @unique @default(autoincrement())
+  code            String               @unique
+  name            String
+  capacity        Int?
+  isActive        Boolean              @default(true)
+  flockLots       FlockLot[]
+  envReadings     EnvironmentalReading[]
+  roleAssignments UserRoleAssignment[]
+}
+
+model BreedLineage {
+  id             String               @id @default(uuid())
+  code           String               @unique
+  name           String
+  standardPoints BreedStandardPoint[]
+  flockLots      FlockLot[]
+}
+
+model BreedStandardPoint {
+  id             String       @id @default(uuid())
+  breedLineageId String
+  breedLineage   BreedLineage @relation(fields: [breedLineageId], references: [id], onDelete: Cascade)
+  ageDays        Int
+  layRatePct     Decimal      @db.Decimal(6, 3)
+  avgEggWeightG  Decimal      @db.Decimal(6, 2)
+
+  @@unique([breedLineageId, ageDays])
+}
+
+enum FlockLotStatus {
+  ACTIVE
+  FINISHED
+}
+
+enum EggShellType {
+  WHITE
+  BROWN
+  MIXED
+}
+
+model FlockLot {
+  id               String                 @id @default(uuid())
+  controlNumber    Int                    @unique @default(autoincrement())
+  code             String                 @unique
+  barnId           String
+  barn             Barn                   @relation(fields: [barnId], references: [id])
+  breedLineageId   String
+  breedLineage     BreedLineage           @relation(fields: [breedLineageId], references: [id])
+  housingDate      DateTime               @db.Date
+  housedQty        Int
+  eggType          EggShellType?
+  strainNotes      String?
+  supplierBatch    String?
+  expectedEndDate  DateTime?              @db.Date
+  plantNotes       String?
+  status           FlockLotStatus         @default(ACTIVE)
+  finishedAt       DateTime?
+  eggProductions   DailyEggProduction[]
+  mortalities      DailyMortality[]
+  feedConsumptions DailyFeedConsumption[]
+  healthEvents     HealthEvent[]
+  feedTransfersOut FeedTransfer[]         @relation("FeedTransferFrom")
+  feedTransfersIn  FeedTransfer[]         @relation("FeedTransferTo")
+}
+
+// --- Produção ---
+
+model DailyEggProduction {
+  id            String   @id @default(uuid())
+  controlNumber Int      @unique @default(autoincrement())
+  flockLotId    String
+  flockLot      FlockLot @relation(fields: [flockLotId], references: [id], onDelete: Cascade)
+  date          DateTime @db.Date
+  extra         Int      @default(0)
+  large         Int      @default(0)
+  medium        Int      @default(0)
+  small         Int      @default(0)
+  cracked       Int      @default(0)
+  dirty         Int      @default(0)
+  deformed      Int      @default(0)
+  discard       Int      @default(0)
+  avgEggWeightG Decimal? @db.Decimal(6, 2)
+  notes         String?
+  updatedAt     DateTime @updatedAt
+
+  eggStockLedger EggProductionStockLedger?
+
+  @@unique([flockLotId, date])
+}
+
+model EggProductionStockLedger {
+  id                   String             @id @default(uuid())
+  dailyEggProductionId String             @unique
+  dailyEggProduction   DailyEggProduction @relation(fields: [dailyEggProductionId], references: [id], onDelete: Cascade)
+  commercialEggs       Int
+  cartonsQty           Decimal            @db.Decimal(14, 3)
+  boxesQty             Decimal            @db.Decimal(14, 3)
+  updatedAt            DateTime           @updatedAt
+}
+
+model EggStockConfig {
+  id                   String   @id @default("default")
+  enabled              Boolean  @default(true)
+  eggsPerCarton        Int      @default(30)
+  cartonsPerBox        Int      @default(12)
+  syncCartons          Boolean  @default(true)
+  syncBoxes            Boolean  @default(true)
+  cartonProductId      String?
+  boxProductId         String?
+  /** Custo estimado por ovo comercial (extra+G+M+P) — usado nas entradas da postura. */
+  costPerCommercialEgg Decimal? @db.Decimal(14, 4)
+  chartAccountId       String?
+  chartAccount         ChartAccount? @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+}
+
+enum MortalityCause {
+  UNKNOWN
+  DISEASE
+  HEAT_STRESS
+  PREDATOR
+  OTHER
+}
+
+model DailyMortality {
+  id            String          @id @default(uuid())
+  controlNumber Int             @unique @default(autoincrement())
+  flockLotId String
+  flockLot   FlockLot        @relation(fields: [flockLotId], references: [id], onDelete: Cascade)
+  date       DateTime        @db.Date
+  quantity   Int
+  cause      MortalityCause  @default(UNKNOWN)
+  causeNotes String?
+  updatedAt  DateTime        @updatedAt
+
+  @@index([flockLotId, date])
+}
+
+model DailyFeedConsumption {
+  id            String   @id @default(uuid())
+  controlNumber Int      @unique @default(autoincrement())
+  flockLotId   String
+  flockLot     FlockLot @relation(fields: [flockLotId], references: [id], onDelete: Cascade)
+  date         DateTime @db.Date
+  consumedKg   Decimal  @db.Decimal(12, 3)
+  leftoverKg   Decimal  @default(0) @db.Decimal(12, 3)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([flockLotId, date])
+}
+
+model FeedTransfer {
+  id           String   @id @default(uuid())
+  date         DateTime @db.Date
+  fromLotId    String
+  fromLot      FlockLot @relation("FeedTransferFrom", fields: [fromLotId], references: [id])
+  toLotId      String
+  toLot        FlockLot @relation("FeedTransferTo", fields: [toLotId], references: [id])
+  quantityKg   Decimal  @db.Decimal(12, 3)
+  notes        String?
+}
+
+enum EnvironmentalSource {
+  MANUAL
+  WEBHOOK
+  MQTT
+}
+
+model EnvironmentalReading {
+  id              String              @id @default(uuid())
+  barnId          String
+  barn            Barn                @relation(fields: [barnId], references: [id], onDelete: Cascade)
+  recordedAt      DateTime
+  temperatureC    Decimal?            @db.Decimal(5, 2)
+  humidityPct     Decimal?            @db.Decimal(5, 2)
+  ventilationNote String?
+  source          EnvironmentalSource @default(MANUAL)
+}
+
+// --- Sanidade ---
+
+enum HealthEventType {
+  VACCINE
+  MEDICATION
+}
+
+model SanitaryProduct {
+  id                   String        @id @default(uuid())
+  controlNumber        Int           @unique @default(autoincrement())
+  name                 String
+  brand                String?
+  activeIngredient     String?
+  unit                 String        @default("ML")
+  doseMl               Decimal?      @db.Decimal(10, 3)
+  withdrawalDaysDefault Int          @default(0)
+  isActive             Boolean       @default(true)
+  healthEvents         HealthEvent[]
+}
+
+model HealthEvent {
+  id                String          @id @default(uuid())
+  controlNumber     Int             @unique @default(autoincrement())
+  flockLotId        String
+  flockLot          FlockLot        @relation(fields: [flockLotId], references: [id], onDelete: Cascade)
+  type              HealthEventType
+  sanitaryProductId String?
+  sanitaryProduct   SanitaryProduct? @relation(fields: [sanitaryProductId], references: [id], onDelete: SetNull)
+  productName       String
+  brand             String?
+  doseMl            Decimal?        @db.Decimal(10, 3)
+  appliedAt         DateTime
+  withdrawalDays    Int             @default(0)
+  withdrawalUntil   DateTime?
+  notes             String?
+}
+
+model BiosecurityLog {
+  id          String   @id @default(uuid())
+  visitedAt   DateTime
+  visitorName String
+  vehiclePlate String?
+  purpose     String?
+  epiUsed     Boolean  @default(true)
+  notes       String?
+}
+
+// --- Estoque / Compras ---
+
+enum ProductType {
+  FEED
+  MEDICATION
+  SUPPLY
+  CONSTRUCTION
+  OFFICE
+  PACKAGED_EGG
+}
+
+model ProductFiscalSituation {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  description String
+  isActive    Boolean   @default(true)
+  products    Product[]
+}
+
+model ProductGroup {
+  id        String    @id @default(uuid())
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  products  Product[]
+}
+
+model Product {
+  id            String          @id @default(uuid())
+  controlNumber Int             @unique @default(autoincrement())
+  sku          String          @unique
+  name         String
+  description  String?
+  type         ProductType
+  unit         String          @default("UN")
+  minStockQty  Decimal         @default(0) @db.Decimal(14, 3)
+  groupId      String?
+  group        ProductGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  salePrice    Decimal?        @db.Decimal(14, 4)
+  fiscalSituationId String?
+  fiscalSituation   ProductFiscalSituation? @relation(fields: [fiscalSituationId], references: [id], onDelete: SetNull)
+  ncm          String?
+  fiscalOrigin String?
+  fiscalCst    String?
+  stockMoves   StockMovement[]
+  purchaseItems PurchaseOrderItem[]
+  purchaseRequestItems PurchaseRequestItem[]
+  purchaseQuoteItems PurchaseQuoteItem[]
+  stockReceiptItems StockReceiptItem[]
+  salesOrderItems SalesOrderItem[]
+  employeeWithdrawals EmployeeProductWithdrawal[]
+  priceHistory ProductPriceHistory[]
+}
+
+model ProductPriceHistory {
+  id            String   @id @default(uuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  salePrice     Decimal  @db.Decimal(14, 4)
+  previousPrice Decimal? @db.Decimal(14, 4)
+  recordedAt    DateTime @default(now())
+  source        String   @default("manual")
+  userId        String?
+
+  @@index([productId, recordedAt(sort: Desc)])
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUST
+}
+
+model StockLocation {
+  id            String   @id @default(uuid())
+  controlNumber Int      @unique @default(autoincrement())
+  code      String   @unique
+  name      String
+  barnId    String?
+  isActive  Boolean  @default(true)
+  movements StockMovement[]
+  receipts  StockReceipt[]
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  controlNumber Int               @unique @default(autoincrement())
+  productId    String
+  product      Product           @relation(fields: [productId], references: [id])
+  chartAccountId String
+  chartAccount   ChartAccount      @relation(fields: [chartAccountId], references: [id])
+  stockLocationId String?
+  stockLocation   StockLocation? @relation(fields: [stockLocationId], references: [id], onDelete: SetNull)
+  type         StockMovementType
+  quantity     Decimal           @db.Decimal(14, 3)
+  unitCost     Decimal?          @db.Decimal(14, 4)
+  reference    String?
+  movedAt      DateTime          @default(now())
+}
+
+enum StockReceiptMode {
+  NFE_KEY
+  MANUAL
+}
+
+model StockReceipt {
+  id              String           @id @default(uuid())
+  controlNumber   Int              @unique @default(autoincrement())
+  partnerId       String
+  partner         Partner          @relation(fields: [partnerId], references: [id])
+  invoiceNumber   String?
+  invoiceSeries   String?
+  issuedAt        DateTime?        @db.Date
+  nfeAccessKey    String?
+  mode            StockReceiptMode @default(MANUAL)
+  stockLocationId String?
+  stockLocation   StockLocation?   @relation(fields: [stockLocationId], references: [id], onDelete: SetNull)
+  chartAccountId  String?
+  chartAccount    ChartAccount?    @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+  totalAmount     Decimal          @default(0) @db.Decimal(14, 2)
+  receivedAt      DateTime         @default(now())
+  notes           String?
+  purchaseOrderId String?          @unique
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  goodsReceipt    GoodsReceipt?
+  items           StockReceiptItem[]
+}
+
+model StockReceiptItem {
+  id             String       @id @default(uuid())
+  stockReceiptId String
+  stockReceipt   StockReceipt @relation(fields: [stockReceiptId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id])
+  quantity       Decimal      @db.Decimal(14, 3)
+  unitCost       Decimal      @db.Decimal(14, 4)
+  batchCode      String?
+  expiresAt      DateTime?    @db.Date
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  QUOTING
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseRequest {
+  id            String                @id @default(uuid())
+  controlNumber Int                   @unique @default(autoincrement())
+  code        String                @unique
+  description String
+  status      PurchaseRequestStatus @default(DRAFT)
+  requestedAt DateTime              @default(now())
+  quotes      PurchaseQuote[]
+  order       PurchaseOrder?
+  items       PurchaseRequestItem[]
+}
+
+model PurchaseRequestItem {
+  id                String          @id @default(uuid())
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id])
+  quantity          Decimal         @db.Decimal(14, 3)
+
+  @@unique([purchaseRequestId, productId])
+}
+
+model PurchaseQuote {
+  id                String          @id @default(uuid())
+  purchaseRequestId String
+  purchaseRequest   PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  partnerId         String?
+  partner           Partner?        @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  supplierName      String
+  totalAmount       Decimal         @db.Decimal(14, 2)
+  validUntil        DateTime?
+  selected          Boolean         @default(false)
+  paymentTermsJson  Json?
+  items             PurchaseQuoteItem[]
+}
+
+model PurchaseQuoteItem {
+  id              String        @id @default(uuid())
+  purchaseQuoteId String
+  purchaseQuote   PurchaseQuote @relation(fields: [purchaseQuoteId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  quantity        Decimal       @db.Decimal(14, 3)
+  unitPrice       Decimal       @db.Decimal(14, 4)
+
+  @@unique([purchaseQuoteId, productId])
+}
+
+model PurchaseOrder {
+  id                     String              @id @default(uuid())
+  purchaseRequestId      String              @unique
+  purchaseRequest        PurchaseRequest     @relation(fields: [purchaseRequestId], references: [id])
+  orderNumber            String              @unique
+  orderedAt              DateTime            @default(now())
+  paymentTermsJson       Json?
+  financeApprovedAt      DateTime?
+  financeApprovedByUserId String?
+  payablesGenerated      Boolean             @default(false)
+  items                  PurchaseOrderItem[]
+  receipt                GoodsReceipt?
+  stockReceipt           StockReceipt?
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  quantity        Decimal       @db.Decimal(14, 3)
+  unitPrice       Decimal       @db.Decimal(14, 4)
+}
+
+model GoodsReceipt {
+  id              String        @id @default(uuid())
+  purchaseOrderId String        @unique
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  stockReceiptId  String?       @unique
+  stockReceipt    StockReceipt? @relation(fields: [stockReceiptId], references: [id], onDelete: SetNull)
+  receivedAt      DateTime      @default(now())
+  notes           String?
+}
+
+// --- Financeiro ---
+
+enum PartnerPersonType {
+  PF
+  PJ
+}
+
+model Partner {
+  id                 String              @id @default(uuid())
+  controlNumber      Int                 @unique @default(autoincrement())
+  personType         PartnerPersonType   @default(PJ)
+  name               String
+  tradeName          String?
+  document           String?
+  cpf                String?
+  cnpj               String?
+  email              String?
+  phone              String?
+  mobile             String?
+  stateRegistration  String?
+  zipCode            String?
+  street             String?
+  addressNumber      String?
+  addressComplement  String?
+  district           String?
+  city               String?
+  state              String?
+  isCustomer         Boolean             @default(false)
+  isSupplier         Boolean             @default(false)
+  payables           AccountPayable[]
+  receivables        AccountReceivable[]
+  salesOrders        SalesOrder[]
+  stockReceipts      StockReceipt[]
+  purchaseQuotes     PurchaseQuote[]
+  recurringFinanceRules RecurringFinanceRule[]
+}
+
+enum PaymentApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum RecurringFinanceKind {
+  PAYABLE
+  RECEIVABLE
+}
+
+model RecurringFinanceRule {
+  id             String               @id @default(uuid())
+  kind           RecurringFinanceKind
+  partnerId      String
+  partner        Partner              @relation(fields: [partnerId], references: [id])
+  chartAccountId String
+  chartAccount   ChartAccount         @relation(fields: [chartAccountId], references: [id])
+  description    String
+  amount         Decimal              @db.Decimal(14, 2)
+  dayOfMonth     Int
+  startDate      DateTime             @db.Date
+  endDate        DateTime             @db.Date
+  isActive       Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  payables       AccountPayable[]
+  receivables    AccountReceivable[]
+}
+
+model AccountPayable {
+  id             String                @id @default(uuid())
+  controlNumber  Int
+  partnerId      String
+  partner        Partner               @relation(fields: [partnerId], references: [id])
+  chartAccountId String
+  chartAccount   ChartAccount          @relation(fields: [chartAccountId], references: [id])
+  description    String
+  amount         Decimal               @db.Decimal(14, 2)
+  amountPaid     Decimal               @default(0) @db.Decimal(14, 2)
+  dueDate        DateTime              @db.Date
+  approvalStatus PaymentApprovalStatus @default(PENDING)
+  paidAt         DateTime?
+  settlementNotes String?
+  recurringRuleId String?
+  recurringRule   RecurringFinanceRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+
+  @@unique([controlNumber])
+  @@index([recurringRuleId, dueDate])
+}
+
+model AccountReceivable {
+  id             String                @id @default(uuid())
+  controlNumber  Int
+  partnerId      String
+  partner        Partner               @relation(fields: [partnerId], references: [id])
+  chartAccountId String
+  chartAccount   ChartAccount          @relation(fields: [chartAccountId], references: [id])
+  description    String
+  amount         Decimal               @db.Decimal(14, 2)
+  amountPaid     Decimal               @default(0) @db.Decimal(14, 2)
+  dueDate        DateTime              @db.Date
+  approvalStatus PaymentApprovalStatus @default(PENDING)
+  receivedAt     DateTime?
+  salesOrderId   String?
+  settlementNotes String?
+  recurringRuleId String?
+  recurringRule   RecurringFinanceRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+
+  @@unique([controlNumber])
+  @@index([recurringRuleId, dueDate])
+}
+
+model Bank {
+  id            String        @id @default(uuid())
+  controlNumber Int           @unique @default(autoincrement())
+  compeCode String       @unique
+  name     String
+  isActive Boolean       @default(true)
+  accounts BankAccount[]
+}
+
+model BankAccount {
+  id       String @id @default(uuid())
+  bankId   String?
+  bank     Bank?  @relation(fields: [bankId], references: [id], onDelete: SetNull)
+  bankName String
+  agency   String
+  account  String
+  balance  Decimal @default(0) @db.Decimal(14, 2)
+}
+
+// --- Comercial ---
+
+model SalesOrder {
+  id            String           @id @default(uuid())
+  controlNumber Int              @unique @default(autoincrement())
+  partnerId  String
+  partner    Partner          @relation(fields: [partnerId], references: [id])
+  orderDate  DateTime         @default(now()) @db.Date
+  status     String           @default("DRAFT")
+  paymentMethod String?
+  cashSessionId String?
+  cashSession   CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  totalAmount Decimal         @default(0) @db.Decimal(14, 2)
+  items      SalesOrderItem[]
+  fiscalDoc  FiscalDocument?
+}
+
+model SalesOrderItem {
+  id           String     @id @default(uuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  eggCategory  String?
+  quantity     Decimal    @db.Decimal(14, 3)
+  unitPrice    Decimal    @db.Decimal(14, 4)
+  discount     Decimal    @default(0) @db.Decimal(14, 2)
+}
+
+// --- Fase 2: Fiscal ---
+
+enum SefazEnvironment {
+  homologacao
+  producao
+}
+
+model FiscalIssuerSettings {
+  id                  String           @id @default(uuid())
+  companyId           String           @unique
+  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sefazEnvironment    SefazEnvironment @default(homologacao)
+  certificatePath     String?
+  certificatePassword String?
+  nfceCscId           String?
+  nfceCsc             String?
+  lastNfeNumber       Int              @default(0)
+  series              Int              @default(1)
+  updatedAt           DateTime         @updatedAt
+}
+
+enum FiscalDocumentStatus {
+  DRAFT
+  PROCESSING
+  AUTHORIZED
+  REJECTED
+  CANCELLED
+}
+
+model FiscalDocument {
+  id           String               @id @default(uuid())
+  salesOrderId String?              @unique
+  salesOrder   SalesOrder?          @relation(fields: [salesOrderId], references: [id])
+  type         String
+  status       FiscalDocumentStatus @default(DRAFT)
+  accessKey    String?
+  protocol     String?
+  xmlStorageKey String?
+  issuedAt     DateTime?
+  errorMessage String?
+}
+
+// --- Fase 2: Compliance ---
+
+model FarmLicense {
+  id          String   @id @default(uuid())
+  licenseType String
+  number      String
+  issuer      String?
+  validFrom   DateTime @db.Date
+  validUntil  DateTime @db.Date
+  rtName      String?
+  rtDocument  String?
+  notes       String?
+}
+
+model Contract {
+  id          String   @id @default(uuid())
+  title       String
+  partyName   String
+  contractType String
+  startsAt    DateTime @db.Date
+  endsAt      DateTime? @db.Date
+  notes       String?
+}
+
+// --- Fase 2: Patrimônio / Obras ---
+
+enum AssetType {
+  EQUIPMENT
+  VEHICLE
+  BUILDING
+}
+
+model Asset {
+  id              String              @id @default(uuid())
+  code            String              @unique
+  name            String
+  type            AssetType
+  barnId          String?
+  acquiredAt      DateTime?
+  maintenanceLogs MaintenanceRecord[]
+}
+
+model MaintenanceRecord {
+  id             String        @id @default(uuid())
+  assetId        String
+  asset          Asset         @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  performedAt    DateTime
+  kind           String
+  description    String?
+  cost           Decimal?      @db.Decimal(14, 2)
+  chartAccountId String?
+  chartAccount   ChartAccount? @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model ConstructionProject {
+  id          String        @id @default(uuid())
+  code        String        @unique
+  name        String
+  budget      Decimal       @db.Decimal(14, 2)
+  spent       Decimal       @default(0) @db.Decimal(14, 2)
+  status      ProjectStatus @default(PLANNING)
+  chartAccountId String?
+}
+
+// --- Cadastros gerais (localização) ---
+
+model City {
+  id            String     @id @default(uuid())
+  controlNumber Int        @unique @default(autoincrement())
+  name     String
+  state    String     @db.Char(2)
+  ibgeCode String?
+  districts District[]
+
+  @@unique([name, state])
+}
+
+model District {
+  id            String @id @default(uuid())
+  controlNumber Int    @unique @default(autoincrement())
+  name   String
+  cityId String
+  city   City   @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@unique([cityId, name])
+}
+
+// --- RH ---
+
+enum HazardPayType {
+  NONE
+  INSALUBRIO
+  PERICULOSIDADE
+}
+
+model Employee {
+  id            String    @id @default(uuid())
+  controlNumber Int       @unique @default(autoincrement())
+  name         String
+  cpf          String?   @unique
+  jobTitle     String?
+  userId       String?   @unique
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workShiftId  String?
+  workShift    WorkShift? @relation(fields: [workShiftId], references: [id], onDelete: SetNull)
+  hiredAt      DateTime? @db.Date
+  baseSalary      Decimal @default(0) @db.Decimal(14, 2)
+  hazardPayType   HazardPayType @default(NONE)
+  /// Grau insalubridade: 10, 20 ou 40 (% do salário mínimo).
+  insalubrityPct  Int     @default(20)
+  /// Horas mensais de referência (220 jornada 8h, 180 jornada 6h).
+  monthlyWorkHours Int    @default(220)
+  vtOptIn         Boolean @default(false)
+  irrfDependents  Int     @default(0)
+  pisPasep        String?
+  bankCode        String?
+  bankAgency      String?
+  bankAccount     String?
+  bankAccountDigit String?
+  isActive        Boolean @default(true)
+  /// Autorização escrita para desconto em folha por retirada de produtos (CLT art. 462 / Súmula 342 TST).
+  payrollWithdrawalAuthorizedAt    DateTime? @db.Date
+  payrollWithdrawalAuthReference   String?
+  leaves       LeaveAbsence[]
+  vacations    VacationPlan[]
+  payrollLines PayrollLine[]
+  punches      TimeClockPunch[]
+  schedules    WorkSchedule[]
+  productWithdrawals EmployeeProductWithdrawal[]
+}
+
+enum LeaveType {
+  MEDICAL
+  OTHER
+}
+
+model LeaveAbsence {
+  id            String    @id @default(uuid())
+  controlNumber Int       @unique @default(autoincrement())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type       LeaveType @default(MEDICAL)
+  startsAt   DateTime  @db.Date
+  endsAt     DateTime  @db.Date
+  cidCode    String?
+  notes      String?
+}
+
+enum VacationStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model VacationPlan {
+  id              String         @id @default(uuid())
+  controlNumber   Int            @unique @default(autoincrement())
+  employeeId      String
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  acquisitionYear Int
+  startsAt        DateTime       @db.Date
+  endsAt          DateTime       @db.Date
+  status          VacationStatus @default(PLANNED)
+}
+
+enum PayrollRunStatus {
+  OPEN
+  CLOSED
+}
+
+model PayrollRun {
+  id            String           @id @default(uuid())
+  controlNumber Int              @unique @default(autoincrement())
+  yearMonth    String           @unique
+  status       PayrollRunStatus @default(OPEN)
+  paymentDate  DateTime?        @db.Date
+  lines        PayrollLine[]
+  createdAt    DateTime         @default(now())
+}
+
+enum PayrollRubricKind {
+  EARNING
+  DEDUCTION
+  INFORMATIVE
+}
+
+model PayrollRubric {
+  id            String            @id @default(uuid())
+  code          String            @unique
+  description   String
+  kind          PayrollRubricKind
+  /// Natureza eSocial Tabela 3 (referência S-1010 natRubr).
+  natureCode    String
+  incidenceCp   String            @default("00")
+  incidenceFgts String            @default("00")
+  incidenceIrrf String            @default("00")
+  integratesInss  Boolean         @default(true)
+  integratesFgts  Boolean         @default(true)
+  integratesIrrf  Boolean         @default(true)
+  isSystem      Boolean           @default(false)
+  validFrom     String?
+  validTo       String?
+  lineItems     PayrollLineItem[]
+}
+
+model PayrollLine {
+  id           String     @id @default(uuid())
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee   @relation(fields: [employeeId], references: [id])
+  baseSalary   Decimal    @db.Decimal(14, 2)
+  /// Salário base + adicionais fixos (insalub./peric.) — rodapé holerite.
+  payrollBaseDisplay Decimal? @db.Decimal(14, 2)
+  otHours50    Decimal    @default(0) @db.Decimal(8, 2)
+  otHours100   Decimal    @default(0) @db.Decimal(8, 2)
+  commissionAmount Decimal @default(0) @db.Decimal(14, 2)
+  ajudaCustoAmount Decimal @default(0) @db.Decimal(14, 2)
+  additions    Decimal    @default(0) @db.Decimal(14, 2)
+  deductions   Decimal    @default(0) @db.Decimal(14, 2)
+  netPay       Decimal    @db.Decimal(14, 2)
+  items        PayrollLineItem[]
+  productWithdrawals EmployeeProductWithdrawal[]
+
+  @@unique([payrollRunId, employeeId])
+}
+
+enum PayrollLineItemKind {
+  EARNING
+  DEDUCTION
+}
+
+model PayrollLineItem {
+  id            String              @id @default(uuid())
+  payrollLineId String
+  payrollLine   PayrollLine         @relation(fields: [payrollLineId], references: [id], onDelete: Cascade)
+  kind          PayrollLineItemKind
+  code          String
+  description   String
+  amount        Decimal             @db.Decimal(14, 2)
+  sourceRef     String?
+  rubricId      String?
+  rubric        PayrollRubric?      @relation(fields: [rubricId], references: [id], onDelete: SetNull)
+}
+
+enum EmployeeWithdrawalStatus {
+  PENDING
+  APPLIED
+  CANCELLED
+}
+
+model EmployeeProductWithdrawal {
+  id            String                   @id @default(uuid())
+  controlNumber Int                      @unique @default(autoincrement())
+  employeeId    String
+  employee      Employee                 @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product                  @relation(fields: [productId], references: [id])
+  quantity      Decimal                  @db.Decimal(14, 3)
+  unitPrice     Decimal                  @db.Decimal(14, 2)
+  totalAmount   Decimal                  @db.Decimal(14, 2)
+  withdrawnAt   DateTime                 @default(now())
+  notes         String?
+  status        EmployeeWithdrawalStatus @default(PENDING)
+  payrollLineId String?
+  payrollLine   PayrollLine?             @relation(fields: [payrollLineId], references: [id], onDelete: SetNull)
+}
+
+model WorkShift {
+  id            String     @id @default(uuid())
+  controlNumber Int        @unique @default(autoincrement())
+  code         String     @unique
+  name         String
+  startTime    String
+  endTime      String
+  breakMinutes Int        @default(60)
+  isActive     Boolean    @default(true)
+  employees    Employee[]
+}
+
+enum ChartAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+model ChartAccount {
+  id             String                @id @default(uuid())
+  controlNumber  Int                   @unique @default(autoincrement())
+  code           String                @unique
+  name           String
+  type           ChartAccountType
+  parentId       String?
+  parent         ChartAccount?         @relation("ChartAccountTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       ChartAccount[]        @relation("ChartAccountTree")
+  isActive       Boolean               @default(true)
+  isPosting      Boolean               @default(true)
+  payables       AccountPayable[]
+  receivables    AccountReceivable[]
+  stockMoves     StockMovement[]
+  stockReceipts  StockReceipt[]
+  cashMovements  CashMovement[]
+  eggStockConfigs EggStockConfig[]
+  budgetLines           BudgetLine[]
+  recurringFinanceRules RecurringFinanceRule[]
+  maintenanceRecords    MaintenanceRecord[]
+}
+
+model WorkSchedule {
+  id         String   @id @default(uuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  weekday    Int
+  startTime  String
+  endTime    String
+}
+
+// --- Ponto ---
+
+model TimeClockTerminal {
+  id           String   @id @default(uuid())
+  name         String
+  deviceSecret String   @unique
+  qrToken      String?
+  qrExpiresAt  DateTime?
+  lastSeenAt   DateTime?
+  isActive     Boolean  @default(true)
+}
+
+enum TimeClockPunchType {
+  IN
+  OUT
+}
+
+enum TimeClockPunchSource {
+  KIOSK
+  MOBILE
+}
+
+model TimeClockPunch {
+  id         String               @id @default(uuid())
+  employeeId String
+  employee   Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type       TimeClockPunchType
+  source     TimeClockPunchSource
+  punchedAt  DateTime             @default(now())
+  terminalId String?
+}
+
+// --- Caixa ---
+
+enum CashSessionStatus {
+  OPEN
+  PENDING_RECONCILIATION
+  RECONCILED
+  CLOSED
+}
+
+enum CashMovementType {
+  IN
+  OUT
+}
+
+model CashRegisterSession {
+  id             String            @id @default(uuid())
+  controlNumber  Int               @unique @default(autoincrement())
+  userId         String
+  user           User              @relation("CashSessionUser", fields: [userId], references: [id])
+  status         CashSessionStatus @default(OPEN)
+  openingBalance Decimal           @default(0) @db.Decimal(14, 2)
+  closingBalance Decimal?          @db.Decimal(14, 2)
+  closingNotes   String?
+  reconciledAt   DateTime?
+  reconciledByUserId String?
+  reconciledBy   User?             @relation("CashSessionReconciledBy", fields: [reconciledByUserId], references: [id], onDelete: SetNull)
+  reconciliationNotes String?
+  openedAt       DateTime          @default(now())
+  closedAt       DateTime?
+  movements      CashMovement[]
+  sales          SalesOrder[]
+}
+
+model CashMovement {
+  id             String              @id @default(uuid())
+  sessionId      String
+  session        CashRegisterSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type           CashMovementType
+  isExpense      Boolean             @default(false)
+  amount         Decimal             @db.Decimal(14, 2)
+  paymentMethod  String?
+  reason         String?
+  chartAccountId String?
+  chartAccount   ChartAccount?       @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+  createdAt      DateTime            @default(now())
+}

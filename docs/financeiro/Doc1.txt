@@ -1,0 +1,45 @@
+⚠️ “No ritmo atual, a despesa de manutenção deverá ultrapassar o orçamento mensal.”
+
+Você descobre antes do fechamento, não depois.
+
+⸻
+
+8. Contas a receber e comportamento dos clientes
+
+O sistema pode acompanhar:
+
+* quem comprou;
+* quanto comprou;
+* quanto deveria pagar;
+* quando deveria pagar;
+* atraso;
+* histórico de pagamento;
+* valores em aberto.
+
+E também mostrar:
+
+“Esse cliente representa X% dos recebimentos previstos.”
+
+Isso é importante porque concentração de recebimento também pode representar risco operacional.
+
+⸻
+
+9. Compras + financeiro
+
+Aqui acontece uma integração que eu considero fundamental para o seu sistema:
+
+Necessidade de compra
+↓
+Cotação
+↓
+Valor da compra
+↓
+Forma de pagamento
+↓
+Impacto no fluxo de caixa
+↓
+Aprovação
+
+Assim, uma compra não aparece no financeiro depois que já aconteceu.
+
+Ela entra na análise antes da decisão.

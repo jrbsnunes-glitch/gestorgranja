@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-900;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .report-print-surface,
+  .report-print-surface * {
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
+  }
+
+  .report-print-surface img.corp-logo,
+  .report-print-surface img.report-header-logo,
+  .report-print-surface header img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .report-print-surface .report-block {
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+}

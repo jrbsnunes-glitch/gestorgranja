@@ -1,0 +1,1 @@
+CREATE DATABASE gestorgranja_tenant_template;

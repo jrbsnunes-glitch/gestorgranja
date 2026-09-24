@@ -1,0 +1,29 @@
+# GestorGranja — PostgreSQL + Redis (somente localhost)
+# Uso: copie deploy/env.production para .env na raiz e execute:
+#   docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gestorgranja-postgres
+    restart: always
+    ports:
+      - '127.0.0.1:${PORTA_POSTGRES:-5440}:5432'
+    environment:
+      POSTGRES_USER: ${DB_USER:-gestorgranja}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: gestorgranja_central
+    volumes:
+      - gestorgranja_pgdata:/var/lib/postgresql/data
+      - ../docker/postgres/init.sql:/docker-entrypoint-initdb.d/02-init.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: gestorgranja-redis
+    restart: always
+    ports:
+      - '127.0.0.1:${PORTA_REDIS:-6382}:6379'
+    command: redis-server --save 60 1 --loglevel warning
+
+volumes:
+  gestorgranja_pgdata:

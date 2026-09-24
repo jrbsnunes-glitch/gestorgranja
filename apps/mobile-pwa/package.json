@@ -1,0 +1,27 @@
+{
+  "name": "@gestor-granja/mobile-pwa",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3021",
+    "build": "next build",
+    "start": "next start --port 3021",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@gestor-granja/types": "workspace:*",
+    "@gestor-granja/ui": "workspace:*",
+    "dexie": "^4.0.11",
+    "next": "^15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2"
+  }
+}

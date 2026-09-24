@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/central-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CENTRAL_DATABASE_URL")
+}
+
+enum LicenseStatus {
+  trial
+  active
+  suspended
+  expired
+}
+
+enum TenantProvisioningStatus {
+  PENDING
+  PROVISIONING
+  READY
+  FAILED
+}
+
+enum TenantFeatureCode {
+  PUBLIC_BIDDING
+  IOT_ENVIRONMENT
+  FLEET
+}
+
+enum CommercialPlan {
+  trial
+  package_a
+  package_b
+  package_c
+  pilot
+}
+
+model Tenant {
+  id                    String                   @id @default(uuid())
+  slug                  String                   @unique
+  cnpj                  String                   @unique
+  companyName           String
+  licenseStatus         LicenseStatus            @default(trial)
+  licenseExpiresAt      DateTime?
+  commercialPlan        CommercialPlan           @default(trial)
+  maxBirds              Int                      @default(500)
+  maxBarns              Int                      @default(1)
+  maxUsers              Int                      @default(2)
+  contractStartedAt     DateTime?
+  billingDay            Int                      @default(10)
+  databaseName          String                   @unique
+  provisioningStatus    TenantProvisioningStatus @default(PENDING)
+  provisioningError     String?
+  provisioningUpdatedAt DateTime?
+  provisionAdminEmail   String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  features              TenantFeature[]
+}
+
+model TenantFeature {
+  id        String            @id @default(uuid())
+  tenantId  String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code      TenantFeatureCode
+  enabledAt DateTime          @default(now())
+
+  @@unique([tenantId, code])
+}
