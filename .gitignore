@@ -1,10 +1,58 @@
-node_modules
-dist
-.next
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build / cache
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+out/
+coverage/
+.nyc_output/
+
+# Ambiente (nunca commitar segredos)
 .env
-.env.local
+.env.*
+!.env.example
+!deploy/env.production.example
+apps/web/.env.local
+apps/web/.env.production.local
+
+# Logs
 *.log
-.turbo
-apps/api/src/generated
-apps/api/uploads
-uploads
+npm-debug.log*
+pnpm-debug.log*
+
+# Prisma clients gerados (regenerar no CI/deploy)
+apps/api/src/generated/
+
+# Uploads locais
+apps/api/uploads/
+uploads/
+
+# IDE / editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+
+# SO
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Office / temporários
+~$*
+*.tmp
+
+# Testes / Playwright
+test-results/
+playwright-report/
+.playwright/
+
+# Docker volumes locais (se houver)
+docker/data/
