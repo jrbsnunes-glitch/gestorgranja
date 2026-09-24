@@ -112,7 +112,7 @@ export default function FolhaRubricasPage() {
                 Rubrica do sistema: código e incidências eSocial não podem ser alterados aqui.
               </p>
             ) : null}
-            <SubmitButton>Salvar</SubmitButton>
+            <SubmitButton label="Salvar" />
           </form>
         ) : null}
       </Modal>
