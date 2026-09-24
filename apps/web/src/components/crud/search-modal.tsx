@@ -98,7 +98,7 @@ export function SearchModal<T>({
         <div
           className="mt-4 rounded-md border border-slate-200 bg-slate-50"
           aria-live="polite"
-          aria-relevant="additions removals text"
+          aria-relevant="additions removals"
         >
           {!displayTerm ? (
             <p className="px-3 py-4 text-sm text-slate-500">Digite um termo para ver os resultados.</p>
