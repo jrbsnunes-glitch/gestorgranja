@@ -495,7 +495,7 @@ export default function FinanceiroCaixaPage() {
           <PageCard
             title="Sessão aberta"
             action={
-              <Button type="button" variant="secondary" onClick={openCloseModal}>
+              <Button type="button" variant="secondary" onClick={() => openCloseModal()}>
                 Fechamento de caixa
               </Button>
             }
