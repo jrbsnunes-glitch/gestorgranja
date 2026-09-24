@@ -170,10 +170,32 @@ certbot renew --dry-run
 
 ## Atualizações
 
+Na raiz do projeto (recomendado):
+
+```bash
+chmod +x atgranja.sh
+./atgranja.sh
+```
+
+Opções: `--skip-git` (só build/migrations locais), `--skip-docker` (não sobe Postgres/Redis).
+
+Equivalente legado:
+
 ```bash
 chmod +x deploy/update.sh
 ./deploy/update.sh
 ```
+
+O script executa: `sync-env.sh`, Docker (5440/6382), `git pull`, `pnpm install`, Prisma generate/migrate (central + tenant + `tenant:migrate-all`), `pnpm build`, restart PM2 e healthcheck nas portas 3010/3020.
+
+## Portal de licenças
+
+Após definir no `.env`:
+
+- `LICENSE_PORTAL_USER`
+- `LICENSE_PORTAL_PASSWORD` (ou `LICENSE_PORTAL_PASSWORD_HASH`)
+
+Acesse: `https://gestorgranja.com/portal-licencas` (login do operador, separado do login das granjas).
 
 ---
 

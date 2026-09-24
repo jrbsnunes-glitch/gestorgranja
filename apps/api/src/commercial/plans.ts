@@ -95,6 +95,22 @@ export const EXCESS_POLICY = {
   },
 } as const;
 
+export function planDisplayPricing(plan: CommercialPlanCode): {
+  label: string;
+  entryFeeBrl: number;
+  monthlyFeeBrl: number;
+} {
+  if (plan === 'trial') {
+    return { label: 'Trial', entryFeeBrl: 0, monthlyFeeBrl: 0 };
+  }
+  const row = COMMERCIAL_PLANS[plan];
+  return {
+    label: row.label,
+    entryFeeBrl: row.pricing.entryFeeBrl,
+    monthlyFeeBrl: row.pricing.monthlyFeeBrl,
+  };
+}
+
 export function resolvePlanLimits(
   plan: CommercialPlanCode,
   overrides?: Partial<PlanLimits>,

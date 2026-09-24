@@ -20,6 +20,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { ProductionModule } from './production/production.module';
+import { LicensePortalModule } from './license-portal/license-portal.module';
 import { ProvisioningModule } from './provisioning/provisioning.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PurchasingModule } from './purchasing/purchasing.module';
@@ -59,6 +60,7 @@ import { UsersModule } from './users/users.module';
     SyncModule,
     AuditModule,
     ProvisioningModule,
+    LicensePortalModule,
     FiscalModule,
     ComplianceModule,
     AssetsModule,

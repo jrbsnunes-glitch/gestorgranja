@@ -54,6 +54,7 @@ model Tenant {
   provisioningError     String?
   provisioningUpdatedAt DateTime?
   provisionAdminEmail   String?
+  archivedAt            DateTime?
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   features              TenantFeature[]
