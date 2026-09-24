@@ -20,7 +20,9 @@ import {
   provisionPortalTenant,
   revalidatePortalLicense,
   updatePortalAdminPassword,
+  updatePortalTenant,
 } from '@/lib/license-portal-api';
+import { EditTenantModal } from '@/components/license-portal/edit-tenant-modal';
 
 function formatDate(iso: string | null) {
   if (!iso) return '—';
@@ -36,6 +38,8 @@ export function LicensePortalDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [busySlug, setBusySlug] = useState<string | null>(null);
+  const [editing, setEditing] = useState<PortalTenant | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -104,8 +108,32 @@ export function LicensePortalDashboard() {
     );
   }
 
+  async function saveEdit(payload: Record<string, unknown>) {
+    if (!editing) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      await updatePortalTenant(editing.slug, payload);
+      setEditing(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao salvar');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
     <>
+      {editing ? (
+        <EditTenantModal
+          tenant={editing}
+          plans={plans}
+          saving={savingEdit}
+          onClose={() => setEditing(null)}
+          onSave={saveEdit}
+        />
+      ) : null}
       <header className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-6">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -207,7 +235,13 @@ export function LicensePortalDashboard() {
                     <td className="py-3 pr-3">{formatBrl(t.monthlyFeeBrl)}</td>
                     <td className="py-3 pr-3 text-xs">{t.provisionAdminEmail ?? '—'}</td>
                     <td className="py-3">
-                      <div className="flex max-w-[220px] flex-wrap gap-1">
+                      <div className="flex max-w-[260px] flex-wrap gap-1">
+                        <ActionBtn
+                          label="Editar"
+                          highlight
+                          disabled={busySlug === t.slug}
+                          onClick={() => setEditing(t)}
+                        />
                         <ActionBtn
                           label="Revalidar"
                           disabled={busySlug === t.slug}
@@ -278,17 +312,23 @@ function ActionBtn({
   label,
   onClick,
   disabled,
+  highlight,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+      className={
+        highlight
+          ? 'rounded border border-emerald-600 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-900 hover:bg-emerald-100 disabled:opacity-50'
+          : 'rounded border border-slate-200 bg-white px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50'
+      }
     >
       {label}
     </button>

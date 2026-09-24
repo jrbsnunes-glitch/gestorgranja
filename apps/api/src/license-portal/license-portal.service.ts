@@ -9,11 +9,16 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { timingSafeEqual } from 'crypto';
 import { LicenseStatus, type Tenant } from '../generated/central-client';
-import { buildActivateLicenseUpdate, extendLicenseExpiresAt } from '../commercial/license-ops';
+import {
+  buildActivateLicenseUpdate,
+  extendLicenseExpiresAt,
+  toCommercialPlanEnum,
+} from '../commercial/license-ops';
 import {
   COMMERCIAL_PLANS,
   type CommercialPlanCode,
   planDisplayPricing,
+  resolvePlanLimits,
 } from '../commercial/plans';
 import { CentralPrismaService } from '../prisma/central-prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -24,6 +29,7 @@ import type {
   AdminPasswordDto,
   PortalLoginDto,
   ProvisionPortalTenantDto,
+  EditPortalTenantDto,
   RevalidateLicenseDto,
 } from './license-portal.dto';
 
@@ -123,6 +129,86 @@ export class LicensePortalService {
 
     const fresh = await this.central.tenant.findUniqueOrThrow({ where: { id: tenant.id } });
     return this.enrichTenant(fresh);
+  }
+
+  async updateTenant(slug: string, dto: EditPortalTenantDto) {
+    await this.requireVisibleTenant(slug);
+    const data: Record<string, unknown> = {};
+
+    if (dto.companyName !== undefined) data.companyName = dto.companyName.trim();
+    if (dto.cnpj !== undefined) data.cnpj = dto.cnpj.trim();
+    if (dto.provisionAdminEmail !== undefined) {
+      data.provisionAdminEmail = dto.provisionAdminEmail.trim().toLowerCase();
+    }
+    if (dto.billingDay !== undefined) data.billingDay = dto.billingDay;
+    if (dto.licenseStatus !== undefined) data.licenseStatus = dto.licenseStatus as LicenseStatus;
+    if (dto.licenseExpiresAt !== undefined) {
+      data.licenseExpiresAt = dto.licenseExpiresAt
+        ? this.parseDate(dto.licenseExpiresAt)
+        : null;
+    }
+
+    if (dto.commercialPlan !== undefined) {
+      data.commercialPlan = toCommercialPlanEnum(dto.commercialPlan);
+      const limits = resolvePlanLimits(dto.commercialPlan, {
+        maxBirds: dto.maxBirds,
+        maxBarns: dto.maxBarns,
+        maxUsers: dto.maxUsers,
+      });
+      data.maxBirds = limits.maxBirds;
+      data.maxBarns = limits.maxBarns;
+      data.maxUsers = limits.maxUsers;
+    } else {
+      if (dto.maxBirds !== undefined) data.maxBirds = dto.maxBirds;
+      if (dto.maxBarns !== undefined) data.maxBarns = dto.maxBarns;
+      if (dto.maxUsers !== undefined) data.maxUsers = dto.maxUsers;
+    }
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Nenhum campo para atualizar');
+    }
+
+    let row: Tenant;
+    try {
+      row = await this.central.tenant.update({ where: { slug }, data });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Unique constraint')) {
+        throw new BadRequestException('CNPJ já utilizado por outro cliente');
+      }
+      throw err;
+    }
+
+    if (dto.companyName !== undefined || dto.cnpj !== undefined) {
+      await this.syncTenantCompany(slug, {
+        companyName: dto.companyName,
+        cnpj: dto.cnpj,
+      });
+    }
+
+    return this.enrichTenant(row);
+  }
+
+  private async syncTenantCompany(
+    slug: string,
+    patch: { companyName?: string; cnpj?: string },
+  ) {
+    try {
+      const prisma = await this.tenantPrisma.getClient(slug);
+      const company = await prisma.company.findFirst();
+      if (!company) return;
+      await prisma.company.update({
+        where: { id: company.id },
+        data: {
+          ...(patch.companyName !== undefined
+            ? { legalName: patch.companyName, tradeName: patch.companyName }
+            : {}),
+          ...(patch.cnpj !== undefined ? { cnpj: patch.cnpj } : {}),
+        },
+      });
+    } catch {
+      // tenant DB indisponível — registro central já foi salvo
+    }
   }
 
   async revalidateLicense(slug: string, dto: RevalidateLicenseDto) {

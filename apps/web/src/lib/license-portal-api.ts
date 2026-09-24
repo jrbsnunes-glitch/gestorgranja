@@ -24,6 +24,23 @@ export type PortalTenant = {
   provisionAdminEmail: string | null;
   databaseName: string;
   provisioningStatus: string;
+  billingDay?: number;
+  maxBirds?: number;
+  maxBarns?: number;
+  maxUsers?: number;
+};
+
+export type EditPortalTenantPayload = {
+  companyName?: string;
+  cnpj?: string;
+  commercialPlan?: string;
+  licenseStatus?: string;
+  licenseExpiresAt?: string | null;
+  provisionAdminEmail?: string;
+  billingDay?: number;
+  maxBirds?: number;
+  maxBarns?: number;
+  maxUsers?: number;
 };
 
 export type PortalTotals = {
@@ -78,6 +95,13 @@ export function fetchPortalPlans() {
 
 export function fetchPortalTenants() {
   return portalFetch<{ items: PortalTenant[]; totals: PortalTotals }>('/v1/license-portal/tenants');
+}
+
+export function updatePortalTenant(slug: string, body: EditPortalTenantPayload) {
+  return portalFetch<PortalTenant>(`/v1/license-portal/tenants/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
 }
 
 export function provisionPortalTenant(body: Record<string, unknown>) {

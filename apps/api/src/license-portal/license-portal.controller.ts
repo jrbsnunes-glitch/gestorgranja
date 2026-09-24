@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   ActivateLicenseDto,
   AdminPasswordDto,
+  EditPortalTenantDto,
   PortalLoginDto,
   ProvisionPortalTenantDto,
   RevalidateLicenseDto,
@@ -39,6 +40,13 @@ export class LicensePortalController {
   @UseGuards(PortalJwtGuard)
   provision(@Body() body: ProvisionPortalTenantDto) {
     return this.portal.provisionTenant(body);
+  }
+
+  @Patch('tenants/:slug')
+  @ApiBearerAuth()
+  @UseGuards(PortalJwtGuard)
+  update(@Param('slug') slug: string, @Body() body: EditPortalTenantDto) {
+    return this.portal.updateTenant(slug, body);
   }
 
   @Patch('tenants/:slug/license/revalidate')

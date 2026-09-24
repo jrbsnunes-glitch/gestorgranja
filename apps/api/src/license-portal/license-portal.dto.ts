@@ -68,3 +68,51 @@ export class AdminPasswordDto {
   @MinLength(6)
   newPassword!: string;
 }
+
+const LICENSE_STATUSES = ['trial', 'active', 'suspended', 'expired'] as const;
+
+export class EditPortalTenantDto {
+  @IsOptional()
+  @IsString()
+  companyName?: string;
+
+  @IsOptional()
+  @IsString()
+  cnpj?: string;
+
+  @IsOptional()
+  @IsIn(PLAN_CODES)
+  commercialPlan?: CommercialPlanCode;
+
+  @IsOptional()
+  @IsIn(LICENSE_STATUSES)
+  licenseStatus?: (typeof LICENSE_STATUSES)[number];
+
+  @IsOptional()
+  @IsString()
+  licenseExpiresAt?: string;
+
+  @IsOptional()
+  @IsEmail()
+  provisionAdminEmail?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  billingDay?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  maxBirds?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  maxBarns?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  maxUsers?: number;
+}
