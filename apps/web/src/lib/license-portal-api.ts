@@ -68,14 +68,21 @@ async function portalFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getPortalToken();
   const base = getApiBase();
   const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init?.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
+    });
+  } catch {
+    throw new Error(
+      `Sem conexão com a API (${base}). Verifique PM2 gestorgranja-api, Nginx /api e porta 3010.`,
+    );
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(formatApiError(text || res.statusText));

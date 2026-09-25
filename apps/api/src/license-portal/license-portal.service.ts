@@ -92,8 +92,10 @@ export class LicensePortalService {
   }
 
   async provisionTenant(dto: ProvisionPortalTenantDto) {
+    const slug = dto.slug.trim();
+    await this.provisioning.abandonIncompleteTenant(slug);
     const tenant = await this.provisioning.provisionNewTenant({
-      slug: dto.slug.trim(),
+      slug,
       cnpj: dto.cnpj.trim(),
       companyName: dto.companyName.trim(),
       databaseName: dto.databaseName.trim(),
@@ -105,7 +107,7 @@ export class LicensePortalService {
     });
 
     const licenseUpdate = buildActivateLicenseUpdate({
-      slug: dto.slug,
+      slug,
       plan: dto.commercialPlan,
       contractEntryFeeBrl: dto.contractEntryFeeBrl,
       contractMonthlyFeeBrl: dto.contractMonthlyFeeBrl,

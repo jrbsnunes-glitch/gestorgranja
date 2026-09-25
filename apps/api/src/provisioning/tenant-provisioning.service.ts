@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { execFileSync } from 'child_process';
 import { createRequire } from 'node:module';
@@ -25,6 +25,20 @@ export class TenantProvisioningService {
     private readonly central: CentralPrismaService,
     private readonly tenantPrisma: TenantPrismaService,
   ) {}
+
+  /** Remove registro central incompleto e banco tenant (após falha de provisionamento). */
+  async abandonIncompleteTenant(slug: string) {
+    const normalized = slug.trim();
+    const existing = await this.central.tenant.findUnique({ where: { slug: normalized } });
+    if (!existing) return;
+    if (existing.provisioningStatus === TenantProvisioningStatus.READY) {
+      throw new BadRequestException(`Cliente "${normalized}" já está provisionado.`);
+    }
+    await this.dropTenantDatabaseIfExists(existing.databaseName);
+    await this.central.tenant.delete({ where: { slug: normalized } });
+    this.tenantPrisma.invalidateClient(normalized);
+    this.logger.warn(`Tenant incompleto removido: ${normalized} (${existing.databaseName})`);
+  }
 
   async provisionNewTenant(params: {
     slug: string;
@@ -85,7 +99,34 @@ export class TenantProvisioningService {
     return template.replace(/\/[^/]+$/, `/${databaseName}`);
   }
 
+  private assertSafeDatabaseName(databaseName: string) {
+    if (!/^gestorgranja_[a-z0-9_-]+$/i.test(databaseName)) {
+      throw new BadRequestException(`Nome de banco inválido: ${databaseName}`);
+    }
+  }
+
+  private async dropTenantDatabaseIfExists(databaseName: string) {
+    this.assertSafeDatabaseName(databaseName);
+    const adminUrl =
+      this.config.get<string>('TENANT_ADMIN_DATABASE_URL') ??
+      this.config.get<string>('TENANT_DATABASE_URL');
+    if (!adminUrl) throw new Error('TENANT_ADMIN_DATABASE_URL não configurada');
+
+    const client = new Client({ connectionString: adminUrl.replace(/\/[^/]+$/, '/postgres') });
+    await client.connect();
+    try {
+      await client.query(
+        `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+        [databaseName],
+      );
+      await client.query(`DROP DATABASE IF EXISTS "${databaseName}"`);
+    } finally {
+      await client.end();
+    }
+  }
+
   private async createDatabase(databaseName: string) {
+    this.assertSafeDatabaseName(databaseName);
     const adminUrl =
       this.config.get<string>('TENANT_ADMIN_DATABASE_URL') ??
       this.config.get<string>('TENANT_DATABASE_URL');

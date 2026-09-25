@@ -44,10 +44,18 @@ export function LicensePortalDashboard() {
 
   const reload = useCallback(async () => {
     setError(null);
-    const [tenantRes, planList] = await Promise.all([fetchPortalTenants(), fetchPortalPlans()]);
-    setItems(tenantRes.items);
-    setTotals(tenantRes.totals);
-    setPlans(planList);
+    const [tenantRes, planList] = await Promise.allSettled([fetchPortalTenants(), fetchPortalPlans()]);
+    if (tenantRes.status === 'fulfilled') {
+      setItems(tenantRes.value.items);
+      setTotals(tenantRes.value.totals);
+    } else {
+      throw tenantRes.reason;
+    }
+    if (planList.status === 'fulfilled') {
+      setPlans(planList.value);
+    } else {
+      throw planList.reason;
+    }
   }, []);
 
   useEffect(() => {
