@@ -12,6 +12,7 @@
     "@gestor-granja/types": "workspace:*",
     "@gestor-granja/ui": "workspace:*",
     "dexie": "^4.0.11",
+    "html5-qrcode": "^2.3.8",
     "next": "^15.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

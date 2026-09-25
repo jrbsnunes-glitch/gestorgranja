@@ -23,15 +23,15 @@ type Html5QrcodeInstance = {
 function cameraErrorMessage(err: unknown): string {
   const name = err instanceof Error ? err.name : '';
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-    return 'Permissão da câmera negada. Nas configurações do navegador, permita a câmera para gestorgranja.com e tente de novo.';
+    return 'Permissão da câmera negada. Permita a câmera para este site nas configurações do celular.';
   }
   if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
     return 'Nenhuma câmera encontrada neste aparelho.';
   }
   if (name === 'NotReadableError') {
-    return 'A câmera está em uso por outro app. Feche o outro app e tente novamente.';
+    return 'A câmera está em uso por outro app.';
   }
-  return 'Não foi possível abrir a câmera. Use HTTPS, permita a câmera ou informe o código manualmente.';
+  return 'Não foi possível abrir a câmera.';
 }
 
 export function PunchQrScanner({ onScan, onError }: Props) {
@@ -47,7 +47,7 @@ export function PunchQrScanner({ onScan, onError }: Props) {
     try {
       await scanner.stop();
     } catch {
-      /* já parado */
+      /* ignore */
     }
     try {
       scanner.clear();
@@ -70,7 +70,6 @@ export function PunchQrScanner({ onScan, onError }: Props) {
 
   useEffect(() => {
     if (!open) return;
-
     let cancelled = false;
 
     async function start() {
@@ -78,12 +77,9 @@ export function PunchQrScanner({ onScan, onError }: Props) {
       try {
         const { Html5Qrcode } = await import('html5-qrcode');
         if (cancelled) return;
-
         const scanner = new Html5Qrcode(regionId) as unknown as Html5QrcodeInstance;
         scannerRef.current = scanner;
-
         const qrbox = Math.min(280, Math.floor(window.innerWidth * 0.75));
-
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: qrbox, height: qrbox } },
@@ -93,9 +89,7 @@ export function PunchQrScanner({ onScan, onError }: Props) {
               setOpen(false);
             }
           },
-          () => {
-            /* frame sem QR — normal */
-          },
+          () => {},
         );
       } catch (err) {
         if (!cancelled) {
@@ -109,7 +103,6 @@ export function PunchQrScanner({ onScan, onError }: Props) {
     }
 
     void start();
-
     return () => {
       cancelled = true;
       void stopCamera();
@@ -119,26 +112,15 @@ export function PunchQrScanner({ onScan, onError }: Props) {
   return (
     <div className="space-y-2">
       {!open ? (
-        <Button type="button" variant="secondary" className="min-h-11 w-full sm:w-auto" onClick={() => setOpen(true)}>
+        <Button type="button" className="min-h-11 w-full" onClick={() => setOpen(true)}>
           Escanear QR da portaria
         </Button>
       ) : (
         <div className="space-y-3">
-          <p className="text-sm text-slate-600">Aponte a câmera traseira para o QR na tela da portaria.</p>
-          <div
-            id={regionId}
-            className="overflow-hidden rounded-lg border border-slate-200 bg-black [&_video]:!object-cover"
-          />
+          <p className="text-sm text-slate-600">Aponte a câmera para o QR na portaria.</p>
+          <div id={regionId} className="overflow-hidden rounded-lg border bg-black" />
           {starting ? <p className="text-center text-sm text-slate-500">Abrindo câmera…</p> : null}
-          <Button
-            type="button"
-            variant="secondary"
-            className="w-full"
-            onClick={() => {
-              setOpen(false);
-              void stopCamera();
-            }}
-          >
+          <Button type="button" className="w-full" onClick={() => { setOpen(false); void stopCamera(); }}>
             Cancelar
           </Button>
         </div>
