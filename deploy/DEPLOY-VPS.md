@@ -119,15 +119,28 @@ pnpm build
 
 ## Fase 5 — PM2
 
+O **PM2 e o Node** ficam no usuário **`deploy`** (NVM). Como **root**, `pm2` **não** aparece no PATH — use `su - deploy` ou `bash atgranja.sh` (root reexecuta como deploy).
+
 ```bash
+su - deploy
+cd /var/www/gestorgranja
+source ~/.nvm/nvm.sh
 export GESTOR_GRANJA_ROOT=/var/www/gestorgranja
 pm2 start ecosystem.config.cjs
+pm2 delete gestorgranja-web 2>/dev/null || true   # legado, se existir
 pm2 status
 curl -s http://127.0.0.1:3010/api/docs | head -c 80
 curl -I http://127.0.0.1:3020 | head -3
 pm2 startup
-# executar o comando sudo que o PM2 imprimir
+# executar o comando sudo que o PM2 imprimir (pode ser como root)
 pm2 save
+```
+
+Como **root**, só consultar PM2:
+
+```bash
+su - deploy -c 'source ~/.nvm/nvm.sh && pm2 status'
+su - deploy -c 'source ~/.nvm/nvm.sh && pm2 delete gestorgranja-web && pm2 save --force'
 ```
 
 ---

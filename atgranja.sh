@@ -202,12 +202,16 @@ pm2_restart_apps() {
     echo "Arquivo PM2 não encontrado: $eco" >&2
     return 1
   fi
-  # Nome antigo do painel (ecosystem legado no deploy/)
+  # Processo legado (ecosystem antigo com pnpm / nome gestorgranja-web)
   pm2 delete gestorgranja-web 2>/dev/null || true
   if pm2 reload "$eco" --update-env 2>/dev/null; then
+    pm2 delete gestorgranja-web 2>/dev/null || true
+    pm2 save --force 2>/dev/null || true
     return 0
   fi
   pm2 start "$eco" --update-env 2>/dev/null || pm2 restart "$eco" --update-env
+  pm2 delete gestorgranja-web 2>/dev/null || true
+  pm2 save --force 2>/dev/null || true
 }
 
 verificar_ambiente
@@ -306,3 +310,8 @@ if [ "$API_OK" -eq 0 ] || [ "$WEB_OK" -eq 0 ] || [ "$CAMPO_OK" -eq 0 ]; then
 fi
 
 echo "Atualização concluída — revisão $DEPLOY_REV (favicon=$FAVICON_OK, campo=$CAMPO_OK)."
+if [ "$(id -u)" -eq 0 ]; then
+  echo ""
+  echo "PM2 roda como usuário $DEPLOY_USER (NVM). Como root, 'pm2' não está no PATH."
+  echo "  su - $DEPLOY_USER -c 'source ~/.nvm/nvm.sh && pm2 status'"
+fi
