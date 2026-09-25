@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { Client } from 'pg';
-import { TenantProvisioningStatus } from '../generated/central-client';
+import { Prisma, TenantProvisioningStatus } from '../generated/central-client';
 import { CentralPrismaService } from '../prisma/central-prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { seedTenantMinimal } from './tenant-minimal-seed';
@@ -26,18 +26,40 @@ export class TenantProvisioningService {
     private readonly tenantPrisma: TenantPrismaService,
   ) {}
 
+  normalizeSlug(slug: string): string {
+    return slug.trim().toLowerCase();
+  }
+
   /** Remove registro central incompleto e banco tenant (após falha de provisionamento). */
-  async abandonIncompleteTenant(slug: string) {
-    const normalized = slug.trim();
+  async abandonIncompleteTenant(slug: string, cnpj?: string) {
+    const normalized = this.normalizeSlug(slug);
     const existing = await this.central.tenant.findUnique({ where: { slug: normalized } });
-    if (!existing) return;
+    if (existing) {
+      await this.removeIncompleteTenantRow(existing);
+      return;
+    }
+
+    const cnpjTrim = cnpj?.trim();
+    if (cnpjTrim) {
+      const byCnpj = await this.central.tenant.findUnique({ where: { cnpj: cnpjTrim } });
+      if (byCnpj) {
+        await this.removeIncompleteTenantRow(byCnpj);
+      }
+    }
+  }
+
+  private async removeIncompleteTenantRow(existing: {
+    slug: string;
+    databaseName: string;
+    provisioningStatus: TenantProvisioningStatus;
+  }) {
     if (existing.provisioningStatus === TenantProvisioningStatus.READY) {
-      throw new BadRequestException(`Cliente "${normalized}" já está provisionado.`);
+      throw new BadRequestException(`Cliente "${existing.slug}" já está provisionado.`);
     }
     await this.dropTenantDatabaseIfExists(existing.databaseName);
-    await this.central.tenant.delete({ where: { slug: normalized } });
-    this.tenantPrisma.invalidateClient(normalized);
-    this.logger.warn(`Tenant incompleto removido: ${normalized} (${existing.databaseName})`);
+    await this.central.tenant.delete({ where: { slug: existing.slug } });
+    this.tenantPrisma.invalidateClient(existing.slug);
+    this.logger.warn(`Tenant incompleto removido: ${existing.slug} (${existing.databaseName})`);
   }
 
   async provisionNewTenant(params: {
@@ -47,27 +69,30 @@ export class TenantProvisioningService {
     databaseName: string;
     seed: ProvisionSeed;
   }) {
-    const tenant = await this.central.tenant.create({
-      data: {
-        slug: params.slug,
-        cnpj: params.cnpj,
-        companyName: params.companyName,
-        databaseName: params.databaseName,
-        provisionAdminEmail: params.seed.adminEmail,
-        provisioningStatus: TenantProvisioningStatus.PROVISIONING,
-      },
+    const slug = this.normalizeSlug(params.slug);
+    const cnpj = params.cnpj.trim();
+    const databaseName = params.databaseName.trim();
+
+    await this.abandonIncompleteTenant(slug, cnpj);
+
+    const tenant = await this.createTenantRow({
+      slug,
+      cnpj,
+      companyName: params.companyName.trim(),
+      databaseName,
+      provisionAdminEmail: params.seed.adminEmail,
     });
 
     try {
-      await this.createDatabase(params.databaseName);
-      await this.runTenantMigrations(params.databaseName);
-      const url = this.buildTenantUrl(params.databaseName);
+      await this.createDatabase(databaseName);
+      await this.runTenantMigrations(databaseName);
+      const url = this.buildTenantUrl(databaseName);
       await seedTenantMinimal(url, {
         adminEmail: params.seed.adminEmail,
         adminPassword: params.seed.adminPassword,
         adminName: params.seed.adminName,
-        companyName: params.companyName,
-        cnpj: params.cnpj,
+        companyName: params.companyName.trim(),
+        cnpj,
       });
       await this.central.tenant.update({
         where: { id: tenant.id },
@@ -77,7 +102,7 @@ export class TenantProvisioningService {
           provisioningUpdatedAt: new Date(),
         },
       });
-      this.tenantPrisma.invalidateClient(params.slug);
+      this.tenantPrisma.invalidateClient(slug);
       return tenant;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -89,6 +114,57 @@ export class TenantProvisioningService {
           provisioningUpdatedAt: new Date(),
         },
       });
+      throw err;
+    }
+  }
+
+  private async createTenantRow(data: {
+    slug: string;
+    cnpj: string;
+    companyName: string;
+    databaseName: string;
+    provisionAdminEmail: string;
+  }) {
+    try {
+      return await this.central.tenant.create({
+        data: {
+          slug: data.slug,
+          cnpj: data.cnpj,
+          companyName: data.companyName,
+          databaseName: data.databaseName,
+          provisionAdminEmail: data.provisionAdminEmail,
+          provisioningStatus: TenantProvisioningStatus.PROVISIONING,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        await this.abandonIncompleteTenant(data.slug, data.cnpj);
+        try {
+          return await this.central.tenant.create({
+            data: {
+              slug: data.slug,
+              cnpj: data.cnpj,
+              companyName: data.companyName,
+              databaseName: data.databaseName,
+              provisionAdminEmail: data.provisionAdminEmail,
+              provisioningStatus: TenantProvisioningStatus.PROVISIONING,
+            },
+          });
+        } catch (retryErr) {
+          if (
+            retryErr instanceof Prisma.PrismaClientKnownRequestError &&
+            retryErr.code === 'P2002'
+          ) {
+            const target = Array.isArray(retryErr.meta?.target)
+              ? retryErr.meta.target.join(', ')
+              : 'slug/cnpj';
+            throw new BadRequestException(
+              `Já existe cliente com este ${target}. Se a tentativa anterior falhou, rode bash atgranja.sh e tente de novo.`,
+            );
+          }
+          throw retryErr;
+        }
+      }
       throw err;
     }
   }
