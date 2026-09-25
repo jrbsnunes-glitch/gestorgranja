@@ -4,6 +4,7 @@ import { Button, Card } from '@gestor-granja/ui';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { campoDb } from '@/lib/db';
 import { getApiBase } from '@/lib/api-base';
+import { EGG_PRODUCTION_FIELDS } from '@/lib/labels';
 import { enqueue, flushSyncQueue } from '@/lib/sync';
 
 type Lot = { id: string; code: string };
@@ -34,7 +35,7 @@ export default function CampoPage() {
       setMsg(`Sincronizado: ${r.flushed} operação(ões)`);
       await refreshPending();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Erro na sync');
+      setMsg(e instanceof Error ? e.message : 'Erro na sincronização');
     }
   }, [token, refreshPending]);
 
@@ -137,14 +138,14 @@ export default function CampoPage() {
   return (
     <main className="mx-auto max-w-lg p-4 pb-16">
       <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-emerald-900">Campo — Postura</h1>
+        <h1 className="text-lg font-bold text-emerald-900">Campo — Postura diária</h1>
         <span className={`text-xs ${online ? 'text-emerald-700' : 'text-amber-700'}`}>
-          {online ? 'Online' : 'Offline'}
+          {online ? 'Conectado' : 'Sem internet'}
         </span>
       </header>
 
       {!token ? (
-        <Card title="Conectar">
+        <Card title="Entrar na granja">
           <input
             className="mb-2 w-full rounded border p-3"
             value={tenantSlug}
@@ -174,6 +175,7 @@ export default function CampoPage() {
         </Card>
       ) : (
         <>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Lote</label>
           <select
             className="mb-3 w-full rounded border p-3 text-lg"
             value={lotId}
@@ -188,15 +190,31 @@ export default function CampoPage() {
 
           <Card title="Produção do dia">
             <form className="flex flex-col gap-3" onSubmit={onSubmit}>
-              <input name="date" type="date" className="rounded border p-3" required defaultValue={new Date().toISOString().slice(0, 10)} />
-              {(['extra', 'large', 'medium', 'small', 'cracked', 'dirty', 'deformed', 'discard'] as const).map((f) => (
-                <label key={f} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="capitalize">{f}</span>
-                  <input name={f} type="number" min={0} defaultValue={0} className="w-28 rounded border p-2 text-right" />
+              <label className="text-sm font-medium text-slate-700">
+                Data
+                <input
+                  name="date"
+                  type="date"
+                  className="mt-1 w-full rounded border p-3"
+                  required
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                />
+              </label>
+              {EGG_PRODUCTION_FIELDS.map((f) => (
+                <label key={f.name} className="flex items-center justify-between gap-2 text-sm">
+                  <span>{f.label}</span>
+                  <input
+                    name={f.name}
+                    type="number"
+                    min={0}
+                    defaultValue={0}
+                    className="w-28 rounded border p-2 text-right"
+                    inputMode="numeric"
+                  />
                 </label>
               ))}
               <Button type="submit" className="w-full py-3 text-base">
-                Salvar {online ? '' : '(offline)'}
+                Salvar {online ? '' : '(sem internet)'}
               </Button>
             </form>
           </Card>
@@ -204,7 +222,7 @@ export default function CampoPage() {
           <p className="mt-3 text-center text-sm text-slate-600">
             Fila pendente: {pending}{' '}
             <button type="button" className="text-emerald-700 underline" onClick={() => void trySync()}>
-              Sync agora
+              Sincronizar agora
             </button>
           </p>
         </>

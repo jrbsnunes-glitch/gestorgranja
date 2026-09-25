@@ -1,6 +1,7 @@
 {
-  "name": "GestorGranja Campo",
+  "name": "Gestor Granja — Campo",
   "short_name": "GG Campo",
+  "lang": "pt-BR",
   "start_url": "/campo",
   "scope": "/campo",
   "display": "standalone",

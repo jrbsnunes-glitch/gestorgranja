@@ -5,7 +5,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'GestorGranja Campo',
-  description: 'Lançamentos offline no galpão',
+  description: 'Postura e ponto no galpão, com ou sem internet',
   manifest: `${CAMPO_BASE_PATH}/manifest.json`,
 };
 
