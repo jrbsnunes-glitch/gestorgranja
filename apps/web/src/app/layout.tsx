@@ -2,9 +2,20 @@ import type { Metadata } from 'next';
 import { Providers } from './providers';
 import './globals.css';
 
+/** Logo padrão do produto (login, favicon e abas do navegador). */
+const PRODUCT_LOGO = '/branding/login-logo.png';
+
 export const metadata: Metadata = {
-  title: 'GestorGranja',
+  title: {
+    default: 'GestorGranja',
+    template: '%s — GestorGranja',
+  },
   description: 'Gestão avicultura de postura',
+  icons: {
+    icon: [{ url: PRODUCT_LOGO, type: 'image/png' }],
+    shortcut: PRODUCT_LOGO,
+    apple: [{ url: PRODUCT_LOGO, type: 'image/png' }],
+  },
 };
 
 export const viewport = {

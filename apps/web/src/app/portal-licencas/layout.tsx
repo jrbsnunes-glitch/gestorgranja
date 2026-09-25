@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Portal de licenças — GestorGranja',
+  title: 'Portal de licenças',
   description: 'Provisionamento e gestão de licenças SaaS',
 };
 
