@@ -20,7 +20,7 @@ export async function ensureTenantRbac(prisma: PrismaClient) {
       create: { name: roleDef.name },
       update: {},
     });
-    const wanted = new Set(roleDef.permissions);
+    const wanted = new Set<string>(roleDef.permissions);
     const existing = await prisma.rolePermission.findMany({
       where: { roleId: role.id },
       include: { permission: true },
