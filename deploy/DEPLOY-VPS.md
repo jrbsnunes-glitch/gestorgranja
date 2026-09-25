@@ -199,6 +199,29 @@ Acesse: `https://gestorgranja.com/portal-licencas` (login do operador, separado 
 
 ---
 
+## Git: `dubious ownership`
+
+Ocorre quando você roda `git` como **root** numa pasta criada pelo usuário **deploy** (ou o contrário).
+
+**Correção rápida (como root ou deploy — quem for rodar o git):**
+
+```bash
+git config --global --add safe.directory /var/www/gestorgranja
+```
+
+**Correção recomendada (ownership + usuário deploy):**
+
+```bash
+sudo chown -R deploy:deploy /var/www/gestorgranja
+su - deploy
+cd /var/www/gestorgranja
+./atgranja.sh
+```
+
+O script `atgranja.sh` tenta registrar `safe.directory` automaticamente antes do `git pull`.
+
+---
+
 ## Checklist rápido
 
 ```bash
