@@ -31,6 +31,11 @@ export const DEFAULT_ROLES = [
     name: 'operador_campo',
     permissions: ['production.read', 'production.write', 'nutrition.write', 'sync.write', 'hr.read'],
   },
+  /** Funcionário de granja: postura + batida de ponto (sem cadastros RH). */
+  {
+    name: 'funcionario',
+    permissions: ['production.read', 'production.write', 'sync.write', 'hr.read'],
+  },
   {
     name: 'financeiro',
     permissions: ['finance.write', 'inventory.write', 'purchasing.write', 'reports.read', 'sales.write', 'cash.write'],

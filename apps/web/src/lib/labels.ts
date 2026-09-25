@@ -170,7 +170,9 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
   gestor_producao: 'Gestor de produção',
   operador_campo: 'Operador de campo',
+  funcionario: 'Funcionário (produção e ponto)',
   financeiro: 'Financeiro',
+  rh: 'Recursos humanos',
 };
 
 export const SYSTEM_ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }));

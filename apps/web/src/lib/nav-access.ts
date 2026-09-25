@@ -4,15 +4,58 @@ import { isRhTabAllowed, type TenantSubscription } from '@/lib/tenant-subscripti
 
 export type NavItem = { id: string; label: string; href: string };
 
+const PONTO_ITEM: NavItem = { id: 'ponto', label: 'Batida de ponto', href: '/rh/ponto' };
+const PRODUCAO_ITEM: NavItem = {
+  id: 'producao-campo',
+  label: 'Lançamento de produção',
+  href: '/producao',
+};
+
 function hasAnyPermission(session: SessionUser, codes: string[]): boolean {
   if (session.permissions.includes('*')) return true;
   return codes.some((c) => session.permissions.includes(c));
 }
 
-/** Só perfil operador de campo (sem outros papéis). */
-export function isFieldOperatorOnly(session: SessionUser | null): boolean {
+const FIELD_WORKER_ROLES = new Set(['operador_campo', 'funcionario']);
+
+/** Só perfis de campo (sem RH admin, gestor, etc.). */
+export function isFieldWorkerOnly(session: SessionUser | null): boolean {
   if (!session?.roles.length) return false;
-  return session.roles.every((r) => r === 'operador_campo');
+  return session.roles.every((r) => FIELD_WORKER_ROLES.has(r));
+}
+
+/** Operador/funcionário ou JWT antigo com permissões típicas de campo. */
+export function isFieldOperatorLike(session: SessionUser | null): boolean {
+  if (!session) return false;
+  if (isFieldWorkerOnly(session)) return true;
+  if (session.roles.length > 0) return false;
+  return (
+    hasAnyPermission(session, ['production.write']) &&
+    hasAnyPermission(session, ['sync.write']) &&
+    !hasAnyPermission(session, ['admin.users', 'finance.write', 'hr.write'])
+  );
+}
+
+/** Plano Completo (ponto). Enquanto subscription carrega, mantém visível. */
+export function canUseTimeClockNav(sub: TenantSubscription | null): boolean {
+  if (!sub) return true;
+  return sub.includesTimeClock;
+}
+
+/** Funcionários / operadores que devem ver batida de ponto no menu. */
+export function shouldShowPontoNav(session: SessionUser, sub: TenantSubscription | null): boolean {
+  if (isAdminSession(session)) return false;
+  if (!canUseTimeClockNav(sub)) return false;
+  if (hasAnyPermission(session, ['hr.read', 'hr.write'])) return true;
+  if (isFieldOperatorLike(session)) return true;
+  if (hasAnyPermission(session, ['production.write'])) return true;
+  return false;
+}
+
+function withPontoItem(items: NavItem[], session: SessionUser, sub: TenantSubscription | null): NavItem[] {
+  if (!shouldShowPontoNav(session, sub)) return items;
+  if (items.some((i) => i.href === PONTO_ITEM.href)) return items;
+  return [...items, PONTO_ITEM];
 }
 
 const MODULE_ACCESS: Record<string, string[]> = {
@@ -52,19 +95,25 @@ export function navItemsForSession(
     return APP_MODULES.map((m) => ({ id: m.id, label: m.label, href: m.href }));
   }
 
-  if (isFieldOperatorOnly(session)) {
-    const items: NavItem[] = [{ id: 'producao-campo', label: 'Lançamento de produção', href: '/producao' }];
-    if (isRhTabAllowed('ponto', sub) && hasAnyPermission(session, ['hr.read'])) {
-      items.push({ id: 'ponto', label: 'Batida de ponto', href: '/rh/ponto' });
-    }
-    return items;
+  if (isFieldOperatorLike(session)) {
+    const items: NavItem[] = [PRODUCAO_ITEM];
+    return withPontoItem(items, session, sub);
   }
 
-  return APP_MODULES.filter((m) => canAccessModule(m, session, sub)).map((m) => ({
+  let items = APP_MODULES.filter((m) => canAccessModule(m, session, sub)).map((m) => ({
     id: m.id,
     label: m.label,
     href: m.href,
   }));
+
+  // RH só leitura (funcionário): não abre cadastro de funcionários; atalho direto ao ponto
+  const hrReadOnly =
+    hasAnyPermission(session, ['hr.read']) && !hasAnyPermission(session, ['hr.write']);
+  if (hrReadOnly) {
+    items = items.filter((m) => m.id !== 'rh');
+  }
+
+  return withPontoItem(items, session, sub);
 }
 
 /** Abas internas do módulo (ex.: Produção vs Sanidade). */
@@ -80,15 +129,20 @@ export function filterModuleTabs(
     return mod.tabs;
   }
 
-  if (isFieldOperatorOnly(session) && mod.id === 'operacao') {
+  if (isFieldOperatorLike(session) && mod.id === 'operacao') {
     return mod.tabs.filter((t) => t.id === 'producao');
   }
 
-  if (isFieldOperatorOnly(session) && mod.id === 'rh') {
+  if (isFieldOperatorLike(session) && mod.id === 'rh') {
     return mod.tabs.filter((t) => t.id === 'ponto' && isRhTabAllowed(t.id, sub));
   }
 
   if (mod.id === 'rh') {
+    const hrReadOnly =
+      hasAnyPermission(session, ['hr.read']) && !hasAnyPermission(session, ['hr.write']);
+    if (hrReadOnly) {
+      return mod.tabs.filter((t) => t.id === 'ponto' && isRhTabAllowed(t.id, sub));
+    }
     return mod.tabs.filter((t) => isRhTabAllowed(t.id, sub));
   }
 
@@ -139,7 +193,7 @@ export function filterModuleTabs(
 export function getPostLoginPath(session: SessionUser | null): string {
   if (!session) return '/dashboard';
   if (isAdminSession(session)) return '/dashboard';
-  if (isFieldOperatorOnly(session)) return '/producao';
+  if (isFieldOperatorLike(session)) return '/producao';
   const items = navItemsForSession(session, null);
   return items[0]?.href ?? '/dashboard';
 }
