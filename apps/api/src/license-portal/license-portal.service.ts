@@ -22,6 +22,7 @@ import {
 } from '../commercial/plans';
 import { CentralPrismaService } from '../prisma/central-prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+import { ensureTenantRbac } from '../provisioning/sync-tenant-rbac';
 import { TenantProvisioningService } from '../provisioning/tenant-provisioning.service';
 import { assertValidUsername } from '../users/username.util';
 import { LICENSE_PORTAL_JWT_AUD } from './portal-jwt.types';
@@ -424,11 +425,13 @@ export class LicensePortalService {
   }
 
   private async requireAdminRole(prisma: Awaited<ReturnType<TenantPrismaService['getClient']>>) {
-    const adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
+    let adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
     if (!adminRole) {
-      throw new BadRequestException(
-        'Perfil admin ausente no tenant. No VPS: pnpm --filter @gestor-granja/api permissions:upsert-all',
-      );
+      await ensureTenantRbac(prisma);
+      adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
+    }
+    if (!adminRole) {
+      throw new BadRequestException('Não foi possível criar o perfil admin nesta granja.');
     }
     return adminRole;
   }

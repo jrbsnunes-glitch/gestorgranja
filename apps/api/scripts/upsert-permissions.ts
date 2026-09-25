@@ -3,7 +3,7 @@
  */
 import { PrismaClient as CentralClient } from '../src/generated/central-client';
 import { PrismaClient as TenantClient } from '../src/generated/tenant-client';
-import { DEFAULT_PERMISSIONS, DEFAULT_ROLES } from '../src/provisioning/permissions.seed';
+import { ensureTenantRbac } from '../src/provisioning/sync-tenant-rbac';
 
 async function main() {
   const centralUrl = process.env.CENTRAL_DATABASE_URL;

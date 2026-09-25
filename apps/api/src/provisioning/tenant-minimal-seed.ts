@@ -1,7 +1,7 @@
 import * as bcrypt from 'bcrypt';
 import { PrismaClient } from '../generated/tenant-client';
 import { assertValidUsername, usernameFromEmail } from '../users/username.util';
-import { DEFAULT_PERMISSIONS, DEFAULT_ROLES } from './permissions.seed';
+import { ensureTenantRbac } from './sync-tenant-rbac';
 import { ensureChartAccountsSeeded } from './seed-chart-accounts';
 
 export async function seedEggStockIntegration(prisma: PrismaClient) {
@@ -64,33 +64,7 @@ export type TenantMinimalSeedOptions = {
 export async function seedTenantMinimal(tenantUrl: string, opts: TenantMinimalSeedOptions) {
   const prisma = new PrismaClient({ datasources: { db: { url: tenantUrl } } });
   try {
-    for (const p of DEFAULT_PERMISSIONS) {
-      await prisma.permission.upsert({
-        where: { code: p.code },
-        create: p,
-        update: { module: p.module, action: p.action },
-      });
-    }
-
-    const permissionRows = await prisma.permission.findMany();
-    const permByCode = new Map(permissionRows.map((p) => [p.code, p.id]));
-
-    for (const role of DEFAULT_ROLES) {
-      const row = await prisma.role.upsert({
-        where: { name: role.name },
-        create: { name: role.name },
-        update: {},
-      });
-      for (const code of role.permissions) {
-        const permissionId = permByCode.get(code);
-        if (!permissionId) continue;
-        await prisma.rolePermission.upsert({
-          where: { roleId_permissionId: { roleId: row.id, permissionId } },
-          create: { roleId: row.id, permissionId },
-          update: {},
-        });
-      }
-    }
+    await ensureTenantRbac(prisma);
 
     const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'admin' } });
     const hash = await bcrypt.hash(opts.adminPassword, 10);
