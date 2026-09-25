@@ -28,9 +28,38 @@ done
 
 cd "$ROOT"
 
-export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-# shellcheck source=/dev/null
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+load_node_env() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [ -s "${NVM_DIR}/nvm.sh" ]; then
+    # shellcheck source=/dev/null
+    . "${NVM_DIR}/nvm.sh"
+    return 0
+  fi
+  if [ -s /home/deploy/.nvm/nvm.sh ]; then
+    export NVM_DIR=/home/deploy/.nvm
+    # shellcheck source=/dev/null
+    . /home/deploy/.nvm/nvm.sh
+    return 0
+  fi
+  return 1
+}
+
+pm2_restart_apps() {
+  export GESTOR_GRANJA_ROOT="$ROOT"
+  local pm2_cmd="pm2 restart deploy/ecosystem.config.cjs --update-env 2>/dev/null || pm2 start deploy/ecosystem.config.cjs"
+  if command -v pm2 >/dev/null 2>&1; then
+    eval "$pm2_cmd"
+    return 0
+  fi
+  if id deploy >/dev/null 2>&1; then
+    echo "  PM2 via usuário deploy (root não tem pm2 no PATH)..."
+    su - deploy -c "cd '$ROOT' && export GESTOR_GRANJA_ROOT='$ROOT' && export NVM_DIR=\"\$HOME/.nvm\" && [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"; $pm2_cmd"
+    return 0
+  fi
+  return 1
+}
+
+load_node_env || true
 
 # --- Git: safe.directory + fetch/pull (evita "dubious ownership" root vs deploy) ---
 git_atualizar_repositorio() {
