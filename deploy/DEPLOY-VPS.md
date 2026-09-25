@@ -170,14 +170,16 @@ certbot renew --dry-run
 
 ## Atualizações
 
-Na raiz do projeto (recomendado):
+Na raiz do projeto (recomendado — **pode rodar como root ou deploy**):
 
 ```bash
-chmod +x atgranja.sh   # necessário após git pull se der "Permission denied"
-./atgranja.sh
-# equivalente sem chmod:
+cd /var/www/gestorgranja
 bash atgranja.sh
 ```
+
+Como **root**, o script faz `chown deploy:deploy`, configura `safe.directory`, testa GitHub (`git ls-remote`) e continua **como usuário deploy** (sem precisar de senha do `su`).
+
+Se der "Permission denied" no `./atgranja.sh`, use `bash atgranja.sh` ou `chmod +x atgranja.sh`.
 
 Opções: `--skip-git` (só build/migrations locais), `--skip-docker` (não sobe Postgres/Redis).
 
