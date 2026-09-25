@@ -118,6 +118,11 @@ export class EditPortalTenantDto {
   provisionAdminEmail?: string;
 
   @IsOptional()
+  @IsString()
+  @MinLength(3)
+  adminUsername?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   billingDay?: number;

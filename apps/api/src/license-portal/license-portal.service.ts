@@ -23,6 +23,7 @@ import {
 import { CentralPrismaService } from '../prisma/central-prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { TenantProvisioningService } from '../provisioning/tenant-provisioning.service';
+import { assertValidUsername } from '../users/username.util';
 import { LICENSE_PORTAL_JWT_AUD } from './portal-jwt.types';
 import type {
   ActivateLicenseDto,
@@ -158,19 +159,26 @@ export class LicensePortalService {
       data.contractMonthlyFeeBrl = dto.contractMonthlyFeeBrl;
     }
 
-    if (Object.keys(data).length === 0) {
+    const syncAdmin =
+      dto.adminUsername !== undefined || dto.provisionAdminEmail !== undefined;
+
+    if (Object.keys(data).length === 0 && !syncAdmin) {
       throw new BadRequestException('Nenhum campo para atualizar');
     }
 
     let row: Tenant;
-    try {
-      row = await this.central.tenant.update({ where: { slug }, data });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('Unique constraint')) {
-        throw new BadRequestException('CNPJ já utilizado por outro cliente');
+    if (Object.keys(data).length > 0) {
+      try {
+        row = await this.central.tenant.update({ where: { slug }, data });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('Unique constraint')) {
+          throw new BadRequestException('CNPJ já utilizado por outro cliente');
+        }
+        throw err;
       }
-      throw err;
+    } else {
+      row = await this.requireVisibleTenant(slug);
     }
 
     if (dto.companyName !== undefined || dto.cnpj !== undefined) {
@@ -180,7 +188,59 @@ export class LicensePortalService {
       });
     }
 
+    if (syncAdmin) {
+      await this.syncTenantAdminUser(slug, {
+        adminUsername: dto.adminUsername,
+        provisionAdminEmail: dto.provisionAdminEmail ?? row.provisionAdminEmail ?? undefined,
+      });
+    }
+
     return this.enrichTenantWithAdmin(row);
+  }
+
+  private async syncTenantAdminUser(
+    slug: string,
+    patch: { adminUsername?: string; provisionAdminEmail?: string },
+  ) {
+    const central = await this.requireVisibleTenant(slug);
+    const admin = await this.findTenantAdminUser(slug, central.provisionAdminEmail);
+    if (!admin) {
+      throw new NotFoundException('Usuário administrador não encontrado no tenant');
+    }
+
+    const data: { username?: string; email?: string } = {};
+
+    if (patch.adminUsername !== undefined && patch.adminUsername.trim()) {
+      try {
+        data.username = assertValidUsername(patch.adminUsername);
+      } catch (e) {
+        throw new BadRequestException(e instanceof Error ? e.message : 'Usuário inválido');
+      }
+    }
+
+    if (patch.provisionAdminEmail !== undefined && patch.provisionAdminEmail.trim()) {
+      data.email = patch.provisionAdminEmail.trim().toLowerCase();
+    }
+
+    if (!Object.keys(data).length) return;
+
+    const prisma = await this.tenantPrisma.getClient(slug);
+
+    if (data.username && data.username !== admin.username) {
+      const taken = await prisma.user.findFirst({
+        where: { username: data.username, NOT: { id: admin.id } },
+      });
+      if (taken) throw new BadRequestException('Usuário de login já em uso nesta granja');
+    }
+
+    if (data.email && data.email !== admin.email) {
+      const taken = await prisma.user.findFirst({
+        where: { email: data.email, NOT: { id: admin.id } },
+      });
+      if (taken) throw new BadRequestException('E-mail já em uso nesta granja');
+    }
+
+    await prisma.user.update({ where: { id: admin.id }, data });
   }
 
   private async syncTenantCompany(

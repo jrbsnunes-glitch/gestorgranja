@@ -30,6 +30,7 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
       licenseStatus: String(fd.get('licenseStatus')),
       licenseExpiresAt: licenseExpiresRaw || null,
       provisionAdminEmail: String(fd.get('provisionAdminEmail')).trim(),
+      adminUsername: String(fd.get('adminUsername')).trim(),
       billingDay: Number(fd.get('billingDay')),
       contractEntryFeeBrl: Number(fd.get('contractEntryFeeBrl')),
       contractMonthlyFeeBrl: Number(fd.get('contractMonthlyFeeBrl')),
@@ -120,10 +121,12 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
               Usuário de login (admin)
               <input
                 name="adminUsername"
-                className={`${inputClass} mt-1 bg-slate-50`}
-                readOnly
-                value={tenant.adminUsername ?? ''}
-                placeholder="Não encontrado no tenant"
+                className={`${inputClass} mt-1`}
+                defaultValue={tenant.adminUsername ?? ''}
+                placeholder="ex.: gerente"
+                autoComplete="username"
+                minLength={3}
+                required
               />
               <span className="mt-1 block text-[11px] text-slate-500">
                 Login no painel: granja <strong>{tenant.slug}</strong> + este usuário + senha.

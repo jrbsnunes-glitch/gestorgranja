@@ -40,6 +40,7 @@ export type EditPortalTenantPayload = {
   licenseStatus?: string;
   licenseExpiresAt?: string | null;
   provisionAdminEmail?: string;
+  adminUsername?: string;
   billingDay?: number;
   maxBirds?: number;
   maxBarns?: number;
