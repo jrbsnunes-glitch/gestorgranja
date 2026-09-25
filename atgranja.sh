@@ -57,11 +57,23 @@ git_atualizar_repositorio() {
     return 1
   fi
 
+  GIT_REF="$GIT_REMOTE/$GIT_BRANCH"
+
   echo "  git fetch $GIT_REMOTE $GIT_BRANCH"
   git fetch "$GIT_REMOTE" "$GIT_BRANCH"
 
+  for f in atgranja.sh deploy/update.sh; do
+    if [ -f "$f" ] && ! git diff --quiet -- "$f" 2>/dev/null; then
+      echo "  git restore $f (descarta cópia local; usa GitHub)"
+      git restore "$f" 2>/dev/null || git checkout -- "$f"
+    fi
+  done
+
   echo "  git pull $GIT_REMOTE $GIT_BRANCH"
-  git pull "$GIT_REMOTE" "$GIT_BRANCH"
+  if ! git pull "$GIT_REMOTE" "$GIT_BRANCH"; then
+    echo "  Pull falhou — git reset --hard $GIT_REF"
+    git reset --hard "$GIT_REF"
+  fi
 
   echo "  $(git rev-parse --short HEAD) — $(git log -1 --pretty=format:'%s')"
 }
