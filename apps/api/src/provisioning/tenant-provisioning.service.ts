@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { execFileSync } from 'child_process';
+import { createRequire } from 'node:module';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { Client } from 'pg';
@@ -102,14 +103,40 @@ export class TenantProvisioningService {
     }
   }
 
-  private runTenantMigrations(databaseName: string) {
-    const url = this.buildTenantUrl(databaseName);
-    const schema = join(process.cwd(), 'prisma/tenant/schema.prisma');
-    const prismaBin = join(process.cwd(), 'node_modules', 'prisma', 'build', 'index.js');
+  /** Raiz do pacote @gestor-granja/api (dist/ → apps/api). */
+  private apiRoot(): string {
+    return join(__dirname, '..', '..');
+  }
+
+  private resolvePrismaCli(): string {
+    const apiRoot = this.apiRoot();
+    const req = createRequire(join(apiRoot, 'package.json'));
+    let pkgPath: string;
+    try {
+      pkgPath = req.resolve('prisma/package.json');
+    } catch {
+      throw new Error(
+        `Pacote prisma não encontrado a partir de ${apiRoot}. Rode pnpm install na raiz do monorepo.`,
+      );
+    }
+    const prismaBin = join(pkgPath, '..', 'build', 'index.js');
     if (!existsSync(prismaBin)) {
       throw new Error(`Prisma CLI não encontrado em ${prismaBin}`);
     }
+    return prismaBin;
+  }
+
+  private runTenantMigrations(databaseName: string) {
+    const apiRoot = this.apiRoot();
+    const url = this.buildTenantUrl(databaseName);
+    const schema = join(apiRoot, 'prisma/tenant/schema.prisma');
+    if (!existsSync(schema)) {
+      throw new Error(`Schema tenant não encontrado: ${schema}`);
+    }
+    const prismaBin = this.resolvePrismaCli();
+    this.logger.log(`Migrando tenant ${databaseName} (schema ${schema})`);
     execFileSync(process.execPath, [prismaBin, 'migrate', 'deploy', `--schema=${schema}`], {
+      cwd: apiRoot,
       env: { ...process.env, TENANT_DATABASE_URL: url },
       stdio: 'inherit',
     });
