@@ -1,7 +1,9 @@
 'use client';
 
 import { Button, Card } from '@gestor-granja/ui';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { PRODUCT_LOGO_PATH } from '@/lib/product-branding';
 import { FormEvent, useEffect, useState } from 'react';
 import { inputClass } from '@/components/ui-parts';
 import { getPortalToken, portalLogin, setPortalToken } from '@/lib/license-portal-api';
@@ -43,8 +45,17 @@ export default function PortalLicencasLoginPage() {
   return (
     <main className="flex min-h-[100dvh] flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
-        <p className="mb-1 text-sm font-medium uppercase tracking-wide text-emerald-800">GestorGranja</p>
-        <h1 className="mb-6 text-2xl font-bold">Portal de licenças</h1>
+        <div className="mb-6">
+          <Image
+            src={PRODUCT_LOGO_PATH}
+            alt="Gestor Granja"
+            width={480}
+            height={160}
+            priority
+            className="h-auto w-full max-w-xs object-contain"
+          />
+        </div>
+        <h1 className="mb-6 text-xl font-bold text-slate-900">Portal de licenças</h1>
         <Card title="Acesso operador">
           <form className="flex flex-col gap-3" onSubmit={onSubmit}>
             <input name="username" placeholder="Usuário" className={inputClass} required autoComplete="username" />

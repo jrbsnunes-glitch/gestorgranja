@@ -92,7 +92,14 @@ if [ ! -f .env ]; then
 fi
 
 echo "[2/10] Sincronizar .env para apps..."
+DEPLOY_REV="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+if grep -q '^NEXT_PUBLIC_DEPLOY_REV=' .env; then
+  sed -i "s/^NEXT_PUBLIC_DEPLOY_REV=.*/NEXT_PUBLIC_DEPLOY_REV=$DEPLOY_REV/" .env
+else
+  echo "NEXT_PUBLIC_DEPLOY_REV=$DEPLOY_REV" >> .env
+fi
 bash deploy/sync-env.sh
+echo "  Build web com NEXT_PUBLIC_DEPLOY_REV=$DEPLOY_REV"
 
 if [ "$SKIP_DOCKER" -eq 0 ]; then
   echo "[3/10] Docker Postgres/Redis..."

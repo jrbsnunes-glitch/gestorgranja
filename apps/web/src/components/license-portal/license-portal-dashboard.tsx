@@ -1,7 +1,9 @@
 'use client';
 
 import { Button, Card } from '@gestor-granja/ui';
+import Image from 'next/image';
 import Link from 'next/link';
+import { PRODUCT_LOGO_PATH } from '@/lib/product-branding';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { inputClass } from '@/components/ui-parts';
@@ -136,9 +138,21 @@ export function LicensePortalDashboard() {
       ) : null}
       <header className="border-b border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-6">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Portal de licenças</h1>
-            <p className="text-sm text-slate-600">Clientes ativos e valores contratados</p>
+          <div className="flex items-center gap-4">
+            <Image
+              src={PRODUCT_LOGO_PATH}
+              alt="Gestor Granja"
+              width={160}
+              height={48}
+              className="hidden h-10 w-auto object-contain sm:block"
+            />
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">Portal de licenças</h1>
+              <p className="text-sm text-slate-600">Clientes ativos e valores contratados</p>
+              {process.env.NEXT_PUBLIC_DEPLOY_REV ? (
+                <p className="text-[10px] text-slate-400">versão {process.env.NEXT_PUBLIC_DEPLOY_REV}</p>
+              ) : null}
+            </div>
           </div>
           {totals ? (
             <div className="flex flex-wrap gap-4 text-sm">
