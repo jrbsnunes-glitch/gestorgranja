@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 import { SwRegister } from '@/components/sw-register';
+import { CAMPO_BASE_PATH } from '@/lib/campo-base-path';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'GestorGranja Campo',
   description: 'Lançamentos offline no galpão',
-  manifest: '/manifest.json',
+  manifest: `${CAMPO_BASE_PATH}/manifest.json`,
 };
 
 export const viewport: Viewport = {

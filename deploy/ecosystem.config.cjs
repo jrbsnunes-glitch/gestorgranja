@@ -1,5 +1,5 @@
 /**
- * PM2 — GestorGranja (API + Next.js)
+ * PM2 — GestorGranja (API + Next.js web + PWA campo)
  * Caminho padrão: /var/www/gestorgranja
  */
 const path = require('path');
@@ -35,6 +35,22 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3020',
+      },
+    },
+    {
+      name: 'gestorgranja-campo',
+      script: 'pnpm',
+      args: '--filter @gestor-granja/mobile-pwa start',
+      cwd: root,
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '512M',
+      env_file: path.join(root, '.env'),
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3021',
       },
     },
   ],

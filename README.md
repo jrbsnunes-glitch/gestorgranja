@@ -40,7 +40,7 @@ Após migrations do plano 42 pts: `pnpm permissions:upsert-all` (tenants existen
 
 - API docs: http://localhost:3010/api/docs
 - Web: http://localhost:3020
-- Campo PWA: http://localhost:3021
+- Campo PWA: http://localhost:3021/campo (produção: https://www.gestorgranja.com/campo/)
 
 ## Novo tenant
 

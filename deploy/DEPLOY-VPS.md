@@ -8,6 +8,7 @@ Stack real deste projeto (diferente do GestorVenda):
 |------------|------------|---------------|
 | API | NestJS + pnpm | **3010** (`/api`) |
 | Web | **Next.js 15** (SSR, não Vite estático) | **3020** |
+| PWA campo (`/campo`) | Next.js 15 + Dexie/offline | **3021** |
 | PostgreSQL 16 | Docker | **5440** → localhost |
 | Redis 7 | Docker | **6382** → localhost |
 | Proxy | Nginx → API + Next | 80 / 443 |
@@ -190,7 +191,19 @@ chmod +x deploy/update.sh
 ./deploy/update.sh
 ```
 
-O script executa: `sync-env.sh`, Docker (5440/6382), `git pull`, `pnpm install`, Prisma generate/migrate (central + tenant + `tenant:migrate-all`), `pnpm build`, restart PM2 e healthcheck nas portas 3010/3020.
+O script executa: `sync-env.sh`, Docker (5440/6382), `git pull`, `pnpm install`, Prisma generate/migrate (central + tenant + `tenant:migrate-all`), `pnpm build`, restart PM2 e healthcheck nas portas 3010/3020/3021 (`/campo/`).
+
+### PWA de campo (`/campo`)
+
+- URL pública: **https://www.gestorgranja.com/campo/** (login igual ao painel: slug + usuário + senha).
+- Após `git pull`, copie o Nginx atualizado se ainda não tiver o bloco `/campo/`:
+
+```bash
+sudo cp /var/www/gestorgranja/deploy/nginx/gestorgranja.com.conf /etc/nginx/sites-available/gestorgranja.com
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+- PM2 deve listar `gestorgranja-campo` (porta 3021). Primeira vez após esta feature: `bash atgranja.sh` sobe o processo via `ecosystem.config.cjs`.
 
 ## Portal de licenças
 

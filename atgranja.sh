@@ -263,6 +263,7 @@ fi
 echo "[10/10] Healthcheck..."
 API_OK=0
 WEB_OK=0
+CAMPO_OK=0
 FAVICON_OK=0
 if curl -sf "http://127.0.0.1:3010/api/docs" >/dev/null 2>&1; then
   echo "  API OK (3010)"
@@ -276,6 +277,12 @@ if curl -sfI "http://127.0.0.1:3020" >/dev/null 2>&1; then
 else
   echo "  Web falhou (3020) — pm2 logs gestorgranja-web" >&2
 fi
+if curl -sfI "http://127.0.0.1:3021/campo/" >/dev/null 2>&1; then
+  echo "  Campo PWA OK (3021 /campo/)"
+  CAMPO_OK=1
+else
+  echo "  Campo PWA falhou (3021) — pm2 logs gestorgranja-campo; nginx /campo/?" >&2
+fi
 if curl -sfI "http://127.0.0.1:3020/favicon.ico" >/dev/null 2>&1; then
   echo "  Favicon OK (/favicon.ico)"
   FAVICON_OK=1
@@ -285,8 +292,8 @@ fi
 
 pm2 status || true
 
-if [ "$API_OK" -eq 0 ] || [ "$WEB_OK" -eq 0 ]; then
+if [ "$API_OK" -eq 0 ] || [ "$WEB_OK" -eq 0 ] || [ "$CAMPO_OK" -eq 0 ]; then
   exit 1
 fi
 
-echo "Atualização concluída — revisão $DEPLOY_REV (favicon=$FAVICON_OK)."
+echo "Atualização concluída — revisão $DEPLOY_REV (favicon=$FAVICON_OK, campo=$CAMPO_OK)."
