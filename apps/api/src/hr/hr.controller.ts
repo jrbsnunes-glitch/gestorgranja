@@ -285,7 +285,7 @@ export class HrController {
   }
 
   @Get('time/terminals')
-  @RequirePermissions('hr.read', '*')
+  @RequirePermissions('hr.read', 'hr.write', 'sync.write', '*')
   terminals(@CurrentUser() user: JwtPayload) {
     return this.hr.listTerminals(user);
   }
@@ -319,7 +319,7 @@ export class HrController {
   }
 
   @Post('time/punch')
-  @RequirePermissions('hr.read', '*')
+  @RequirePermissions('hr.read', 'sync.write', '*')
   punch(
     @CurrentUser() user: JwtPayload,
     @Body() body: { token: string; terminalId: string; source: 'KIOSK' | 'MOBILE' },

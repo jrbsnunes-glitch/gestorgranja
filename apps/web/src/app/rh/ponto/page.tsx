@@ -22,6 +22,8 @@ type Punch = {
 
 export default function PontoPage() {
   const [terminals, setTerminals] = useState<Terminal[]>([]);
+  const [terminalsLoaded, setTerminalsLoaded] = useState(false);
+  const [terminalsHint, setTerminalsHint] = useState<string | null>(null);
   const [punches, setPunches] = useState<Punch[]>([]);
   const [terminalId, setTerminalId] = useState('');
   const [token, setToken] = useState('');
@@ -40,12 +42,30 @@ export default function PontoPage() {
   const activeTerminals = terminals.filter((t) => t.isActive);
 
   const load = useCallback(() => {
-    void apiFetch<Punch[]>('/v1/hr/time/punches').then(setPunches);
-    void apiFetch<Terminal[]>('/v1/hr/time/terminals').then((t) => {
-      setTerminals(t);
-      const active = t.filter((x) => x.isActive);
-      setTerminalId((prev) => prev || active[0]?.id || '');
-    });
+    void apiFetch<Punch[]>('/v1/hr/time/punches')
+      .then(setPunches)
+      .catch(() => setPunches([]));
+
+    void apiFetch<Terminal[]>('/v1/hr/time/terminals')
+      .then((t) => {
+        setTerminals(t);
+        setTerminalsHint(null);
+        const active = t.filter((x) => x.isActive);
+        setTerminalId((prev) => prev || active[0]?.id || '');
+        if (t.length > 0 && active.length === 0) {
+          setTerminalsHint(
+            'Há terminal cadastrado, mas nenhum está ativo. Em RH → Terminal portaria, ative o terminal.',
+          );
+        }
+      })
+      .catch((err) => {
+        setTerminals([]);
+        const text = err instanceof Error ? err.message : 'Erro ao carregar terminais';
+        setTerminalsHint(
+          `${text} Verifique plano Completo, permissão de ponto (hr.read) e faça login de novo após o RH ajustar o usuário.`,
+        );
+      })
+      .finally(() => setTerminalsLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -92,51 +112,60 @@ export default function PontoPage() {
     }
   }
 
+  const showManualForm = activeTerminals.length > 0;
+
   return (
     <AdminShell title="Ponto eletrônico">
       <PageIntro
         title="Ponto eletrônico"
-        description="Escaneie o QR na portaria ou informe o token. É necessário estar logado como funcionário vinculado a um usuário."
+        description="Escaneie o QR na portaria (recomendado). O QR já identifica o terminal. É preciso estar logado e vinculado a um funcionário em RH."
       />
       <ErrorBox message={error} />
+      {terminalsHint ? <p className="mb-3 text-sm text-amber-800">{terminalsHint}</p> : null}
       {msg ? <p className="mb-4 text-sm text-emerald-700">{msg}</p> : null}
       <div className="mb-6">
         <PageCard title="Registrar batida">
-          {activeTerminals.length === 0 ? (
-            <p className="text-sm text-amber-800">
-              Nenhum terminal ativo. Cadastre em RH → Terminal portaria.
+          {terminalsLoaded && activeTerminals.length === 0 && !terminalsHint ? (
+            <p className="mb-4 text-sm text-amber-800">
+              Nenhum terminal ativo. Peça ao RH para cadastrar e ativar em Terminal portaria e mantenha o QR da
+              portaria aberto.
             </p>
+          ) : null}
+
+          <PunchQrScanner onScan={applyScanned} onError={(m) => setError(m)} />
+
+          {showManualForm ? (
+            <form onSubmit={submit} className="mt-4 max-w-md space-y-3">
+              <Field label="Terminal">
+                <select
+                  className={inputClass}
+                  value={terminalId}
+                  onChange={(e) => setTerminalId(e.target.value)}
+                  required
+                >
+                  {activeTerminals.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Código do QR (manual)">
+                <input
+                  className={inputClass}
+                  value={token}
+                  onChange={(e) => onTokenPaste(e.target.value)}
+                  required
+                  placeholder="Cole o JSON ou código do QR"
+                  autoComplete="off"
+                />
+              </Field>
+              <SubmitButton label={submitting ? 'Registrando…' : 'Bater ponto'} disabled={submitting} />
+            </form>
           ) : (
-            <>
-              <PunchQrScanner onScan={applyScanned} onError={(m) => setError(m)} />
-              <form onSubmit={submit} className="mt-4 max-w-md space-y-3">
-                <Field label="Terminal">
-                  <select
-                    className={inputClass}
-                    value={terminalId}
-                    onChange={(e) => setTerminalId(e.target.value)}
-                    required
-                  >
-                    {activeTerminals.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Token do QR (manual)">
-                  <input
-                    className={inputClass}
-                    value={token}
-                    onChange={(e) => onTokenPaste(e.target.value)}
-                    required
-                    placeholder="Código ou JSON do QR"
-                    autoComplete="off"
-                  />
-                </Field>
-                <SubmitButton label={submitting ? 'Registrando…' : 'Bater ponto'} disabled={submitting} />
-              </form>
-            </>
+            <p className="mt-4 text-sm text-slate-600">
+              Use o botão acima para escanear o QR da portaria. Entrada manual exige terminal ativo na lista.
+            </p>
           )}
         </PageCard>
       </div>
