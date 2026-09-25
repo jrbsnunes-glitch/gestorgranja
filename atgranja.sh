@@ -1,5 +1,6 @@
 #!/bin/bash
 # Atualização completa do GestorGranja no VPS (git/GitHub, Docker, migrations, build, PM2).
+# Ponto único de git no servidor: não rode git pull/fetch fora deste script.
 # Pode rodar como root ou deploy: como root, corrige ownership e reexecuta como deploy.
 # Se "Permission denied" ao executar: chmod +x atgranja.sh  — ou: bash atgranja.sh
 set -euo pipefail

@@ -201,12 +201,12 @@ chmod +x deploy/update.sh
 ./deploy/update.sh
 ```
 
-O script executa: `sync-env.sh`, Docker (5440/6382), `git pull`, `pnpm install`, Prisma generate/migrate (central + tenant + `tenant:migrate-all`), `pnpm build`, restart PM2 e healthcheck nas portas 3010/3020/3021 (`/campo/`).
+O script executa, **em uma única execução** (inclui git): fetch/pull do GitHub, `sync-env.sh`, Docker (5440/6382), `pnpm install`, Prisma generate/migrate (central + tenant + `tenant:migrate-all`), `pnpm build`, restart PM2 e healthcheck nas portas 3010/3020/3021 (`/campo/`). **Não** rode `git pull` separado antes — use só `bash atgranja.sh`.
 
 ### PWA de campo (`/campo`)
 
 - URL pública: **https://gestorgranja.com/campo** (sem barra final; login igual ao painel).
-- Após `git pull`, atualize Nginx **nos dois** `server` (porta **80** e **443**). O Certbot costuma duplicar o bloco SSL — sem `location /campo` no HTTPS o celular falha.
+- Após `bash atgranja.sh`, se mudou config Nginx no repo, atualize **nos dois** `server` (porta **80** e **443**). O Certbot costuma duplicar o bloco SSL — sem `location /campo` no HTTPS o celular falha.
 
 ```bash
 sudo cp /var/www/gestorgranja/deploy/nginx/gestorgranja.com.conf /etc/nginx/sites-available/gestorgranja.com

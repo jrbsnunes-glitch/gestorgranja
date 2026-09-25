@@ -37,7 +37,14 @@ export class UsersController {
   update(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() body: { name?: string; isActive?: boolean },
+    @Body()
+    body: {
+      name?: string;
+      isActive?: boolean;
+      email?: string;
+      username?: string;
+      password?: string;
+    },
   ) {
     return this.users.updateUser(user, id, body);
   }

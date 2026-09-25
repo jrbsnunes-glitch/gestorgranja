@@ -101,9 +101,16 @@ export default function UsuariosPage() {
     const fd = new FormData(e.currentTarget);
     try {
       if (modal === 'edit' && selected) {
+        const password = String(fd.get('password') ?? '').trim();
         await apiFetch(`/v1/users/${selected.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ name: fd.get('name') }),
+          body: JSON.stringify({
+            name: fd.get('name'),
+            username: fd.get('username'),
+            email: fd.get('email'),
+            isActive: fd.get('isActive') === 'true',
+            ...(password ? { password } : {}),
+          }),
         });
       } else {
         await apiFetch('/v1/users', {
@@ -299,7 +306,7 @@ export default function UsuariosPage() {
         {tab === 'usuarios' && modal !== null && modal !== 'view' ? (
           <form onSubmit={saveUser} key={selected?.id ?? 'new'}>
             <Field label="Nome">
-              <input name="name" className={inputClass} required defaultValue={selected?.name} />
+              <input name="name" className={inputClass} required defaultValue={selected?.name ?? ''} />
             </Field>
             {modal === 'include' ? (
               <>
@@ -313,6 +320,61 @@ export default function UsuariosPage() {
                   <input name="password" type="password" className={inputClass} required minLength={6} />
                 </Field>
                 <Field label="Perfil inicial">{roleSelect}</Field>
+              </>
+            ) : null}
+            {modal === 'edit' && selected ? (
+              <>
+                <Field label="Usuário (login)">
+                  <input
+                    name="username"
+                    className={inputClass}
+                    required
+                    defaultValue={selected.username}
+                    autoComplete="username"
+                  />
+                </Field>
+                <Field label="E-mail (interno)">
+                  <input
+                    name="email"
+                    type="email"
+                    className={inputClass}
+                    required
+                    defaultValue={selected.email}
+                    autoComplete="email"
+                  />
+                </Field>
+                <Field label="Ativo">
+                  <select
+                    name="isActive"
+                    className={inputClass}
+                    defaultValue={selected.isActive ? 'true' : 'false'}
+                  >
+                    <option value="true">Sim</option>
+                    <option value="false">Não</option>
+                  </select>
+                </Field>
+                <Field label="Nova senha (opcional)">
+                  <input
+                    name="password"
+                    type="password"
+                    className={inputClass}
+                    minLength={6}
+                    placeholder="Deixe em branco para manter a atual"
+                    autoComplete="new-password"
+                  />
+                </Field>
+                <p className="mb-3 text-sm text-slate-600">
+                  Perfis e galpão: aba <strong>Atribuições de perfil</strong> —{' '}
+                  {selected.roleAssignments.length
+                    ? selected.roleAssignments
+                        .map((a) =>
+                          a.barn
+                            ? `${labelRole(a.role.name)} @ ${a.barn.name}`
+                            : labelRole(a.role.name),
+                        )
+                        .join(', ')
+                    : 'nenhum perfil atribuído'}
+                </p>
               </>
             ) : null}
             <SubmitButton label={modal === 'edit' ? 'Salvar alterações' : 'Criar usuário'} />

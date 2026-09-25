@@ -7,10 +7,33 @@ import { getApiBase } from '@/lib/api-base';
 import { EGG_PRODUCTION_FIELDS } from '@/lib/labels';
 import { enqueue, flushSyncQueue } from '@/lib/sync';
 
-type Lot = { id: string; code: string };
+type Lot = {
+  id: string;
+  code: string;
+  barn?: { code: string; name: string };
+};
+
+async function fetchLots(api: string, accessToken: string): Promise<Lot[]> {
+  const lotRes = await fetch(`${api}/v1/production/lots`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!lotRes.ok) {
+    const text = await lotRes.text();
+    throw new Error(
+      text || 'Não foi possível listar lotes (permissão production.read ou perfil sem acesso).',
+    );
+  }
+  return (await lotRes.json()) as Lot[];
+}
+
+function lotLabel(l: Lot): string {
+  const barn = l.barn?.code || l.barn?.name;
+  return barn ? `${barn} — ${l.code}` : l.code;
+}
 
 export default function CampoPage() {
   const [token, setToken] = useState('');
+  const [scopedBarnIds, setScopedBarnIds] = useState<string[]>([]);
   const [tenantSlug, setTenantSlug] = useState('demo');
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin123');
@@ -57,6 +80,28 @@ export default function CampoPage() {
     };
   }, [trySync, refreshPending]);
 
+  useEffect(() => {
+    const stored = localStorage.getItem('gg_campo_token');
+    if (!stored) return;
+    setToken(stored);
+    const api = getApiBase();
+    void fetchLots(api, stored)
+      .then((lotRows) => {
+        setLots(lotRows);
+        if (lotRows[0]) setLotId(lotRows[0].id);
+        if (!lotRows.length) {
+          setMsg(
+            'Nenhum lote visível para este usuário. Confira escopo por galpão em Usuários ou cadastre um lote.',
+          );
+        }
+      })
+      .catch((e) => {
+        localStorage.removeItem('gg_campo_token');
+        setToken('');
+        setLoginError(e instanceof Error ? e.message : 'Sessão expirada — entre de novo.');
+      });
+  }, []);
+
   async function login() {
     setLoginError(null);
     setLoggingIn(true);
@@ -75,24 +120,23 @@ export default function CampoPage() {
         const text = await res.text();
         throw new Error(text || `Login falhou (${res.status})`);
       }
-      const data = (await res.json()) as { accessToken: string };
+      const data = (await res.json()) as {
+        accessToken: string;
+        user?: { barnIds?: string[] };
+      };
       localStorage.setItem('gg_campo_token', data.accessToken);
       setToken(data.accessToken);
-      const lotRes = await fetch(`${api}/v1/production/lots`, {
-        headers: { Authorization: `Bearer ${data.accessToken}` },
-      });
-      if (!lotRes.ok) {
-        const text = await lotRes.text();
-        throw new Error(
-          text ||
-            'Login OK, mas não foi possível listar lotes (permissão production.read ou perfil sem acesso).',
-        );
-      }
-      const lotRows = (await lotRes.json()) as Lot[];
+      const barnIds = data.user?.barnIds ?? [];
+      setScopedBarnIds(barnIds);
+      const lotRows = await fetchLots(api, data.accessToken);
       setLots(lotRows);
       if (lotRows[0]) setLotId(lotRows[0].id);
       if (!lotRows.length) {
-        setMsg('Nenhum lote visível para este usuário. Cadastre um lote no painel ou ajuste permissões.');
+        setMsg(
+          barnIds.length
+            ? 'Nenhum lote nos galpões permitidos para este usuário. Em Usuários → Atribuições de perfil, inclua o galpão ou deixe galpão em branco.'
+            : 'Nenhum lote nesta granja. Cadastre em Cadastros → Lotes (mesmo slug usado no login).',
+        );
       }
     } catch (e) {
       const err = e instanceof Error ? e.message : 'Falha ao entrar';
@@ -175,18 +219,28 @@ export default function CampoPage() {
         </Card>
       ) : (
         <>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Lote</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Galpão — lote</label>
           <select
             className="mb-3 w-full rounded border p-3 text-lg"
             value={lotId}
             onChange={(e) => setLotId(e.target.value)}
           >
-            {lots.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.code}
-              </option>
-            ))}
+            {lots.length === 0 ? (
+              <option value="">Nenhum lote disponível</option>
+            ) : (
+              lots.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {lotLabel(l)}
+                </option>
+              ))
+            )}
           </select>
+          {lots.length === 0 && scopedBarnIds.length > 0 ? (
+            <p className="mb-3 text-sm text-amber-800">
+              Este login está limitado a galpão(ões) específico(s). O lote do banco precisa estar vinculado a um
+              galpão liberado no perfil.
+            </p>
+          ) : null}
 
           <Card title="Produção do dia">
             <form className="flex flex-col gap-3" onSubmit={onSubmit}>

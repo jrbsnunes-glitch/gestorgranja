@@ -1,0 +1,20 @@
+---
+description: Deploy no VPS — git somente via atgranja.sh
+alwaysApply: true
+---
+
+# Git e deploy no VPS (GestorGranja)
+
+- **Todo uso de git no servidor** (fetch, pull, reset, checkout de scripts de deploy) deve acontecer **apenas dentro de `atgranja.sh`** na raiz do projeto.
+- **Nunca** orientar ou executar fluxo em duas etapas: `git pull` (ou `git fetch`) **e depois** `atgranja.sh`.
+- Comando canônico de atualização no VPS:
+
+```bash
+cd /var/www/gestorgranja
+bash atgranja.sh
+```
+
+- Como **root**, o mesmo comando continua válido (o script ajusta `chown` e reexecuta como `deploy`).
+- Exceção local no servidor: `bash atgranja.sh --skip-git` quando o código já está no commit desejado e só faltam build/migrate/PM2 (não rodar `git pull` manualmente antes).
+- `deploy/update.sh` é wrapper — também delega para `atgranja.sh`; não usar git fora dele.
+- Commits, branches e PRs no ambiente de **desenvolvimento** (máquina local / CI) seguem o fluxo git normal; esta regra vale para **operação no VPS**.
