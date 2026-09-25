@@ -29,7 +29,7 @@ export const DEFAULT_ROLES = [
   },
   {
     name: 'operador_campo',
-    permissions: ['production.write', 'nutrition.write', 'sync.write'],
+    permissions: ['production.read', 'production.write', 'nutrition.write', 'sync.write', 'hr.read'],
   },
   {
     name: 'financeiro',

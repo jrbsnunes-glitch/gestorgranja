@@ -3,8 +3,9 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { TabBar } from '@/components/list-crud';
 import { useTenantSubscription } from '@/components/tenant-subscription-provider';
+import { filterModuleTabs } from '@/lib/nav-access';
 import { activeModuleTabId, moduleForPath } from '@/lib/module-nav';
-import { isRhTabAllowed } from '@/lib/tenant-subscription';
+import { readSession } from '@/lib/session';
 
 /** Abas de seção do módulo (substituem submenus laterais). */
 export function ModuleSectionTabs() {
@@ -14,10 +15,8 @@ export function ModuleSectionTabs() {
   const mod = moduleForPath(pathname);
   if (!mod?.tabs?.length) return null;
 
-  const tabs =
-    mod.id === 'rh'
-      ? mod.tabs.filter((t) => isRhTabAllowed(t.id, subscription))
-      : mod.tabs;
+  const session = readSession();
+  const tabs = filterModuleTabs(mod, session, subscription);
   if (!tabs.length) return null;
 
   const active = activeModuleTabId(pathname, tabs);

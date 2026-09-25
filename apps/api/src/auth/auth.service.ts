@@ -35,8 +35,10 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('Credenciais inválidas');
 
     const permissions = new Set<string>();
+    const roles = new Set<string>();
     const barnIds = new Set<string>();
     for (const a of user.roleAssignments) {
+      roles.add(a.role.name);
       if (a.barnId) barnIds.add(a.barnId);
       for (const rp of a.role.permissions) {
         permissions.add(rp.permission.code);
@@ -49,6 +51,7 @@ export class AuthService {
       email: user.email,
       tenantSlug: dto.tenantSlug,
       permissions: [...permissions],
+      roles: [...roles],
       barnIds: [...barnIds],
     };
 
@@ -59,6 +62,7 @@ export class AuthService {
         username: user.username,
         name: user.name,
         permissions: payload.permissions,
+        roles: payload.roles,
         barnIds: payload.barnIds,
       },
     };

@@ -9,6 +9,7 @@ export type JwtPayload = {
   email: string;
   tenantSlug: string;
   permissions: string[];
+  roles: string[];
   barnIds: string[];
 };
 
@@ -22,6 +23,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtPayload): JwtPayload {
-    return payload;
+    return {
+      ...payload,
+      roles: payload.roles ?? [],
+      barnIds: payload.barnIds ?? [],
+    };
   }
 }

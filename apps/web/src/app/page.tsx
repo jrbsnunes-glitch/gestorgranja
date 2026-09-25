@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { inputClass } from '@/components/ui-parts';
 import { login } from '@/lib/api';
+import { getPostLoginPath } from '@/lib/nav-access';
+import { readSession } from '@/lib/session';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,7 +24,7 @@ export default function LoginPage() {
         String(fd.get('password')),
       );
       localStorage.setItem('gg_token', res.accessToken);
-      router.push('/dashboard');
+      router.push(getPostLoginPath(readSession()));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha no login');
     }
