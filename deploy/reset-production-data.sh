@@ -39,7 +39,7 @@ load_node_env() {
 
 echo "==> [1/6] Parando apps PM2 (libera conexões ao Postgres)..."
 if command -v pm2 >/dev/null 2>&1; then
-  pm2 stop gestorgranja-api gestorgranja-web gestorgranja-campo 2>/dev/null || true
+  pm2 stop gestorgranja-api gestorgranja-painel gestorgranja-campo 2>/dev/null || true
 fi
 
 echo "==> [2/6] Removendo volume Docker do Postgres (e Redis)..."

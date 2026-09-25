@@ -121,7 +121,7 @@ pnpm build
 
 ```bash
 export GESTOR_GRANJA_ROOT=/var/www/gestorgranja
-pm2 start deploy/ecosystem.config.cjs
+pm2 start ecosystem.config.cjs
 pm2 status
 curl -s http://127.0.0.1:3010/api/docs | head -c 80
 curl -I http://127.0.0.1:3020 | head -3
@@ -232,7 +232,7 @@ pm2 status   # deve aparecer gestorgranja-campo online
 curl -sI http://127.0.0.1:3021/campo/ | head -3
 # se falhar:
 pm2 logs gestorgranja-campo --lines 40
-pm2 reload deploy/ecosystem.config.cjs --update-env
+pm2 reload ecosystem.config.cjs --update-env
 # Nginx com bloco /campo/ (ver deploy/nginx/gestorgranja.com.conf)
 sudo nginx -t && sudo systemctl reload nginx
 ```

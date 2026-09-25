@@ -193,15 +193,21 @@ git_atualizar_repositorio() {
 
 pm2_restart_apps() {
   export GESTOR_GRANJA_ROOT="$ROOT"
+  local eco="$ROOT/ecosystem.config.cjs"
   if ! command -v pm2 >/dev/null 2>&1; then
     echo "PM2 não encontrado no PATH de $(whoami)." >&2
     return 1
   fi
-  # reload inclui apps novos no ecosystem (ex.: gestorgranja-campo); restart sozinho não sobe processo novo
-  if pm2 reload deploy/ecosystem.config.cjs --update-env 2>/dev/null; then
+  if [ ! -f "$eco" ]; then
+    echo "Arquivo PM2 não encontrado: $eco" >&2
+    return 1
+  fi
+  # Nome antigo do painel (ecosystem legado no deploy/)
+  pm2 delete gestorgranja-web 2>/dev/null || true
+  if pm2 reload "$eco" --update-env 2>/dev/null; then
     return 0
   fi
-  pm2 start deploy/ecosystem.config.cjs --update-env 2>/dev/null || pm2 restart deploy/ecosystem.config.cjs --update-env
+  pm2 start "$eco" --update-env 2>/dev/null || pm2 restart "$eco" --update-env
 }
 
 verificar_ambiente
@@ -278,7 +284,7 @@ if curl -sfI "http://127.0.0.1:3020" >/dev/null 2>&1; then
   echo "  Web OK (3020)"
   WEB_OK=1
 else
-  echo "  Web falhou (3020) — pm2 logs gestorgranja-web" >&2
+  echo "  Web falhou (3020) — pm2 logs gestorgranja-painel" >&2
 fi
 if curl -sfI "http://127.0.0.1:3021/campo" >/dev/null 2>&1; then
   echo "  Campo PWA OK (3021 /campo)"
