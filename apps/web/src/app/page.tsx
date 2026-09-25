@@ -61,14 +61,13 @@ export default function LoginPage() {
                 name="tenantSlug"
                 placeholder="Granja (slug)"
                 className={inputClass}
-                defaultValue="demo"
                 required
+                autoComplete="organization"
               />
               <input
                 name="username"
                 placeholder="Usuário"
                 className={inputClass}
-                defaultValue="admin"
                 required
                 autoComplete="username"
               />
