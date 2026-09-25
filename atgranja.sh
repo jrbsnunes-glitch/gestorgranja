@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="${GESTOR_GRANJA_ROOT:-/var/www/gestorgranja}"
 GIT_BRANCH="${GESTOR_GRANJA_GIT_BRANCH:-main}"
+GIT_REMOTE="${GESTOR_GRANJA_GIT_REMOTE:-origin}"
 SKIP_GIT=0
 SKIP_DOCKER=0
 
@@ -14,6 +15,7 @@ for arg in "$@"; do
     -h|--help)
       echo "Uso: ./atgranja.sh [--skip-git] [--skip-docker]"
       echo "  GESTOR_GRANJA_ROOT (padrão: /var/www/gestorgranja)"
+      echo "  GESTOR_GRANJA_GIT_BRANCH (padrão: main)"
       exit 0
       ;;
     *)
@@ -25,52 +27,65 @@ done
 
 cd "$ROOT"
 
-# Git recusa operar se o dono da pasta ≠ usuário atual (ex.: root em /var/www/gestorgranja do deploy).
-ensure_git_trust() {
-  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Aviso: $ROOT não é um repositório git." >&2
-    return 1
-  fi
-  if git status >/dev/null 2>&1; then
-    return 0
-  fi
-  echo "Git: registrando safe.directory para $ROOT..."
-  git config --global --add safe.directory "$ROOT"
-  if git status >/dev/null 2>&1; then
-    return 0
-  fi
-  echo "Git ainda bloqueado. Corrija ownership, ex.:" >&2
-  echo "  chown -R deploy:deploy $ROOT   # depois rode como usuário deploy" >&2
-  echo "  git config --global --add safe.directory $ROOT" >&2
-  return 1
-}
-
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+# --- Git: safe.directory + fetch/pull (evita "dubious ownership" root vs deploy) ---
+git_atualizar_repositorio() {
+  if ! command -v git >/dev/null 2>&1; then
+    echo "Git não instalado." >&2
+    return 1
+  fi
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "$ROOT não é um repositório git." >&2
+    return 1
+  fi
+
+  echo "  git config --global --add safe.directory $ROOT"
+  git config --global --add safe.directory "$ROOT"
+
+  REPO_TOP="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$REPO_TOP" ] && [ "$REPO_TOP" != "$ROOT" ]; then
+    echo "  git config --global --add safe.directory $REPO_TOP"
+    git config --global --add safe.directory "$REPO_TOP"
+  fi
+
+  if ! git status >/dev/null 2>&1; then
+    echo "Git ainda bloqueado após safe.directory. Tente:" >&2
+    echo "  chown -R deploy:deploy $ROOT" >&2
+    return 1
+  fi
+
+  echo "  git fetch $GIT_REMOTE $GIT_BRANCH"
+  git fetch "$GIT_REMOTE" "$GIT_BRANCH"
+
+  echo "  git pull $GIT_REMOTE $GIT_BRANCH"
+  git pull "$GIT_REMOTE" "$GIT_BRANCH"
+
+  echo "  $(git rev-parse --short HEAD) — $(git log -1 --pretty=format:'%s')"
+}
+
+if [ "$SKIP_GIT" -eq 0 ]; then
+  echo "[1/10] Git (safe.directory + pull)..."
+  git_atualizar_repositorio
+else
+  echo "[1/10] Git ignorado (--skip-git)"
+fi
 
 if [ ! -f .env ]; then
   echo "Arquivo .env não encontrado em $ROOT" >&2
   exit 1
 fi
 
-echo "[1/10] Sincronizar .env para apps..."
+echo "[2/10] Sincronizar .env para apps..."
 bash deploy/sync-env.sh
 
 if [ "$SKIP_DOCKER" -eq 0 ]; then
-  echo "[2/10] Docker Postgres/Redis..."
+  echo "[3/10] Docker Postgres/Redis..."
   docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d
 else
-  echo "[2/10] Docker ignorado (--skip-docker)"
-fi
-
-if [ "$SKIP_GIT" -eq 0 ]; then
-  echo "[3/10] git pull origin $GIT_BRANCH..."
-  ensure_git_trust
-  git fetch origin "$GIT_BRANCH"
-  git pull origin "$GIT_BRANCH"
-else
-  echo "[3/10] Git ignorado (--skip-git)"
+  echo "[3/10] Docker ignorado (--skip-docker)"
 fi
 
 echo "[4/10] pnpm install..."
