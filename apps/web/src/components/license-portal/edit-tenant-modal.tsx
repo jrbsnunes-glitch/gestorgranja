@@ -129,7 +129,8 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
                 required
               />
               <span className="mt-1 block text-[11px] text-slate-500">
-                Login no painel: granja <strong>{tenant.slug}</strong> + este usuário + senha.
+                Login no painel: granja <strong>{tenant.slug}</strong> + este usuário + senha. Se a granja
+                ainda não tinha admin, salve aqui e use <strong>Senha admin</strong> na lista para definir a senha.
               </span>
             </label>
             <label className="text-xs text-slate-600">

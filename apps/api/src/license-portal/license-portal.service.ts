@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { timingSafeEqual } from 'crypto';
+import { randomUUID, timingSafeEqual } from 'crypto';
 import { LicenseStatus, type Tenant } from '../generated/central-client';
 import {
   buildActivateLicenseUpdate,
@@ -203,44 +203,61 @@ export class LicensePortalService {
     patch: { adminUsername?: string; provisionAdminEmail?: string },
   ) {
     const central = await this.requireVisibleTenant(slug);
-    const admin = await this.findTenantAdminUser(slug, central.provisionAdminEmail);
-    if (!admin) {
-      throw new NotFoundException('Usuário administrador não encontrado no tenant');
-    }
+    const emailHint = patch.provisionAdminEmail ?? central.provisionAdminEmail ?? '';
+    const usernameHint = patch.adminUsername ?? '';
 
-    const data: { username?: string; email?: string } = {};
-
-    if (patch.adminUsername !== undefined && patch.adminUsername.trim()) {
+    let username: string | undefined;
+    if (usernameHint.trim()) {
       try {
-        data.username = assertValidUsername(patch.adminUsername);
+        username = assertValidUsername(usernameHint);
       } catch (e) {
         throw new BadRequestException(e instanceof Error ? e.message : 'Usuário inválido');
       }
     }
 
-    if (patch.provisionAdminEmail !== undefined && patch.provisionAdminEmail.trim()) {
-      data.email = patch.provisionAdminEmail.trim().toLowerCase();
+    const email = emailHint.trim().toLowerCase();
+    if (!username || !email) {
+      throw new BadRequestException('Informe usuário e e-mail admin para configurar o login da granja.');
     }
 
-    if (!Object.keys(data).length) return;
-
+    let admin = await this.resolveTenantAdminUser(slug, { email, username });
     const prisma = await this.tenantPrisma.getClient(slug);
 
-    if (data.username && data.username !== admin.username) {
+    if (!admin) {
+      const adminRole = await this.requireAdminRole(prisma);
+      admin = await prisma.user.create({
+        data: {
+          username,
+          email,
+          name: central.companyName,
+          passwordHash: await bcrypt.hash(randomUUID(), 10),
+          roleAssignments: { create: { roleId: adminRole.id } },
+        },
+      });
+    } else {
+      await this.ensureUserHasAdminRole(prisma, admin.id);
+    }
+
+    if (username !== admin.username) {
       const taken = await prisma.user.findFirst({
-        where: { username: data.username, NOT: { id: admin.id } },
+        where: { username, NOT: { id: admin.id } },
       });
       if (taken) throw new BadRequestException('Usuário de login já em uso nesta granja');
     }
 
-    if (data.email && data.email !== admin.email) {
+    if (email !== admin.email) {
       const taken = await prisma.user.findFirst({
-        where: { email: data.email, NOT: { id: admin.id } },
+        where: { email, NOT: { id: admin.id } },
       });
       if (taken) throw new BadRequestException('E-mail já em uso nesta granja');
     }
 
-    await prisma.user.update({ where: { id: admin.id }, data });
+    if (username !== admin.username || email !== admin.email) {
+      await prisma.user.update({
+        where: { id: admin.id },
+        data: { username, email },
+      });
+    }
   }
 
   private async syncTenantCompany(
@@ -322,9 +339,14 @@ export class LicensePortalService {
 
   async updateAdminPassword(slug: string, dto: AdminPasswordDto) {
     const tenant = await this.requireVisibleTenant(slug);
-    const admin = await this.findTenantAdminUser(slug, tenant.provisionAdminEmail);
+    const admin = await this.resolveTenantAdminUser(slug, {
+      email: tenant.provisionAdminEmail,
+      username: null,
+    });
     if (!admin) {
-      throw new NotFoundException('Usuário administrador não encontrado no tenant');
+      throw new BadRequestException(
+        'Nenhum usuário admin na granja. Em Editar, preencha usuário e e-mail admin e salve; depois use Senha admin.',
+      );
     }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
@@ -362,19 +384,68 @@ export class LicensePortalService {
   }
 
   private async findTenantAdminUser(slug: string, provisionAdminEmail: string | null) {
+    return this.resolveTenantAdminUser(slug, {
+      email: provisionAdminEmail,
+      username: null,
+    });
+  }
+
+  private async resolveTenantAdminUser(
+    slug: string,
+    hints: { email?: string | null; username?: string | null },
+  ) {
     const prisma = await this.tenantPrisma.getClient(slug);
-    const email = provisionAdminEmail?.trim().toLowerCase();
+    const email = hints.email?.trim().toLowerCase();
     if (email) {
       const byEmail = await prisma.user.findUnique({ where: { email } });
       if (byEmail) return byEmail;
     }
+
+    if (hints.username?.trim()) {
+      try {
+        const username = assertValidUsername(hints.username);
+        const byUsername = await prisma.user.findUnique({ where: { username } });
+        if (byUsername) return byUsername;
+      } catch {
+        /* ignore invalid hint */
+      }
+    }
+
     const adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
-    if (!adminRole) return null;
-    const assignment = await prisma.userRoleAssignment.findFirst({
-      where: { roleId: adminRole.id },
-      include: { user: true },
+    if (adminRole) {
+      const assignment = await prisma.userRoleAssignment.findFirst({
+        where: { roleId: adminRole.id },
+        include: { user: true },
+      });
+      if (assignment?.user) return assignment.user;
+    }
+
+    return prisma.user.findFirst({ orderBy: { createdAt: 'asc' } });
+  }
+
+  private async requireAdminRole(prisma: Awaited<ReturnType<TenantPrismaService['getClient']>>) {
+    const adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
+    if (!adminRole) {
+      throw new BadRequestException(
+        'Perfil admin ausente no tenant. No VPS: pnpm --filter @gestor-granja/api permissions:upsert-all',
+      );
+    }
+    return adminRole;
+  }
+
+  private async ensureUserHasAdminRole(
+    prisma: Awaited<ReturnType<TenantPrismaService['getClient']>>,
+    userId: string,
+  ) {
+    const adminRole = await this.requireAdminRole(prisma);
+    const link = await prisma.userRoleAssignment.findFirst({
+      where: { userId, roleId: adminRole.id },
     });
-    return assignment?.user ?? null;
+    if (!link) {
+      await prisma.userRoleAssignment.create({
+        data: { userId, roleId: adminRole.id },
+      });
+    }
   }
 
   private computeTotals(items: TenantRow[]) {
