@@ -37,6 +37,7 @@ type TenantRow = Tenant & {
   planLabel: string;
   entryFeeBrl: number;
   monthlyFeeBrl: number;
+  adminUsername: string | null;
 };
 
 @Injectable()
@@ -86,7 +87,7 @@ export class LicensePortalService {
       where: { archivedAt: null },
       orderBy: { createdAt: 'desc' },
     });
-    const items = rows.map((t) => this.enrichTenant(t));
+    const items = await Promise.all(rows.map((t) => this.enrichTenantWithAdmin(t)));
     const totals = this.computeTotals(items);
     return { items, totals };
   }
@@ -123,7 +124,7 @@ export class LicensePortalService {
     });
 
     const fresh = await this.central.tenant.findUniqueOrThrow({ where: { id: tenant.id } });
-    return this.enrichTenant(fresh);
+    return this.enrichTenantWithAdmin(fresh);
   }
 
   async updateTenant(slug: string, dto: EditPortalTenantDto) {
@@ -179,7 +180,7 @@ export class LicensePortalService {
       });
     }
 
-    return this.enrichTenant(row);
+    return this.enrichTenantWithAdmin(row);
   }
 
   private async syncTenantCompany(
@@ -215,7 +216,7 @@ export class LicensePortalService {
       where: { slug },
       data: { licenseExpiresAt, licenseStatus: LicenseStatus.active },
     });
-    return this.enrichTenant(row);
+    return this.enrichTenantWithAdmin(row);
   }
 
   async pauseLicense(slug: string) {
@@ -224,7 +225,7 @@ export class LicensePortalService {
       where: { slug },
       data: { licenseStatus: LicenseStatus.suspended },
     });
-    return this.enrichTenant(row);
+    return this.enrichTenantWithAdmin(row);
   }
 
   async activateLicense(slug: string, dto: ActivateLicenseDto) {
@@ -244,7 +245,7 @@ export class LicensePortalService {
       where: { slug },
       data: update,
     });
-    return this.enrichTenant(row);
+    return this.enrichTenantWithAdmin(row);
   }
 
   async archiveTenant(slug: string) {
@@ -256,39 +257,23 @@ export class LicensePortalService {
         licenseStatus: LicenseStatus.expired,
       },
     });
-    return this.enrichTenant(row);
+    return this.enrichTenantWithAdmin(row);
   }
 
   async updateAdminPassword(slug: string, dto: AdminPasswordDto) {
     const tenant = await this.requireVisibleTenant(slug);
-    const prisma = await this.tenantPrisma.getClient(slug);
-    const email = tenant.provisionAdminEmail?.trim().toLowerCase();
-
-    let userId: string | undefined;
-    if (email) {
-      const byEmail = await prisma.user.findUnique({ where: { email } });
-      userId = byEmail?.id;
-    }
-    if (!userId) {
-      const adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
-      if (adminRole) {
-        const assignment = await prisma.userRoleAssignment.findFirst({
-          where: { roleId: adminRole.id },
-          include: { user: true },
-        });
-        userId = assignment?.userId;
-      }
-    }
-    if (!userId) {
+    const admin = await this.findTenantAdminUser(slug, tenant.provisionAdminEmail);
+    if (!admin) {
       throw new NotFoundException('Usuário administrador não encontrado no tenant');
     }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    const prisma = await this.tenantPrisma.getClient(slug);
     await prisma.user.update({
-      where: { id: userId },
+      where: { id: admin.id },
       data: { passwordHash },
     });
-    return { ok: true, slug };
+    return { ok: true, slug, username: admin.username };
   }
 
   private async requireVisibleTenant(slug: string): Promise<Tenant> {
@@ -299,13 +284,37 @@ export class LicensePortalService {
     return tenant;
   }
 
-  private enrichTenant(t: Tenant): TenantRow {
+  private async enrichTenantWithAdmin(t: Tenant): Promise<TenantRow> {
+    const admin = await this.findTenantAdminUser(t.slug, t.provisionAdminEmail).catch(() => null);
+    return {
+      ...this.enrichTenant(t),
+      adminUsername: admin?.username ?? null,
+    };
+  }
+
+  private enrichTenant(t: Tenant): Omit<TenantRow, 'adminUsername'> {
     return {
       ...t,
       planLabel: planDisplayName(t.commercialPlan),
       entryFeeBrl: t.contractEntryFeeBrl,
       monthlyFeeBrl: t.contractMonthlyFeeBrl,
     };
+  }
+
+  private async findTenantAdminUser(slug: string, provisionAdminEmail: string | null) {
+    const prisma = await this.tenantPrisma.getClient(slug);
+    const email = provisionAdminEmail?.trim().toLowerCase();
+    if (email) {
+      const byEmail = await prisma.user.findUnique({ where: { email } });
+      if (byEmail) return byEmail;
+    }
+    const adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
+    if (!adminRole) return null;
+    const assignment = await prisma.userRoleAssignment.findFirst({
+      where: { roleId: adminRole.id },
+      include: { user: true },
+    });
+    return assignment?.user ?? null;
   }
 
   private computeTotals(items: TenantRow[]) {

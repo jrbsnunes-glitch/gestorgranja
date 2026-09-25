@@ -22,6 +22,7 @@ export type PortalTenant = {
   entryFeeBrl: number;
   monthlyFeeBrl: number;
   provisionAdminEmail: string | null;
+  adminUsername: string | null;
   databaseName: string;
   provisioningStatus: string;
   billingDay?: number;

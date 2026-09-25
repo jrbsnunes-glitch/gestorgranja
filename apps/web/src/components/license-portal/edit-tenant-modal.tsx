@@ -117,6 +117,19 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
               />
             </label>
             <label className="text-xs text-slate-600">
+              Usuário de login (admin)
+              <input
+                name="adminUsername"
+                className={`${inputClass} mt-1 bg-slate-50`}
+                readOnly
+                value={tenant.adminUsername ?? ''}
+                placeholder="Não encontrado no tenant"
+              />
+              <span className="mt-1 block text-[11px] text-slate-500">
+                Login no painel: granja <strong>{tenant.slug}</strong> + este usuário + senha.
+              </span>
+            </label>
+            <label className="text-xs text-slate-600">
               E-mail admin (referência)
               <input
                 name="provisionAdminEmail"
