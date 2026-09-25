@@ -1,8 +1,12 @@
-/** Logo padrão GestorGranja (login, portal, favicon). */
+/** Logo padrão GestorGranja (login, portal). */
 export const PRODUCT_LOGO_PATH = '/branding/login-logo.png';
 
+/** Favicon estático + ícones do App Router (app/icon.png, app/apple-icon.png). */
 export const productMetadataIcons = {
-  icon: [{ url: PRODUCT_LOGO_PATH, type: 'image/png' as const }],
-  shortcut: PRODUCT_LOGO_PATH,
-  apple: [{ url: PRODUCT_LOGO_PATH, type: 'image/png' as const }],
+  icon: [
+    { url: '/favicon.png', type: 'image/png' as const },
+    { url: '/favicon.ico', type: 'image/x-icon' as const },
+  ],
+  shortcut: '/favicon.ico',
+  apple: [{ url: '/apple-icon', type: 'image/png' as const }],
 };

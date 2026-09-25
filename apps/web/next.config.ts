@@ -7,7 +7,11 @@ const nextConfig: NextConfig = {
     return [{ source: '/api/:path*', destination: `${apiUpstream}/api/:path*` }];
   },
   async redirects() {
-    return [{ source: '/cadastros/parceiros', destination: '/parceiros', permanent: false }];
+    return [
+      { source: '/cadastros/parceiros', destination: '/parceiros', permanent: false },
+      // Navegadores pedem /favicon.ico por padrão; aponta para o ícone gerado pelo App Router.
+      { source: '/favicon.ico', destination: '/favicon.png', permanent: false },
+    ];
   },
   transpilePackages: ['@gestor-granja/ui', '@gestor-granja/types'],
   experimental: {
