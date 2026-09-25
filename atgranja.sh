@@ -1,5 +1,6 @@
 #!/bin/bash
 # Atualização completa do GestorGranja no VPS (git, Docker, migrations, build, PM2).
+# Se aparecer "Permission denied": chmod +x atgranja.sh  — ou rode: bash atgranja.sh
 set -euo pipefail
 
 ROOT="${GESTOR_GRANJA_ROOT:-/var/www/gestorgranja}"

@@ -173,8 +173,10 @@ certbot renew --dry-run
 Na raiz do projeto (recomendado):
 
 ```bash
-chmod +x atgranja.sh
+chmod +x atgranja.sh   # necessário após git pull se der "Permission denied"
 ./atgranja.sh
+# equivalente sem chmod:
+bash atgranja.sh
 ```
 
 Opções: `--skip-git` (só build/migrations locais), `--skip-docker` (não sobe Postgres/Redis).
