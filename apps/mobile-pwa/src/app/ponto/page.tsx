@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3010/api';
+import { getApiBase } from '@/lib/api-base';
 
 export default function PontoPage() {
   const [terminalId, setTerminalId] = useState('');
@@ -16,7 +16,7 @@ export default function PontoPage() {
     try {
       const jwt = localStorage.getItem('gg_campo_token') ?? '';
       if (!jwt) throw new Error('Faça login na tela inicial do PWA');
-      const res = await fetch(`${API}/v1/hr/time/punch`, {
+      const res = await fetch(`${getApiBase()}/v1/hr/time/punch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
         body: JSON.stringify({ terminalId, token: qrToken, source: 'MOBILE' }),

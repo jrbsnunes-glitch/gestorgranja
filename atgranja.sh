@@ -192,13 +192,15 @@ git_atualizar_repositorio() {
 
 pm2_restart_apps() {
   export GESTOR_GRANJA_ROOT="$ROOT"
-  local pm2_cmd="pm2 restart deploy/ecosystem.config.cjs --update-env 2>/dev/null || pm2 start deploy/ecosystem.config.cjs"
-  if command -v pm2 >/dev/null 2>&1; then
-    eval "$pm2_cmd"
+  if ! command -v pm2 >/dev/null 2>&1; then
+    echo "PM2 não encontrado no PATH de $(whoami)." >&2
+    return 1
+  fi
+  # reload inclui apps novos no ecosystem (ex.: gestorgranja-campo); restart sozinho não sobe processo novo
+  if pm2 reload deploy/ecosystem.config.cjs --update-env 2>/dev/null; then
     return 0
   fi
-  echo "PM2 não encontrado no PATH de $(whoami)." >&2
-  return 1
+  pm2 start deploy/ecosystem.config.cjs --update-env 2>/dev/null || pm2 restart deploy/ecosystem.config.cjs --update-env
 }
 
 verificar_ambiente

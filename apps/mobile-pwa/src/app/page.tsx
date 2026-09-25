@@ -3,9 +3,8 @@
 import { Button, Card } from '@gestor-granja/ui';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { campoDb } from '@/lib/db';
+import { getApiBase } from '@/lib/api-base';
 import { enqueue, flushSyncQueue } from '@/lib/sync';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3010/api';
 
 type Lot = { id: string; code: string };
 
@@ -19,6 +18,8 @@ export default function CampoPage() {
   const [pending, setPending] = useState(0);
   const [online, setOnline] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
 
   const refreshPending = useCallback(async () => {
     const n = await campoDb.syncQueue.where('status').equals('pending').count();
@@ -56,25 +57,52 @@ export default function CampoPage() {
   }, [trySync, refreshPending]);
 
   async function login() {
-    const res = await fetch(`${API}/v1/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tenantSlug,
-        username,
-        password,
-      }),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    const data = (await res.json()) as { accessToken: string };
-    localStorage.setItem('gg_campo_token', data.accessToken);
-    setToken(data.accessToken);
-    const lotRes = await fetch(`${API}/v1/production/lots`, {
-      headers: { Authorization: `Bearer ${data.accessToken}` },
-    });
-    const lotRows = (await lotRes.json()) as Lot[];
-    setLots(lotRows);
-    if (lotRows[0]) setLotId(lotRows[0].id);
+    setLoginError(null);
+    setLoggingIn(true);
+    try {
+      const api = getApiBase();
+      const res = await fetch(`${api}/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: tenantSlug.trim(),
+          username: username.trim(),
+          password,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Login falhou (${res.status})`);
+      }
+      const data = (await res.json()) as { accessToken: string };
+      localStorage.setItem('gg_campo_token', data.accessToken);
+      setToken(data.accessToken);
+      const lotRes = await fetch(`${api}/v1/production/lots`, {
+        headers: { Authorization: `Bearer ${data.accessToken}` },
+      });
+      if (!lotRes.ok) {
+        const text = await lotRes.text();
+        throw new Error(
+          text ||
+            'Login OK, mas não foi possível listar lotes (permissão production.read ou perfil sem acesso).',
+        );
+      }
+      const lotRows = (await lotRes.json()) as Lot[];
+      setLots(lotRows);
+      if (lotRows[0]) setLotId(lotRows[0].id);
+      if (!lotRows.length) {
+        setMsg('Nenhum lote visível para este usuário. Cadastre um lote no painel ou ajuste permissões.');
+      }
+    } catch (e) {
+      const err = e instanceof Error ? e.message : 'Falha ao entrar';
+      if (err.includes('Failed to fetch') || err.includes('NetworkError')) {
+        setLoginError('Sem conexão com a API. Verifique internet ou se o site está no ar.');
+      } else {
+        setLoginError(err.slice(0, 280));
+      }
+    } finally {
+      setLoggingIn(false);
+    }
   }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -139,8 +167,9 @@ export default function CampoPage() {
             placeholder="Senha"
             autoComplete="current-password"
           />
-          <Button className="w-full" onClick={() => void login()}>
-            Entrar
+          {loginError ? <p className="text-sm text-red-600">{loginError}</p> : null}
+          <Button className="w-full" disabled={loggingIn} onClick={() => void login()}>
+            {loggingIn ? 'Entrando…' : 'Entrar'}
           </Button>
         </Card>
       ) : (

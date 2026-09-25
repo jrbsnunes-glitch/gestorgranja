@@ -1,12 +1,11 @@
+import { getApiBase } from './api-base';
 import { campoDb, type SyncQueueItem } from './db';
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3010/api';
 
 export async function flushSyncQueue(token: string) {
   const pending = await campoDb.syncQueue.where('status').equals('pending').toArray();
   if (!pending.length) return { flushed: 0 };
 
-  const res = await fetch(`${API}/v1/sync/batch`, {
+  const res = await fetch(`${getApiBase()}/v1/sync/batch`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

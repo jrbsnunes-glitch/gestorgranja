@@ -205,6 +205,20 @@ sudo nginx -t && sudo systemctl reload nginx
 
 - PM2 deve listar `gestorgranja-campo` (porta 3021). Primeira vez após esta feature: `bash atgranja.sh` sobe o processo via `ecosystem.config.cjs`.
 
+**Erro 502/504 em `/campo/`** (página não abre):
+
+```bash
+su - deploy
+cd /var/www/gestorgranja
+pm2 status   # deve aparecer gestorgranja-campo online
+curl -sI http://127.0.0.1:3021/campo/ | head -3
+# se falhar:
+pm2 logs gestorgranja-campo --lines 40
+pm2 reload deploy/ecosystem.config.cjs --update-env
+# Nginx com bloco /campo/ (ver deploy/nginx/gestorgranja.com.conf)
+sudo nginx -t && sudo systemctl reload nginx
+```
+
 ## Portal de licenças
 
 Após definir no `.env`:
