@@ -30,6 +30,26 @@ export class TenantProvisioningService {
     return slug.trim().toLowerCase();
   }
 
+  /** Aceita vazio, `gestorgranja_<slug>` ou só o sufixo (ex.: aurora → gestorgranja_aurora). */
+  normalizeDatabaseName(slug: string, raw?: string): string {
+    const normalizedSlug = this.normalizeSlug(slug).replace(/-/g, '_');
+    const trimmed = raw?.trim() ?? '';
+    if (!trimmed) {
+      return `gestorgranja_${normalizedSlug}`;
+    }
+    const lower = trimmed.toLowerCase();
+    if (/^gestorgranja_[a-z0-9_]+$/.test(lower)) {
+      return lower;
+    }
+    if (/^[a-z0-9_-]+$/.test(lower)) {
+      const suffix = lower.replace(/-/g, '_');
+      return `gestorgranja_${suffix}`;
+    }
+    throw new BadRequestException(
+      `Nome de banco inválido: ${trimmed}. Deixe em branco ou use gestorgranja_${normalizedSlug}.`,
+    );
+  }
+
   /** Remove registro central incompleto e banco tenant (após falha de provisionamento). */
   async abandonIncompleteTenant(slug: string, cnpj?: string) {
     const normalized = this.normalizeSlug(slug);
@@ -71,7 +91,7 @@ export class TenantProvisioningService {
   }) {
     const slug = this.normalizeSlug(params.slug);
     const cnpj = params.cnpj.trim();
-    const databaseName = params.databaseName.trim();
+    const databaseName = this.normalizeDatabaseName(slug, params.databaseName);
 
     await this.abandonIncompleteTenant(slug, cnpj);
 

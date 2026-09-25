@@ -94,8 +94,7 @@ export class LicensePortalService {
   async provisionTenant(dto: ProvisionPortalTenantDto) {
     const slug = this.provisioning.normalizeSlug(dto.slug);
     const cnpj = dto.cnpj.trim();
-    const databaseName =
-      dto.databaseName.trim() || `gestorgranja_${slug.replace(/-/g, '_')}`;
+    const databaseName = this.provisioning.normalizeDatabaseName(slug, dto.databaseName);
     await this.provisioning.abandonIncompleteTenant(slug, cnpj);
     const tenant = await this.provisioning.provisionNewTenant({
       slug,

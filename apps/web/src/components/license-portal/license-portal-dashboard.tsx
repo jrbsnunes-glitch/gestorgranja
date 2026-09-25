@@ -96,7 +96,13 @@ export function LicensePortalDashboard() {
         slug,
         cnpj: String(fd.get('cnpj')).trim(),
         companyName: String(fd.get('companyName')).trim(),
-        databaseName: String(fd.get('databaseName')).trim() || `gestorgranja_${slug}`,
+        databaseName: (() => {
+          const raw = String(fd.get('databaseName') ?? '').trim();
+          if (!raw) return `gestorgranja_${slug.replace(/-/g, '_')}`;
+          const lower = raw.toLowerCase();
+          if (lower.startsWith('gestorgranja_')) return lower;
+          return `gestorgranja_${lower.replace(/-/g, '_')}`;
+        })(),
         adminEmail: String(fd.get('adminEmail')).trim(),
         adminPassword: String(fd.get('adminPassword')),
         adminName: String(fd.get('adminName') || '').trim() || undefined,
@@ -203,9 +209,12 @@ export function LicensePortalDashboard() {
               <input name="companyName" placeholder="Razão social" className={`${inputClass} sm:col-span-2`} required />
               <input
                 name="databaseName"
-                placeholder="Banco (padrão gestorgranja_&lt;slug&gt;)"
+                placeholder="Banco (opcional — vazio = gestorgranja_&lt;slug&gt;)"
                 className={inputClass}
               />
+              <p className="text-xs text-slate-500 sm:col-span-2">
+                Se preencher só o nome (ex.: aurora), será usado <strong>gestorgranja_aurora</strong>.
+              </p>
               <select name="commercialPlan" className={inputClass} defaultValue="basic">
                 {plans.map((p) => (
                   <option key={p.code} value={p.code}>
