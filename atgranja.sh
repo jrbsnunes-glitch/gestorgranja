@@ -25,6 +25,26 @@ done
 
 cd "$ROOT"
 
+# Git recusa operar se o dono da pasta ≠ usuário atual (ex.: root em /var/www/gestorgranja do deploy).
+ensure_git_trust() {
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Aviso: $ROOT não é um repositório git." >&2
+    return 1
+  fi
+  if git status >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Git: registrando safe.directory para $ROOT..."
+  git config --global --add safe.directory "$ROOT"
+  if git status >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Git ainda bloqueado. Corrija ownership, ex.:" >&2
+  echo "  chown -R deploy:deploy $ROOT   # depois rode como usuário deploy" >&2
+  echo "  git config --global --add safe.directory $ROOT" >&2
+  return 1
+}
+
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 # shellcheck source=/dev/null
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
@@ -46,6 +66,7 @@ fi
 
 if [ "$SKIP_GIT" -eq 0 ]; then
   echo "[3/10] git pull origin $GIT_BRANCH..."
+  ensure_git_trust
   git fetch origin "$GIT_BRANCH"
   git pull origin "$GIT_BRANCH"
 else
