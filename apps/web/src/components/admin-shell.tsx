@@ -5,6 +5,7 @@ import { AppNav } from '@/components/app-nav';
 import { SidebarBrand } from '@/components/sidebar-brand';
 import { useShellTitle, useShellTitleContext } from '@/components/shell-title-context';
 import { getToken, logout, requireAuth } from '@/lib/auth';
+import { readSession, sessionDisplayName } from '@/lib/session';
 import { useIsMobile } from '@/lib/use-mobile';
 
 /** Frame persistente (layout) — não desmonta entre navegações. */
@@ -45,9 +46,10 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
 
   const title = state.title;
   const description = state.description;
+  const displayName = sessionDisplayName(readSession());
 
   const sidebar = (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <div className="mb-6 flex items-start justify-between gap-2">
         <SidebarBrand />
         {isMobile ? (
@@ -62,14 +64,21 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
         ) : null}
       </div>
       <AppNav onNavigate={() => setNavOpen(false)} />
-      <button
-        type="button"
-        onClick={logout}
-        className="mt-8 w-full min-h-11 rounded-md border border-slate-200 px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
-      >
-        Sair
-      </button>
-    </>
+      <div className="mt-auto border-t border-slate-100 pt-4">
+        {displayName ? (
+          <p className="mb-2 truncate px-1 text-sm font-medium text-slate-800" title={displayName}>
+            {displayName}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={logout}
+          className="w-full min-h-11 rounded-md border border-slate-200 px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
+        >
+          Sair
+        </button>
+      </div>
+    </div>
   );
 
   return (
@@ -97,7 +106,7 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
             />
           ) : null}
           <aside
-            className={`fixed inset-y-0 left-0 z-50 w-[min(100vw-3rem,17.5rem)] transform border-r border-slate-200 bg-white p-4 shadow-xl transition-transform duration-200 ease-out safe-top safe-bottom ${
+            className={`fixed inset-y-0 left-0 z-50 flex w-[min(100vw-3rem,17.5rem)] transform flex-col border-r border-slate-200 bg-white p-4 shadow-xl transition-transform duration-200 ease-out safe-top safe-bottom ${
               navOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
@@ -105,7 +114,7 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
           </aside>
         </>
       ) : (
-        <aside className="w-60 shrink-0 border-r border-slate-200 bg-white p-4">{sidebar}</aside>
+        <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white p-4">{sidebar}</aside>
       )}
 
       <main className="flex-1 p-3 pb-6 md:p-6 md:pb-8 safe-bottom">

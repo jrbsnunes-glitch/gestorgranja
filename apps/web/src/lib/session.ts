@@ -5,6 +5,7 @@ import { getToken } from '@/lib/auth';
 export type SessionUser = {
   sub: string;
   username: string;
+  name: string;
   permissions: string[];
   roles: string[];
 };
@@ -28,9 +29,17 @@ export function readSession(): SessionUser | null {
   return {
     sub: p.sub,
     username: typeof p.username === 'string' ? p.username : '',
+    name: typeof p.name === 'string' ? p.name : '',
     permissions: Array.isArray(p.permissions) ? (p.permissions as string[]) : [],
     roles: Array.isArray(p.roles) ? (p.roles as string[]) : [],
   };
+}
+
+/** Nome de exibição na UI (nome cadastrado ou login). */
+export function sessionDisplayName(session: SessionUser | null): string {
+  if (!session) return '';
+  const name = session.name.trim();
+  return name || session.username;
 }
 
 export function isAdminSession(session: SessionUser | null): boolean {

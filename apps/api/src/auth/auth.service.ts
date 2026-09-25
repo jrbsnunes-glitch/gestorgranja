@@ -48,6 +48,7 @@ export class AuthService {
     const payload: JwtPayload = {
       sub: user.id,
       username: user.username,
+      name: user.name?.trim() ?? '',
       email: user.email,
       tenantSlug: dto.tenantSlug,
       permissions: [...permissions],
