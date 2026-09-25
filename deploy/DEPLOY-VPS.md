@@ -195,12 +195,20 @@ O script executa: `sync-env.sh`, Docker (5440/6382), `git pull`, `pnpm install`,
 
 ### PWA de campo (`/campo`)
 
-- URL pública: **https://www.gestorgranja.com/campo/** (login igual ao painel: slug + usuário + senha).
-- Após `git pull`, copie o Nginx atualizado se ainda não tiver o bloco `/campo/`:
+- URL pública: **https://gestorgranja.com/campo** (sem barra final; login igual ao painel).
+- Após `git pull`, atualize Nginx **nos dois** `server` (porta **80** e **443**). O Certbot costuma duplicar o bloco SSL — sem `location /campo` no HTTPS o celular falha.
 
 ```bash
 sudo cp /var/www/gestorgranja/deploy/nginx/gestorgranja.com.conf /etc/nginx/sites-available/gestorgranja.com
+# No server { listen 443 ssl; ... } adicione a mesma linha include do repo:
+#   include /var/www/gestorgranja/deploy/nginx/snippets/campo-locations.conf;
 sudo nginx -t && sudo systemctl reload nginx
+```
+
+Teste **no VPS** (HTTPS local, sem sair pela internet):
+
+```bash
+curl -sIL -o /dev/null -w "final: %{http_code}\n" --resolve gestorgranja.com:443:127.0.0.1 https://gestorgranja.com/campo -k
 ```
 
 - PM2 deve listar `gestorgranja-campo` (porta 3021). Primeira vez após esta feature: `bash atgranja.sh` sobe o processo via `ecosystem.config.cjs`.

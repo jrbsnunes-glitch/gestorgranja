@@ -279,8 +279,8 @@ if curl -sfI "http://127.0.0.1:3020" >/dev/null 2>&1; then
 else
   echo "  Web falhou (3020) — pm2 logs gestorgranja-web" >&2
 fi
-if curl -sfI "http://127.0.0.1:3021/campo/" >/dev/null 2>&1; then
-  echo "  Campo PWA OK (3021 /campo/)"
+if curl -sfI "http://127.0.0.1:3021/campo" >/dev/null 2>&1; then
+  echo "  Campo PWA OK (3021 /campo)"
   CAMPO_OK=1
 else
   echo "  Campo PWA falhou (3021) — pm2 logs gestorgranja-campo; nginx /campo/?" >&2

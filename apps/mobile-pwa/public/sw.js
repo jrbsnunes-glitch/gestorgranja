@@ -1,7 +1,7 @@
 const CACHE = 'gg-campo-v1';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/campo/'])));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/campo'])));
   self.skipWaiting();
 });
 
