@@ -132,9 +132,11 @@ pm2 save
 
 ---
 
-## Fase 6 — Nginx
+## Fase 6 — Nginx + SSL
 
-Como **root**:
+O arquivo `deploy/nginx/gestorgranja.com.conf` inclui **:80 (redirect)** e **:443 (HTTPS)** com `/campo` no mesmo bloco SSL.
+
+Como **root** (após Certbot já ter emitido certificado em `/etc/letsencrypt/live/gestorgranja.com/`):
 
 ```bash
 cp /var/www/gestorgranja/deploy/nginx/gestorgranja.com.conf /etc/nginx/sites-available/gestorgranja.com
@@ -142,9 +144,17 @@ ln -sf /etc/nginx/sites-available/gestorgranja.com /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 ```
 
+**Não** use só o bloco `:80` do repo em produção — isso **remove o HTTPS** e o `curl` em `https://…/campo` retorna **final: 000**.
+
+Diagnóstico:
+
+```bash
+bash /var/www/gestorgranja/deploy/check-campo.sh
+```
+
 ---
 
-## Fase 7 — SSL
+## Fase 7 — SSL (primeira instalação)
 
 Confirme DNS:
 

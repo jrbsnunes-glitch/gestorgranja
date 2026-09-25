@@ -99,7 +99,7 @@ verificar_ambiente() {
   fi
   echo "  Node: $(node -v) | pnpm: $(pnpm -v)"
 
-  chmod +x atgranja.sh deploy/update.sh deploy/sync-env.sh 2>/dev/null || true
+  chmod +x atgranja.sh deploy/update.sh deploy/sync-env.sh deploy/check-campo.sh 2>/dev/null || true
 }
 
 git_verificar_escrita() {
@@ -186,7 +186,7 @@ git_atualizar_repositorio() {
     git reset --hard "$GIT_REF"
   fi
 
-  chmod +x atgranja.sh deploy/update.sh deploy/sync-env.sh 2>/dev/null || true
+  chmod +x atgranja.sh deploy/update.sh deploy/sync-env.sh deploy/check-campo.sh 2>/dev/null || true
   echo "  Commit atual: $(git rev-parse --short HEAD) — $(git log -1 --pretty=format:'%s')"
 }
 
