@@ -21,7 +21,7 @@
     "seed:initial": "dotenv -e ../../.env -- tsx scripts/seed-initial-tenant.ts",
     "seed:egg-stock:demo": "tsx scripts/seed-egg-stock-demo.ts",
     "seed:chart-accounts:all": "tsx scripts/seed-chart-accounts-all-tenants.ts",
-    "permissions:upsert-all": "tsx scripts/upsert-permissions.ts",
+    "permissions:upsert-all": "dotenv -e ../../.env -- tsx scripts/upsert-permissions.ts",
     "postinstall": "pnpm prisma:generate"
   },
   "dependencies": {

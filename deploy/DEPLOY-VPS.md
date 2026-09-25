@@ -248,6 +248,35 @@ Acesse: `https://gestorgranja.com/portal-licencas` (login do operador, separado 
 
 ---
 
+## Zerar base de dados (recomeçar movimentos)
+
+**Isto apaga irreversivelmente** todos os dados no Postgres: granjas (tenants), usuários, galpões, lotes, produção, financeiro, RH, etc. O `.env` (senhas JWT, `INITIAL_*`, portal de licenças) **não** é apagado.
+
+### Antes (opcional — backup)
+
+```bash
+cd /var/www/gestorgranja
+docker exec gestorgranja-postgres pg_dumpall -U gestorgranja > ~/backup-gestorgranja-$(date +%F).sql
+```
+
+### Reset
+
+Confira no `.env` os valores que serão usados no tenant novo: `INITIAL_TENANT_SLUG`, `INITIAL_COMPANY_NAME`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, etc.
+
+```bash
+cd /var/www/gestorgranja
+GESTORGRANJA_RESET_CONFIRM=APAGAR-TUDO bash deploy/reset-production-data.sh
+bash atgranja.sh --skip-git
+```
+
+O script: para PM2 → `docker compose down -v` → sobe Postgres/Redis vazios → migrations → `seed:initial` → `permissions:upsert-all`.
+
+**Login após reset:** granja = `INITIAL_TENANT_SLUG`; usuário/senha = `INITIAL_ADMIN_*` do `.env` (cadastros operacionais refazem no painel).
+
+**Git no VPS:** use só `atgranja.sh` (com ou sem `--skip-git`); não rode `git pull` separado.
+
+---
+
 ## Git: `dubious ownership`
 
 Ocorre quando você roda `git` como **root** numa pasta criada pelo usuário **deploy** (ou o contrário).
