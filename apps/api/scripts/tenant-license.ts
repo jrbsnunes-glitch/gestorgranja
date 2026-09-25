@@ -9,7 +9,7 @@ import { LicenseStatus, PrismaClient } from '../src/generated/central-client';
 import { buildActivateLicenseUpdate, extendLicenseExpiresAt } from '../src/commercial/license-ops';
 import type { CommercialPlanCode } from '../src/commercial/plans';
 
-const PLANS: CommercialPlanCode[] = ['trial', 'package_a', 'package_b', 'package_c', 'pilot'];
+const PLANS: CommercialPlanCode[] = ['basic', 'complete'];
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];

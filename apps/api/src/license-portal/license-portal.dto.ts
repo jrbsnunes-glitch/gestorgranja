@@ -1,8 +1,8 @@
 import { Type } from 'class-transformer';
-import { IsEmail, IsIn, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import type { CommercialPlanCode } from '../commercial/plans';
 
-const PLAN_CODES: CommercialPlanCode[] = ['trial', 'package_a', 'package_b', 'package_c', 'pilot'];
+const PLAN_CODES: CommercialPlanCode[] = ['basic', 'complete'];
 
 export class PortalLoginDto {
   @IsString()
@@ -37,9 +37,18 @@ export class ProvisionPortalTenantDto {
   @IsString()
   adminName?: string;
 
-  @IsOptional()
   @IsIn(PLAN_CODES)
-  commercialPlan?: CommercialPlanCode;
+  commercialPlan!: CommercialPlanCode;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  contractEntryFeeBrl!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  contractMonthlyFeeBrl!: number;
 }
 
 export class RevalidateLicenseDto {
@@ -61,6 +70,18 @@ export class ActivateLicenseDto {
   @Type(() => Number)
   @IsInt()
   billingDay?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  contractEntryFeeBrl?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  contractMonthlyFeeBrl?: number;
 }
 
 export class AdminPasswordDto {
@@ -104,15 +125,12 @@ export class EditPortalTenantDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  maxBirds?: number;
+  @Min(0)
+  contractEntryFeeBrl?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  maxBarns?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  maxUsers?: number;
+  @Min(0)
+  contractMonthlyFeeBrl?: number;
 }

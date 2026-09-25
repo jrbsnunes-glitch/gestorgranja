@@ -29,11 +29,8 @@ enum TenantFeatureCode {
 }
 
 enum CommercialPlan {
-  trial
-  package_a
-  package_b
-  package_c
-  pilot
+  basic
+  complete
 }
 
 model Tenant {
@@ -43,10 +40,12 @@ model Tenant {
   companyName           String
   licenseStatus         LicenseStatus            @default(trial)
   licenseExpiresAt      DateTime?
-  commercialPlan        CommercialPlan           @default(trial)
-  maxBirds              Int                      @default(500)
-  maxBarns              Int                      @default(1)
-  maxUsers              Int                      @default(2)
+  commercialPlan        CommercialPlan           @default(basic)
+  contractEntryFeeBrl   Int                      @default(0)
+  contractMonthlyFeeBrl Int                      @default(0)
+  maxBirds              Int                      @default(2147483647)
+  maxBarns              Int                      @default(2147483647)
+  maxUsers              Int                      @default(2147483647)
   contractStartedAt     DateTime?
   billingDay            Int                      @default(10)
   databaseName          String                   @unique

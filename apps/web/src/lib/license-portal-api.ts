@@ -6,8 +6,8 @@ const PORTAL_TOKEN_KEY = 'gg_portal_token';
 export type PortalPlan = {
   code: string;
   label: string;
-  entryFeeBrl: number;
-  monthlyFeeBrl: number;
+  includesPayroll: boolean;
+  includesTimeClock: boolean;
 };
 
 export type PortalTenant = {
@@ -34,6 +34,8 @@ export type EditPortalTenantPayload = {
   companyName?: string;
   cnpj?: string;
   commercialPlan?: string;
+  contractEntryFeeBrl?: number;
+  contractMonthlyFeeBrl?: number;
   licenseStatus?: string;
   licenseExpiresAt?: string | null;
   provisionAdminEmail?: string;

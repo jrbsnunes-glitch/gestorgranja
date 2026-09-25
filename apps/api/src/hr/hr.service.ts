@@ -1168,6 +1168,7 @@ export class HrService {
 
   async refreshTerminalQrPublic(tenantSlug: string, terminalId: string, deviceSecret: string) {
     await this.tenantService.assertLicenseActive(tenantSlug);
+    await this.tenantService.assertPlanTimeClock(tenantSlug);
     const prisma = await this.tenantPrisma.getClient(tenantSlug);
     const terminal = await prisma.timeClockTerminal.findUnique({ where: { id: terminalId } });
     if (!terminal) throw new NotFoundException('Terminal não encontrado');

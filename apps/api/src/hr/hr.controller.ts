@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
@@ -9,11 +20,13 @@ import { HrReportsService } from './hr-reports.service';
 import { HrSettingsService } from './hr-settings.service';
 import { HrPayrollRubricsService } from './hr-payroll-rubrics.service';
 import type { PayslipFieldsConfig } from './hr-payslip-fields';
+import { HrPlanInterceptor } from './hr-plan.interceptor';
 import { HrService } from './hr.service';
 
 @ApiTags('hr')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseInterceptors(HrPlanInterceptor)
 @Controller('v1/hr')
 export class HrController {
   constructor(

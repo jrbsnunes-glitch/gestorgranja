@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { HrController } from './hr.controller';
+import { HrPlanInterceptor } from './hr-plan.interceptor';
 import { HrTimeKioskPublicController } from './hr-time-kiosk-public.controller';
 import { HrReportsService } from './hr-reports.service';
 import { HrSettingsService } from './hr-settings.service';
@@ -11,7 +12,7 @@ import { HrService } from './hr.service';
 @Module({
   imports: [AuthModule, TenantModule],
   controllers: [HrController, HrTimeKioskPublicController],
-  providers: [HrService, HrReportsService, HrSettingsService, HrPayrollRubricsService],
+  providers: [HrService, HrReportsService, HrSettingsService, HrPayrollRubricsService, HrPlanInterceptor],
   exports: [HrService, HrReportsService],
 })
 export class HrModule {}

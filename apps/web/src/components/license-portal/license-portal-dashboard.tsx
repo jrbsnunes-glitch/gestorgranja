@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { inputClass } from '@/components/ui-parts';
 import {
-  activatePortalLicense,
   archivePortalTenant,
   clearPortalToken,
   fetchPortalPlans,
@@ -93,7 +92,9 @@ export function LicensePortalDashboard() {
         adminEmail: String(fd.get('adminEmail')).trim(),
         adminPassword: String(fd.get('adminPassword')),
         adminName: String(fd.get('adminName') || '').trim() || undefined,
-        commercialPlan: String(fd.get('commercialPlan') || 'package_b'),
+        commercialPlan: String(fd.get('commercialPlan') || 'basic'),
+        contractEntryFeeBrl: Number(fd.get('contractEntryFeeBrl') || 0),
+        contractMonthlyFeeBrl: Number(fd.get('contractMonthlyFeeBrl') || 0),
       });
       setShowNew(false);
       await reload();
@@ -197,13 +198,30 @@ export function LicensePortalDashboard() {
                 placeholder="Banco (padrão gestorgranja_&lt;slug&gt;)"
                 className={inputClass}
               />
-              <select name="commercialPlan" className={inputClass} defaultValue="package_b">
+              <select name="commercialPlan" className={inputClass} defaultValue="basic">
                 {plans.map((p) => (
                   <option key={p.code} value={p.code}>
-                    {p.label} — entrada {formatBrl(p.entryFeeBrl)}, {formatBrl(p.monthlyFeeBrl)}/mês
+                    {p.label}
+                    {p.includesPayroll ? ' (ponto + folha)' : ' (sem ponto/folha)'}
                   </option>
                 ))}
               </select>
+              <input
+                name="contractEntryFeeBrl"
+                type="number"
+                min={0}
+                placeholder="Entrada (R$)"
+                className={inputClass}
+                required
+              />
+              <input
+                name="contractMonthlyFeeBrl"
+                type="number"
+                min={0}
+                placeholder="Mensalidade (R$)"
+                className={inputClass}
+                required
+              />
               <input name="adminEmail" type="email" placeholder="E-mail admin" className={inputClass} required />
               <input name="adminName" placeholder="Nome admin (opcional)" className={inputClass} />
               <input
@@ -265,13 +283,6 @@ export function LicensePortalDashboard() {
                           label="Pausar"
                           disabled={busySlug === t.slug}
                           onClick={() => runAction(t.slug, () => pausePortalLicense(t.slug))}
-                        />
-                        <ActionBtn
-                          label="Reativar B"
-                          disabled={busySlug === t.slug}
-                          onClick={() =>
-                            runAction(t.slug, () => activatePortalLicense(t.slug, 'package_b'))
-                          }
                         />
                         <ActionBtn
                           label="Senha admin"

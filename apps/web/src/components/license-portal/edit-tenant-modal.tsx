@@ -31,9 +31,8 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
       licenseExpiresAt: licenseExpiresRaw || null,
       provisionAdminEmail: String(fd.get('provisionAdminEmail')).trim(),
       billingDay: Number(fd.get('billingDay')),
-      maxBirds: Number(fd.get('maxBirds')),
-      maxBarns: Number(fd.get('maxBarns')),
-      maxUsers: Number(fd.get('maxUsers')),
+      contractEntryFeeBrl: Number(fd.get('contractEntryFeeBrl')),
+      contractMonthlyFeeBrl: Number(fd.get('contractMonthlyFeeBrl')),
     });
   }
 
@@ -64,7 +63,7 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
               <input name="cnpj" className={`${inputClass} mt-1`} defaultValue={tenant.cnpj} required />
             </label>
             <label className="text-xs text-slate-600">
-              Plano comercial
+              Plano
               <select name="commercialPlan" className={`${inputClass} mt-1`} defaultValue={tenant.commercialPlan}>
                 {plans.map((p) => (
                   <option key={p.code} value={p.code}>
@@ -73,6 +72,32 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
                 ))}
               </select>
             </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-xs text-slate-600">
+                Entrada (R$)
+                <input
+                  name="contractEntryFeeBrl"
+                  type="number"
+                  min={0}
+                  step={1}
+                  className={`${inputClass} mt-1`}
+                  defaultValue={tenant.entryFeeBrl}
+                  required
+                />
+              </label>
+              <label className="text-xs text-slate-600">
+                Mensalidade (R$)
+                <input
+                  name="contractMonthlyFeeBrl"
+                  type="number"
+                  min={0}
+                  step={1}
+                  className={`${inputClass} mt-1`}
+                  defaultValue={tenant.monthlyFeeBrl}
+                  required
+                />
+              </label>
+            </div>
             <label className="text-xs text-slate-600">
               Status da licença
               <select name="licenseStatus" className={`${inputClass} mt-1`} defaultValue={tenant.licenseStatus}>
@@ -111,35 +136,6 @@ export function EditTenantModal({ tenant, plans, saving, onClose, onSave }: Prop
                 defaultValue={tenant.billingDay ?? 10}
               />
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              <label className="text-xs text-slate-600">
-                Máx. aves
-                <input
-                  name="maxBirds"
-                  type="number"
-                  className={`${inputClass} mt-1`}
-                  defaultValue={tenant.maxBirds ?? 5000}
-                />
-              </label>
-              <label className="text-xs text-slate-600">
-                Máx. galpões
-                <input
-                  name="maxBarns"
-                  type="number"
-                  className={`${inputClass} mt-1`}
-                  defaultValue={tenant.maxBarns ?? 3}
-                />
-              </label>
-              <label className="text-xs text-slate-600">
-                Máx. usuários
-                <input
-                  name="maxUsers"
-                  type="number"
-                  className={`${inputClass} mt-1`}
-                  defaultValue={tenant.maxUsers ?? 5}
-                />
-              </label>
-            </div>
             <div className="flex flex-wrap gap-2 pt-2">
               <Button type="submit" disabled={saving}>
                 {saving ? 'Salvando…' : 'Salvar'}

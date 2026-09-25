@@ -15,10 +15,10 @@ import {
   toCommercialPlanEnum,
 } from '../commercial/license-ops';
 import {
-  COMMERCIAL_PLANS,
+  PLAN_CATALOG,
   type CommercialPlanCode,
-  planDisplayPricing,
-  resolvePlanLimits,
+  planDisplayName,
+  unlimitedTenantLimits,
 } from '../commercial/plans';
 import { CentralPrismaService } from '../prisma/central-prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -73,21 +73,12 @@ export class LicensePortalService {
   }
 
   listPlans() {
-    const trial = {
-      code: 'trial' as const,
-      label: 'Trial',
-      entryFeeBrl: 0,
-      monthlyFeeBrl: 0,
-    };
-    const paid = (Object.keys(COMMERCIAL_PLANS) as Array<keyof typeof COMMERCIAL_PLANS>).map(
-      (code) => ({
-        code,
-        label: COMMERCIAL_PLANS[code].label,
-        entryFeeBrl: COMMERCIAL_PLANS[code].pricing.entryFeeBrl,
-        monthlyFeeBrl: COMMERCIAL_PLANS[code].pricing.monthlyFeeBrl,
-      }),
-    );
-    return [trial, ...paid];
+    return (Object.keys(PLAN_CATALOG) as CommercialPlanCode[]).map((code) => ({
+      code,
+      label: PLAN_CATALOG[code].label,
+      includesPayroll: PLAN_CATALOG[code].includesPayroll,
+      includesTimeClock: PLAN_CATALOG[code].includesTimeClock,
+    }));
   }
 
   async listTenants() {
@@ -113,12 +104,12 @@ export class LicensePortalService {
       },
     });
 
-    const licenseUpdate = dto.commercialPlan
-      ? buildActivateLicenseUpdate({
-          slug: dto.slug,
-          plan: dto.commercialPlan,
-        })
-      : {};
+    const licenseUpdate = buildActivateLicenseUpdate({
+      slug: dto.slug,
+      plan: dto.commercialPlan,
+      contractEntryFeeBrl: dto.contractEntryFeeBrl,
+      contractMonthlyFeeBrl: dto.contractMonthlyFeeBrl,
+    });
     await this.central.tenant.update({
       where: { id: tenant.id },
       data: {
@@ -150,18 +141,16 @@ export class LicensePortalService {
 
     if (dto.commercialPlan !== undefined) {
       data.commercialPlan = toCommercialPlanEnum(dto.commercialPlan);
-      const limits = resolvePlanLimits(dto.commercialPlan, {
-        maxBirds: dto.maxBirds,
-        maxBarns: dto.maxBarns,
-        maxUsers: dto.maxUsers,
-      });
+      const limits = unlimitedTenantLimits();
       data.maxBirds = limits.maxBirds;
       data.maxBarns = limits.maxBarns;
       data.maxUsers = limits.maxUsers;
-    } else {
-      if (dto.maxBirds !== undefined) data.maxBirds = dto.maxBirds;
-      if (dto.maxBarns !== undefined) data.maxBarns = dto.maxBarns;
-      if (dto.maxUsers !== undefined) data.maxUsers = dto.maxUsers;
+    }
+    if (dto.contractEntryFeeBrl !== undefined) {
+      data.contractEntryFeeBrl = dto.contractEntryFeeBrl;
+    }
+    if (dto.contractMonthlyFeeBrl !== undefined) {
+      data.contractMonthlyFeeBrl = dto.contractMonthlyFeeBrl;
     }
 
     if (Object.keys(data).length === 0) {
@@ -244,6 +233,8 @@ export class LicensePortalService {
       contractStartedAt: entryPaidAt,
       billingDay: dto.billingDay,
       status: LicenseStatus.active,
+      contractEntryFeeBrl: dto.contractEntryFeeBrl,
+      contractMonthlyFeeBrl: dto.contractMonthlyFeeBrl,
     });
     const row = await this.central.tenant.update({
       where: { slug },
@@ -305,13 +296,11 @@ export class LicensePortalService {
   }
 
   private enrichTenant(t: Tenant): TenantRow {
-    const plan = t.commercialPlan as CommercialPlanCode;
-    const display = planDisplayPricing(plan);
     return {
       ...t,
-      planLabel: display.label,
-      entryFeeBrl: display.entryFeeBrl,
-      monthlyFeeBrl: display.monthlyFeeBrl,
+      planLabel: planDisplayName(t.commercialPlan),
+      entryFeeBrl: t.contractEntryFeeBrl,
+      monthlyFeeBrl: t.contractMonthlyFeeBrl,
     };
   }
 

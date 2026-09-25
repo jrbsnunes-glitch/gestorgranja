@@ -2,7 +2,7 @@ import { LicenseStatus, type CommercialPlan, type Tenant } from '../generated/ce
 import {
   type CommercialPlanCode,
   initialLicenseExpiresAt,
-  resolvePlanLimits,
+  unlimitedTenantLimits,
 } from './plans';
 
 export type ActivateLicenseInput = {
@@ -12,9 +12,8 @@ export type ActivateLicenseInput = {
   contractStartedAt?: Date;
   billingDay?: number;
   status?: LicenseStatus;
-  maxBirds?: number;
-  maxBarns?: number;
-  maxUsers?: number;
+  contractEntryFeeBrl?: number;
+  contractMonthlyFeeBrl?: number;
 };
 
 export function toCommercialPlanEnum(plan: CommercialPlanCode): CommercialPlan {
@@ -22,15 +21,9 @@ export function toCommercialPlanEnum(plan: CommercialPlanCode): CommercialPlan {
 }
 
 export function buildActivateLicenseUpdate(input: ActivateLicenseInput) {
-  const limits = resolvePlanLimits(input.plan, {
-    maxBirds: input.maxBirds,
-    maxBarns: input.maxBarns,
-    maxUsers: input.maxUsers,
-  });
+  const limits = unlimitedTenantLimits();
   const entryAt = input.entryPaidAt ?? input.contractStartedAt ?? new Date();
-  const status =
-    input.status ??
-    (input.plan === 'trial' ? LicenseStatus.trial : LicenseStatus.active);
+  const status = input.status ?? LicenseStatus.active;
 
   const data: Record<string, unknown> = {
     commercialPlan: toCommercialPlanEnum(input.plan),
@@ -41,6 +34,12 @@ export function buildActivateLicenseUpdate(input: ActivateLicenseInput) {
     contractStartedAt: input.contractStartedAt ?? entryAt,
     billingDay: input.billingDay ?? 10,
   };
+  if (input.contractEntryFeeBrl !== undefined) {
+    data.contractEntryFeeBrl = input.contractEntryFeeBrl;
+  }
+  if (input.contractMonthlyFeeBrl !== undefined) {
+    data.contractMonthlyFeeBrl = input.contractMonthlyFeeBrl;
+  }
   if (status === LicenseStatus.active || status === LicenseStatus.trial) {
     data.licenseExpiresAt = initialLicenseExpiresAt(input.plan, entryAt);
   }

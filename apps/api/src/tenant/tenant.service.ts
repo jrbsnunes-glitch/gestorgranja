@@ -1,5 +1,11 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { LicenseStatus } from '../generated/central-client';
+import {
+  planDisplayName,
+  planIncludesPayroll,
+  planIncludesTimeClock,
+  type CommercialPlanCode,
+} from '../commercial/plans';
 import { CentralPrismaService } from '../prisma/central-prisma.service';
 
 @Injectable()
@@ -23,6 +29,31 @@ export class TenantService {
       licenseStatus: tenant.licenseStatus,
       licenseExpiresAt: tenant.licenseExpiresAt,
     };
+  }
+
+  async getSubscriptionForClient(slug: string) {
+    const tenant = await this.getBySlug(slug);
+    const plan = tenant.commercialPlan as CommercialPlanCode;
+    return {
+      commercialPlan: plan,
+      planLabel: planDisplayName(plan),
+      includesPayroll: planIncludesPayroll(plan),
+      includesTimeClock: planIncludesTimeClock(plan),
+    };
+  }
+
+  async assertPlanPayroll(slug: string) {
+    const tenant = await this.getBySlug(slug);
+    if (!planIncludesPayroll(tenant.commercialPlan)) {
+      throw new ForbiddenException('Folha de pagamento disponível apenas no plano Completo');
+    }
+  }
+
+  async assertPlanTimeClock(slug: string) {
+    const tenant = await this.getBySlug(slug);
+    if (!planIncludesTimeClock(tenant.commercialPlan)) {
+      throw new ForbiddenException('Controle de ponto disponível apenas no plano Completo');
+    }
   }
 
   async assertLicenseActive(slug: string) {
