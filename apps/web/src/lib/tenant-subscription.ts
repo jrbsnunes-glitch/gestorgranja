@@ -25,3 +25,6 @@ export function isRhTabAllowed(tabId: string, sub: TenantSubscription | null): b
   if (sub.includesPayroll && sub.includesTimeClock) return true;
   return !RH_TABS_PAYROLL_TIME.has(tabId);
 }
+
+export const RH_TAB_PLAN_LOCK_HINT =
+  'Disponível no plano Completo (folha e ponto). Entre em contato para upgrade.';

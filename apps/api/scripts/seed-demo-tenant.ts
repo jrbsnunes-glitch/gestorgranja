@@ -15,7 +15,15 @@ async function main() {
 
   const existing = await central.tenant.findUnique({ where: { slug: 'demo' } });
   if (existing?.provisioningStatus === 'READY') {
-    console.log('Tenant demo já provisionado');
+    if (existing.commercialPlan !== 'complete') {
+      await central.tenant.update({
+        where: { slug: 'demo' },
+        data: { commercialPlan: 'complete' },
+      });
+      console.log('Tenant demo já provisionado — plano ajustado para Completo');
+    } else {
+      console.log('Tenant demo já provisionado');
+    }
     await central.$disconnect();
     return;
   }
@@ -35,7 +43,12 @@ async function main() {
     },
   });
 
-  console.log('Tenant demo OK — login: slug demo / usuário admin / senha admin123');
+  await central.tenant.update({
+    where: { slug: 'demo' },
+    data: { commercialPlan: 'complete' },
+  });
+
+  console.log('Tenant demo OK — login: slug demo / usuário admin / senha admin123 (plano Completo)');
   await central.$disconnect();
 }
 

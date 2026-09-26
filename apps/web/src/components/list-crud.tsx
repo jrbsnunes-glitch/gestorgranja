@@ -15,7 +15,7 @@ export function TabBar({
   active,
   onChange,
 }: {
-  tabs: { id: string; label: string }[];
+  tabs: { id: string; label: string; disabled?: boolean; title?: string }[];
   active: string;
   onChange: (id: string) => void;
 }) {
@@ -25,11 +25,17 @@ export function TabBar({
         <button
           key={t.id}
           type="button"
-          onClick={() => onChange(t.id)}
+          disabled={t.disabled}
+          title={t.title}
+          onClick={() => {
+            if (!t.disabled) onChange(t.id);
+          }}
           className={`shrink-0 rounded-t-md px-4 py-2.5 text-sm font-medium max-md:min-h-11 ${
-            active === t.id
-              ? 'border border-b-0 border-slate-200 bg-white text-emerald-800'
-              : 'text-slate-600 hover:bg-slate-50'
+            t.disabled
+              ? 'cursor-not-allowed text-slate-400'
+              : active === t.id
+                ? 'border border-b-0 border-slate-200 bg-white text-emerald-800'
+                : 'text-slate-600 hover:bg-slate-50'
           }`}
         >
           {t.label}

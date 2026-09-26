@@ -133,7 +133,6 @@ export function filterModuleTabs(
   if (!mod.tabs?.length || !session) return mod.tabs ?? [];
 
   if (isAdminSession(session)) {
-    if (mod.id === 'rh') return mod.tabs.filter((t) => isRhTabAllowed(t.id, sub));
     return mod.tabs;
   }
 
@@ -144,16 +143,16 @@ export function filterModuleTabs(
   }
 
   if (isFieldOperatorLike(session) && mod.id === 'rh') {
-    return mod.tabs.filter((t) => t.id === 'ponto' && isRhTabAllowed(t.id, sub));
+    return mod.tabs.filter((t) => t.id === 'ponto');
   }
 
   if (mod.id === 'rh') {
     const hrReadOnly =
       hasAnyPermission(session, ['hr.read']) && !hasAnyPermission(session, ['hr.write']);
     if (hrReadOnly) {
-      return mod.tabs.filter((t) => t.id === 'ponto' && isRhTabAllowed(t.id, sub));
+      return mod.tabs.filter((t) => t.id === 'ponto');
     }
-    return mod.tabs.filter((t) => isRhTabAllowed(t.id, sub));
+    return mod.tabs;
   }
 
   if (mod.id === 'operacao') {

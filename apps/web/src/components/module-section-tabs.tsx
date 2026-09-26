@@ -6,6 +6,7 @@ import { useTenantSubscription } from '@/components/tenant-subscription-provider
 import { filterModuleTabs } from '@/lib/nav-access';
 import { activeModuleTabId, moduleForPath } from '@/lib/module-nav';
 import { readSession } from '@/lib/session';
+import { isRhTabAllowed, RH_TAB_PLAN_LOCK_HINT } from '@/lib/tenant-subscription';
 
 /** Abas de seção do módulo (substituem submenus laterais). */
 export function ModuleSectionTabs() {
@@ -28,7 +29,15 @@ export function ModuleSectionTabs() {
         const tab = tabs.find((t) => t.id === id);
         if (tab) router.push(tab.href);
       }}
-      tabs={tabs.map((t) => ({ id: t.id, label: t.label }))}
+      tabs={tabs.map((t) => {
+        const planLocked = mod.id === 'rh' && subscription != null && !isRhTabAllowed(t.id, subscription);
+        return {
+          id: t.id,
+          label: t.label,
+          disabled: planLocked,
+          title: planLocked ? RH_TAB_PLAN_LOCK_HINT : undefined,
+        };
+      })}
     />
   );
 }
