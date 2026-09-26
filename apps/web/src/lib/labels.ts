@@ -54,6 +54,57 @@ const ENUM_LABELS: Record<string, string> = {
   ACTIVE: 'Ativo',
   FINISHED: 'Encerrado',
 
+  // Movimentação de aves
+  ENTRY: 'Entrada',
+  TRANSFER_IN: 'Transferência (entrada)',
+  TRANSFER_OUT: 'Transferência (saída)',
+  EXIT: 'Saída',
+  CLOSE: 'Encerramento do lote',
+
+  // Galpão — situação
+  IN_PRODUCTION: 'Em produção',
+  EMPTY: 'Vazio',
+  CLEANING: 'Limpeza / vazio sanitário',
+  MAINTENANCE: 'Em manutenção',
+
+  // Registros operacionais — conferência
+  RECORDED: 'Registrado',
+  REVIEWED: 'Conferido',
+  ADJUSTED: 'Ajustado',
+
+  // Alertas operacionais
+  PRODUCTION_BELOW_STANDARD: 'Postura abaixo do padrão',
+  FEED_VARIATION: 'Variação no consumo de ração',
+  PENDING_RECORDS: 'Lançamento diário pendente',
+  OPEN_OCCURRENCE: 'Ocorrência sem tratamento',
+  LOSS_ABOVE_LIMIT: 'Perdas acima do limite',
+  MORTALITY_ABOVE_LIMIT: 'Mortalidade acima do limite',
+
+  // Ocorrências — tipo
+  EQUIPMENT: 'Equipamento',
+  WATER: 'Água (falta/interrupção)',
+  POWER: 'Energia elétrica',
+  ROUTINE: 'Alteração de rotina',
+  ENVIRONMENT: 'Ambiente (temperatura/ventilação)',
+  LOSS_INCREASE: 'Aumento de perdas',
+  PRODUCTION_ANOMALY: 'Anormalidade na produção',
+  SANITARY: 'Ocorrência sanitária',
+
+  // Ocorrências — prioridade
+  LOW: 'Baixa',
+  MEDIUM: 'Média',
+  HIGH: 'Alta',
+  CRITICAL: 'Crítica',
+
+  // Insumos — tipo de movimentação
+  CONSUMPTION: 'Consumo',
+  LOSS: 'Perda',
+  RETURN: 'Devolução',
+
+  // Perdas — tipo
+  EGG: 'Ovos',
+  BIRD: 'Aves',
+
   // Produtos
   PACKAGED_EGG: 'Ovo embalado',
   FEED: 'Ração',
@@ -152,6 +203,35 @@ export const EGG_PRODUCTION_FIELDS = [
 ] as const;
 
 export type EggProductionField = (typeof EGG_PRODUCTION_FIELDS)[number];
+
+export const MORTALITY_CAUSES = ['UNKNOWN', 'DISEASE', 'HEAT_STRESS', 'PREDATOR', 'OTHER'] as const;
+
+export const BARN_SITUATIONS = ['IN_PRODUCTION', 'EMPTY', 'CLEANING', 'MAINTENANCE'] as const;
+
+export const FLOCK_MOVEMENT_TYPES = ['ENTRY', 'TRANSFER_IN', 'TRANSFER_OUT', 'EXIT', 'ADJUST', 'CLOSE'] as const;
+
+export type OperationRecordStatus = 'PENDING' | 'RECORDED' | 'REVIEWED' | 'ADJUSTED';
+
+export const OCCURRENCE_TYPES = [
+  'EQUIPMENT',
+  'WATER',
+  'POWER',
+  'ROUTINE',
+  'ENVIRONMENT',
+  'LOSS_INCREASE',
+  'PRODUCTION_ANOMALY',
+  'SANITARY',
+  'OTHER',
+] as const;
+export const OCCURRENCE_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+export const OCCURRENCE_STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CANCELLED'] as const;
+export const SUPPLY_MOVEMENT_KINDS = ['CONSUMPTION', 'LOSS', 'ADJUST', 'TRANSFER', 'RETURN'] as const;
+export const OPERATIONAL_LOSS_TYPES = ['EGG', 'FEED', 'SUPPLY', 'BIRD', 'EQUIPMENT', 'OTHER'] as const;
+
+/** Registro conferido/ajustado só pode ser alterado com justificativa e permissão de ajuste. */
+export function isRecordLocked(status: string | null | undefined): boolean {
+  return status === 'REVIEWED' || status === 'ADJUSTED';
+}
 
 export function labelEggProductionField(field: EggProductionField | string): string {
   return labelEnum(field);

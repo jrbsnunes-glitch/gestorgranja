@@ -2,6 +2,14 @@ export const DEFAULT_PERMISSIONS = [
   { code: '*', module: 'all', action: 'all' },
   { code: 'production.read', module: 'production', action: 'read' },
   { code: 'production.write', module: 'production', action: 'write' },
+  /** Conferir registros operacionais (marcar como conferido). */
+  { code: 'production.review', module: 'production', action: 'review' },
+  /** Ajustes autorizados (movimentação de aves ADJUST/CLOSE, correção de registro conferido). */
+  { code: 'production.adjust', module: 'production', action: 'adjust' },
+  /** Registrar e tratar ocorrências operacionais. */
+  { code: 'occurrences.write', module: 'occurrences', action: 'write' },
+  /** Alterar parâmetros e padrões da operação (limites de alerta, integração de estoque). */
+  { code: 'operation.settings', module: 'operation', action: 'settings' },
   { code: 'nutrition.write', module: 'nutrition', action: 'write' },
   { code: 'health.write', module: 'health', action: 'write' },
   { code: 'inventory.write', module: 'inventory', action: 'write' },
@@ -25,11 +33,28 @@ export const DEFAULT_ROLES = [
   { name: 'admin', permissions: ['*'] },
   {
     name: 'gestor_producao',
-    permissions: ['production.read', 'production.write', 'nutrition.write', 'health.write', 'reports.read'],
+    permissions: [
+      'production.read',
+      'production.write',
+      'production.review',
+      'production.adjust',
+      'occurrences.write',
+      'operation.settings',
+      'nutrition.write',
+      'health.write',
+      'reports.read',
+    ],
   },
   {
     name: 'operador_campo',
-    permissions: ['production.read', 'production.write', 'nutrition.write', 'sync.write', 'hr.read'],
+    permissions: [
+      'production.read',
+      'production.write',
+      'occurrences.write',
+      'nutrition.write',
+      'sync.write',
+      'hr.read',
+    ],
   },
   /** Funcionário de granja: postura + batida de ponto (sem cadastros RH). */
   {

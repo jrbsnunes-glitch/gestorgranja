@@ -69,4 +69,19 @@ export class UpsertDailyEggDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Motivo do descarte, quando registrado.' })
+  @IsString()
+  @IsOptional()
+  discardReason?: string;
+
+  @ApiPropertyOptional({ description: 'Turno (manhã, tarde, noite…), quando aplicável.' })
+  @IsString()
+  @IsOptional()
+  shift?: string;
+
+  @ApiPropertyOptional({ description: 'Justificativa da alteração (gravada na auditoria).' })
+  @IsString()
+  @IsOptional()
+  reason?: string;
 }

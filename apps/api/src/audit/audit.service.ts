@@ -24,6 +24,8 @@ export class AuditService {
     entityId?: string;
     before?: unknown;
     after?: unknown;
+    /** Justificativa da alteração/ajuste (quando informada). */
+    reason?: string;
     ip?: string;
   }) {
     const prisma = await this.tenantPrisma.getClient(params.tenantSlug);
@@ -35,8 +37,20 @@ export class AuditService {
         entityId: params.entityId,
         beforeJson: params.before as Prisma.InputJsonValue | undefined,
         afterJson: params.after as Prisma.InputJsonValue | undefined,
+        reason: params.reason?.trim() || undefined,
         ip: params.ip,
       },
+    });
+  }
+
+  /** Histórico de alterações de um registro específico (mais recente primeiro). */
+  async historyFor(tenantSlug: string, entity: string, entityId: string, limit = 50) {
+    const prisma = await this.tenantPrisma.getClient(tenantSlug);
+    return prisma.auditLog.findMany({
+      where: { entity, entityId },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(limit, 200),
+      include: { user: { select: { username: true, name: true } } },
     });
   }
 }

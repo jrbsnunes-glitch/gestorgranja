@@ -45,3 +45,9 @@ export function sessionDisplayName(session: SessionUser | null): string {
 export function isAdminSession(session: SessionUser | null): boolean {
   return !!session?.permissions.includes('*');
 }
+
+/** Sessão possui a permissão (admin `*` sempre tem). */
+export function sessionHasPermission(session: SessionUser | null, code: string): boolean {
+  if (!session) return false;
+  return session.permissions.includes('*') || session.permissions.includes(code);
+}

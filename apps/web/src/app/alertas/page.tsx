@@ -17,6 +17,15 @@ type Alert = {
   message: string;
   status: string;
   createdAt: string;
+  criteria?: string | null;
+  priority?: string | null;
+};
+
+const PRIORITY_CLS: Record<string, string> = {
+  LOW: 'bg-slate-50 text-slate-600 border-slate-200',
+  MEDIUM: 'bg-sky-50 text-sky-800 border-sky-200',
+  HIGH: 'bg-amber-50 text-amber-800 border-amber-200',
+  CRITICAL: 'bg-red-50 text-red-700 border-red-200',
 };
 
 export default function AlertasPage() {
@@ -50,7 +59,7 @@ export default function AlertasPage() {
     setScanMsg(null);
     try {
       await apiFetch('/v1/alerts/scan/all', { method: 'POST', body: '{}' });
-      setScanMsg('Varredura concluída (CP, estoque, carência).');
+      setScanMsg('Varredura concluída (CP, estoque, carência, operação).');
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao varrer');
@@ -61,7 +70,7 @@ export default function AlertasPage() {
     <AdminShell title="Alertas e pendências">
       <PageIntro
         title="Alertas e pendências"
-        description="Pendências detectadas pelo sistema (contas a pagar, estoque, carência). Reconheça ou execute uma nova varredura."
+        description="Pendências detectadas pelo sistema (contas a pagar, estoque, carência, operação: postura, ração, perdas, mortalidade, ocorrências). Reconheça ou execute uma nova varredura."
       />
       <ErrorBox message={error} />
       {scanMsg ? <p className="mb-4 text-sm text-emerald-700">{scanMsg}</p> : null}
@@ -77,12 +86,22 @@ export default function AlertasPage() {
         showDateFilter
       />
       <PaginatedTable
-        headers={['Tipo', 'Título', 'Mensagem', 'Data', 'Ação']}
+        headers={['Tipo', 'Prioridade', 'Título', 'Mensagem', 'Data', 'Ação']}
         recordItems={slice}
         rows={slice.map((a) => [
           labelEnum(a.type),
+          a.priority ? (
+            <span key={`${a.id}-p`} className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${PRIORITY_CLS[a.priority] ?? ''}`}>
+              {labelEnum(a.priority)}
+            </span>
+          ) : (
+            '—'
+          ),
           a.title,
-          humanizeUserText(a.message),
+          <span key={`${a.id}-m`}>
+            {humanizeUserText(a.message)}
+            {a.criteria ? <span className="block text-xs text-slate-500">Critério: {a.criteria}</span> : null}
+          </span>,
           new Date(a.createdAt).toLocaleString('pt-BR'),
           a.status === 'OPEN' ? (
             <Button key={a.id} type="button" onClick={() => void ack(a.id)}>

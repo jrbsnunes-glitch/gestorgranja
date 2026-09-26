@@ -3,6 +3,7 @@ import { JwtPayload } from '../auth/jwt.strategy';
 import { AlertStatus } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { humanizeUserMessage } from '../common/humanize-user-message.util';
+import { OperationAlertsService } from '../operation/operation-alerts.service';
 import { AlertSchedulerService } from './alert-scheduler.service';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class AlertsService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly scheduler: AlertSchedulerService,
+    private readonly opAlerts: OperationAlertsService,
   ) {}
 
   async listOpen(user: JwtPayload) {
@@ -55,6 +57,9 @@ export class AlertsService {
   async runFullScan(user: JwtPayload) {
     await this.scheduler.scanTenant(user.tenantSlug);
     await this.scanWithdrawals(user);
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    await this.opAlerts.resolveStaleOccurrenceAlerts(prisma);
+    await this.opAlerts.scanTenant(user.tenantSlug);
     return { ok: true };
   }
 }

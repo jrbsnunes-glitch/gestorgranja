@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { StockMovementType } from '../generated/tenant-client';
+import { averageCostByProduct } from '../inventory/product-cost.util';
+import { FEED_CONSUMPTION_REF } from '../operation/consumption-stock-sync.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+import { computeFlockBalance } from '../production/flock-balance.util';
+import { ageDaysAt, feedConversion, standardAt } from '../production/lay-standard.util';
 import { ProductionService } from '../production/production.service';
 
 @Injectable()
@@ -13,12 +18,15 @@ export class ZootechnicalMetricsService {
     const prisma = await this.tenantPrisma.getClient(tenantSlug);
     const lot = await prisma.flockLot.findUnique({
       where: { id: flockLotId },
-      include: { breedLineage: { include: { standardPoints: true } } },
+      include: {
+        breedLineage: { include: { standardPoints: true } },
+        movements: { select: { type: true, quantity: true } },
+      },
     });
     if (!lot) return null;
 
     const today = new Date();
-    const ageDays = Math.floor((today.getTime() - lot.housingDate.getTime()) / 86400000);
+    const ageDays = ageDaysAt(lot.housingDate, today);
 
     const eggsRecent = await prisma.dailyEggProduction.findMany({
       where: { flockLotId },
@@ -35,44 +43,53 @@ export class ZootechnicalMetricsService {
     const feeds = feedsRecent.slice().reverse();
 
     const totalMortality = mortalities.reduce((s, m) => s + m.quantity, 0);
-    const liveBirds = Math.max(lot.housedQty - totalMortality, 1);
+    // aves vivas = alojadas + movimentações − mortalidade (mesma regra do saldo do lote)
+    const balance = computeFlockBalance(lot.housedQty, lot.movements, totalMortality);
+    const liveBirds = Math.max(balance.liveBirds, 1);
 
+    // padrão da linhagem dia a dia (pela idade do lote em cada data)
+    const points = lot.breedLineage.standardPoints;
     const series = eggs.map((e) => {
       const commercial = this.production.commercialEggs(e);
       const layRatePct = (commercial / liveBirds) * 100;
+      const std = standardAt(points, ageDaysAt(lot.housingDate, e.date));
       return {
         date: e.date,
         commercialEggs: commercial,
         layRatePct: Number(layRatePct.toFixed(2)),
+        standardLayRatePct: std?.layRatePct ?? null,
       };
     });
 
-    const standard = lot.breedLineage.standardPoints
-      .slice()
-      .sort((a, b) => a.ageDays - b.ageDays)
-      .find((p) => p.ageDays >= ageDays) ??
-      lot.breedLineage.standardPoints[lot.breedLineage.standardPoints.length - 1];
+    const standardToday = standardAt(points, ageDays);
 
-    const lastEgg = eggs[eggs.length - 1];
-    const lastFeed = feeds[feeds.length - 1];
-    let feedConversion: number | null = null;
-    if (lastEgg && lastFeed) {
-      const commercial = this.production.commercialEggs(lastEgg);
-      const avgW = lastEgg.avgEggWeightG ? Number(lastEgg.avgEggWeightG) : 62;
-      const eggMassKg = (commercial * avgW) / 1000;
-      if (eggMassKg > 0) {
-        feedConversion = Number((Number(lastFeed.consumedKg) / eggMassKg).toFixed(3));
-      }
-    }
+    // conversão alimentar em janela: últimos 7 dias com postura e ração pareadas por data
+    const feedByDate = new Map(feeds.map((f) => [f.date.toISOString().slice(0, 10), Number(f.consumedKg)]));
+    const pairs = eggs
+      .slice()
+      .reverse()
+      .filter((e) => feedByDate.has(e.date.toISOString().slice(0, 10)))
+      .slice(0, 7)
+      .map((e) => ({
+        consumedKg: feedByDate.get(e.date.toISOString().slice(0, 10))!,
+        commercialEggs: this.production.commercialEggs(e),
+        avgEggWeightG:
+          e.avgEggWeightG != null
+            ? Number(e.avgEggWeightG)
+            : standardAt(points, ageDaysAt(lot.housingDate, e.date))?.avgEggWeightG ?? null,
+      }));
+    const feedConversion7d = feedConversion(pairs);
 
     return {
       flockLotId,
       ageDays,
-      liveBirds,
-      standardLayRatePct: standard ? Number(standard.layRatePct) : null,
+      liveBirds: balance.liveBirds,
+      balance,
+      standardLayRatePct: standardToday?.layRatePct ?? null,
       currentLayRatePct: series.length ? series[series.length - 1].layRatePct : null,
       mortalityAccumulated: totalMortality,
-      feedConversion,
+      feedConversion: feedConversion7d,
+      feedConversionWindowDays: pairs.length,
       layRateSeries: series,
     };
   }
@@ -84,21 +101,48 @@ export class ZootechnicalMetricsService {
     const commercialTotal = eggs.reduce((s, e) => s + this.production.commercialEggs(e), 0);
     const feedKg = feeds.reduce((s, f) => s + Number(f.consumedKg), 0);
 
-    const feedMoves = await prisma.stockMovement.findMany({
-      where: { product: { type: 'FEED' }, type: 'OUT' },
-    });
-    const feedCost = feedMoves.reduce(
-      (s, m) => s + Number(m.quantity) * Number(m.unitCost ?? 0),
-      0,
-    );
+    // 1) custo real: baixas de ração vinculadas aos registros deste lote
+    const refs = feeds.map((f) => `${FEED_CONSUMPTION_REF}${f.id}`);
+    const linkedMoves = refs.length
+      ? await prisma.stockMovement.findMany({
+          where: { type: StockMovementType.OUT, reference: { in: refs } },
+          select: { quantity: true, unitCost: true },
+        })
+      : [];
+    let feedCost = linkedMoves.reduce((s, m) => s + Number(m.quantity) * Number(m.unitCost ?? 0), 0);
+    let costSource: 'linked' | 'average' | 'none' = feedCost > 0 ? 'linked' : 'none';
+
+    // 2) fallback: kg consumidos × custo médio dos produtos de ração
+    if (feedCost <= 0 && feedKg > 0) {
+      const feedProducts = await prisma.product.findMany({ where: { type: 'FEED' }, select: { id: true } });
+      const ids = feedProducts.map((p) => p.id);
+      if (ids.length) {
+        const moves = await prisma.stockMovement.findMany({
+          where: { productId: { in: ids } },
+          orderBy: [{ movedAt: 'asc' }, { id: 'asc' }],
+          select: { productId: true, type: true, quantity: true, unitCost: true },
+        });
+        const costs = averageCostByProduct(moves);
+        const withCost = [...costs.values()].filter((c) => c.averageCost > 0);
+        if (withCost.length) {
+          const totalQty = withCost.reduce((s, c) => s + Math.max(c.qty, 0), 0);
+          const avg = totalQty > 0
+            ? withCost.reduce((s, c) => s + c.averageCost * Math.max(c.qty, 0), 0) / totalQty
+            : withCost.reduce((s, c) => s + c.averageCost, 0) / withCost.length;
+          feedCost = feedKg * avg;
+          costSource = 'average';
+        }
+      }
+    }
 
     const dozens = commercialTotal / 12;
     return {
       flockLotId,
       commercialEggs: commercialTotal,
       feedKgTotal: feedKg,
-      estimatedFeedCost: feedCost,
-      costPerDozen: dozens > 0 ? Number((feedCost / dozens).toFixed(2)) : null,
+      estimatedFeedCost: Number(feedCost.toFixed(2)),
+      costSource,
+      costPerDozen: dozens > 0 && feedCost > 0 ? Number((feedCost / dozens).toFixed(2)) : null,
     };
   }
 }

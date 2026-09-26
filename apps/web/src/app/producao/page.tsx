@@ -20,15 +20,32 @@ import {
   usePagination,
   type ModalMode,
 } from '@/components/list-crud';
+import { RecordHistorySection } from '@/components/operation/record-history-section';
+import { RecordStatusBadge } from '@/components/operation/record-status-badge';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
-import { EGG_PRODUCTION_FIELDS, labelEggProductionField } from '@/lib/labels';
+import {
+  EGG_PRODUCTION_FIELDS,
+  MORTALITY_CAUSES,
+  isRecordLocked,
+  labelEggProductionField,
+  labelEnum,
+} from '@/lib/labels';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
+import { useProductOptions, useStockLocationOptions } from '@/lib/operation-options';
 
 type Lot = { id: string; code: string; barn: { id: string; name: string } };
 type Barn = { id: string; code: string; name: string };
 
-type EggRow = {
+type RecordMeta = {
+  status?: string;
+  shift?: string | null;
+  createdByName?: string | null;
+  reviewedByName?: string | null;
+  reviewedAt?: string | null;
+};
+
+type EggRow = RecordMeta & {
   id: string;
   date: string;
   extra: number;
@@ -39,7 +56,9 @@ type EggRow = {
   dirty?: number;
   deformed?: number;
   discard?: number;
+  discardReason?: string | null;
   avgEggWeightG?: number | null;
+  notes?: string | null;
   flockLot: { code: string };
 };
 
@@ -51,20 +70,47 @@ function eggCommercialQty(r: EggRow) {
   return r.extra + r.large + r.medium + r.small;
 }
 
-type MortRow = {
+type MortRow = RecordMeta & {
   id: string;
   date: string;
   quantity: number;
+  cause?: string;
   causeNotes: string | null;
   flockLot: { code: string };
 };
-type FeedRow = {
+type FeedRow = RecordMeta & {
   id: string;
   date: string;
   consumedKg: string;
   leftoverKg: string;
+  productId?: string | null;
+  stockLocationId?: string | null;
+  product?: { id: string; sku: string; name: string } | null;
   flockLot: { code: string };
 };
+
+/** Campo de justificativa exibido ao alterar (obrigatório se o registro já foi conferido). */
+function ReasonField({ locked }: { locked: boolean }) {
+  return (
+    <Field label={locked ? 'Justificativa da alteração (obrigatória — registro conferido)' : 'Justificativa da alteração'}>
+      <input name="reason" className={inputClass} required={locked} placeholder="Por que o registro está sendo alterado?" />
+    </Field>
+  );
+}
+
+function recordMetaFields(r: RecordMeta) {
+  return [
+    { label: 'Status', value: labelEnum(r.status ?? 'RECORDED') },
+    { label: 'Turno', value: r.shift ?? '—' },
+    { label: 'Registrado por', value: r.createdByName ?? '—' },
+    {
+      label: 'Conferido por',
+      value: r.reviewedByName
+        ? `${r.reviewedByName}${r.reviewedAt ? ` em ${new Date(r.reviewedAt).toLocaleString('pt-BR')}` : ''}`
+        : '—',
+    },
+  ];
+}
 type EnvRow = {
   id: string;
   recordedAt: string;
@@ -113,6 +159,8 @@ export default function ProducaoPage() {
   const [selectedFeed, setSelectedFeed] = useState<FeedRow | null>(null);
   const [selectedEnv, setSelectedEnv] = useState<EnvRow | null>(null);
   const [selectedTransfer, setSelectedTransfer] = useState<TransferRow | null>(null);
+  const feedProducts = useProductOptions('FEED');
+  const stockLocations = useStockLocationOptions();
 
   const eggList = useCrudList({
     items: eggs,
@@ -232,6 +280,9 @@ export default function ProducaoPage() {
           deformed: Number(fd.get('deformed') || 0),
           discard: Number(fd.get('discard') || 0),
           avgEggWeightG: fd.get('avgEggWeightG') ? Number(fd.get('avgEggWeightG')) : undefined,
+          discardReason: fd.get('discardReason') || undefined,
+          shift: fd.get('shift') || undefined,
+          reason: fd.get('reason') || undefined,
         }),
       });
       setModal(null);
@@ -250,7 +301,10 @@ export default function ProducaoPage() {
         flockLotId: lotId,
         date: fd.get('date'),
         quantity: Number(fd.get('quantity')),
+        cause: fd.get('cause') || undefined,
         causeNotes: fd.get('causeNotes') || undefined,
+        shift: fd.get('shift') || undefined,
+        reason: fd.get('reason') || undefined,
       };
       if (editingMort) {
         await apiFetch(`/v1/production/daily-mortality/${editingMort.id}`, {
@@ -282,6 +336,10 @@ export default function ProducaoPage() {
           date: fd.get('date'),
           consumedKg: Number(fd.get('consumedKg')),
           leftoverKg: Number(fd.get('leftoverKg') || 0),
+          productId: (fd.get('productId') as string) || undefined,
+          stockLocationId: (fd.get('stockLocationId') as string) || undefined,
+          shift: fd.get('shift') || undefined,
+          reason: fd.get('reason') || undefined,
         }),
       });
       setModal(null);
@@ -424,12 +482,13 @@ export default function ProducaoPage() {
 
       {tab === 'postura' ? (
         <PaginatedTable
-          headers={['Data', 'Lote', 'Comerciais (un)', 'Ações']}
+          headers={['Data', 'Lote', 'Comerciais (un)', 'Status', 'Ações']}
           recordItems={eggPag.slice}
           rows={eggPag.slice.map((r) => [
             formatCalendarDatePtBR(r.date),
             r.flockLot.code,
             String(eggCommercialQty(r)),
+            <RecordStatusBadge key={`${r.id}-st`} status={r.status ?? 'RECORDED'} />,
             <RowActions
               key={r.id}
               onView={() => {
@@ -452,12 +511,14 @@ export default function ProducaoPage() {
 
       {tab === 'mortalidade' ? (
         <PaginatedTable
-          headers={['Data', 'Lote', 'Qtd', 'Ações']}
+          headers={['Data', 'Lote', 'Qtd', 'Causa', 'Status', 'Ações']}
           recordItems={mortPag.slice}
           rows={mortPag.slice.map((r) => [
             formatCalendarDatePtBR(r.date),
             r.flockLot.code,
             String(r.quantity),
+            labelEnum(r.cause ?? 'UNKNOWN'),
+            <RecordStatusBadge key={`${r.id}-st`} status={r.status ?? 'RECORDED'} />,
             <RowActions
               key={r.id}
               onView={() => {
@@ -480,12 +541,13 @@ export default function ProducaoPage() {
 
       {tab === 'racao' ? (
         <PaginatedTable
-          headers={['Data', 'Lote', 'Consumido (kg)', 'Ações']}
+          headers={['Data', 'Lote', 'Consumido (kg)', 'Status', 'Ações']}
           recordItems={feedPag.slice}
           rows={feedPag.slice.map((r) => [
             formatCalendarDatePtBR(r.date),
             r.flockLot.code,
             r.consumedKg,
+            <RecordStatusBadge key={`${r.id}-st`} status={r.status ?? 'RECORDED'} />,
             <RowActions
               key={r.id}
               onView={() => {
@@ -605,6 +667,13 @@ export default function ProducaoPage() {
                 defaultValue={editingEgg?.avgEggWeightG ?? ''}
               />
             </Field>
+            <Field label="Motivo do descarte (quando houver)">
+              <input name="discardReason" className={inputClass} defaultValue={editingEgg?.discardReason ?? ''} />
+            </Field>
+            <Field label="Turno (opcional)">
+              <input name="shift" className={inputClass} defaultValue={editingEgg?.shift ?? ''} placeholder="Manhã / Tarde" />
+            </Field>
+            {editingEgg ? <ReasonField locked={isRecordLocked(editingEgg.status)} /> : null}
           </form>
         ) : null}
 
@@ -633,9 +702,22 @@ export default function ProducaoPage() {
                 defaultValue={editingMort?.quantity ?? ''}
               />
             </Field>
+            <Field label="Causa (registrada — não confirma diagnóstico)">
+              <select name="cause" className={inputClass} defaultValue={editingMort?.cause ?? 'UNKNOWN'}>
+                {MORTALITY_CAUSES.map((c) => (
+                  <option key={c} value={c}>
+                    {labelEnum(c)}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Observação">
               <input name="causeNotes" className={inputClass} defaultValue={editingMort?.causeNotes ?? ''} />
             </Field>
+            <Field label="Turno (opcional)">
+              <input name="shift" className={inputClass} defaultValue={editingMort?.shift ?? ''} placeholder="Manhã / Tarde" />
+            </Field>
+            {editingMort ? <ReasonField locked={isRecordLocked(editingMort.status)} /> : null}
           </form>
         ) : null}
 
@@ -675,6 +757,33 @@ export default function ProducaoPage() {
                 defaultValue={editingFeed?.leftoverKg ?? 0}
               />
             </Field>
+            <Field label="Produto de estoque (ração) — opcional">
+              <select name="productId" className={inputClass} defaultValue={editingFeed?.productId ?? ''}>
+                <option value="">— não vincular ao estoque —</option>
+                {feedProducts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.sku} — {p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Local de estoque (opcional)">
+              <select name="stockLocationId" className={inputClass} defaultValue={editingFeed?.stockLocationId ?? ''}>
+                <option value="">—</option>
+                {stockLocations.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} — {s.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <p className="-mt-2 mb-3 text-xs text-slate-500">
+              Com produto vinculado, a baixa no estoque é feita automaticamente após a conferência (ou no registro, conforme configuração).
+            </p>
+            <Field label="Turno (opcional)">
+              <input name="shift" className={inputClass} defaultValue={editingFeed?.shift ?? ''} placeholder="Manhã / Tarde" />
+            </Field>
+            {editingFeed ? <ReasonField locked={isRecordLocked(editingFeed.status)} /> : null}
           </form>
         ) : null}
 
@@ -759,8 +868,15 @@ export default function ProducaoPage() {
                     { label: 'Sujos', value: selectedEgg.dirty ?? 0 },
                     { label: 'Deformados', value: selectedEgg.deformed ?? 0 },
                     { label: 'Descarte', value: selectedEgg.discard ?? 0 },
+                    { label: 'Motivo do descarte', value: selectedEgg.discardReason ?? '—' },
                     { label: 'Peso médio (g)', value: selectedEgg.avgEggWeightG ?? '—' },
+                    { label: 'Observações', value: selectedEgg.notes ?? '—' },
                   ],
+                },
+                { title: 'Registro e conferência', fields: recordMetaFields(selectedEgg) },
+                {
+                  title: 'Histórico de alterações',
+                  content: <RecordHistorySection entity="DailyEggProduction" id={selectedEgg.id} />,
                 },
               ]
             : tab === 'mortalidade' && selectedMort
@@ -771,8 +887,14 @@ export default function ProducaoPage() {
                       { label: 'Data', value: formatCalendarDatePtBR(selectedMort.date) },
                       { label: 'Lote', value: selectedMort.flockLot.code },
                       { label: 'Quantidade', value: selectedMort.quantity },
+                      { label: 'Causa registrada', value: labelEnum(selectedMort.cause ?? 'UNKNOWN') },
                       { label: 'Obs.', value: selectedMort.causeNotes ?? '—' },
                     ],
+                  },
+                  { title: 'Registro e conferência', fields: recordMetaFields(selectedMort) },
+                  {
+                    title: 'Histórico de alterações',
+                    content: <RecordHistorySection entity="DailyMortality" id={selectedMort.id} />,
                   },
                 ]
               : tab === 'racao' && selectedFeed
@@ -784,7 +906,16 @@ export default function ProducaoPage() {
                         { label: 'Lote', value: selectedFeed.flockLot.code },
                         { label: 'Consumido (kg)', value: selectedFeed.consumedKg },
                         { label: 'Sobra (kg)', value: selectedFeed.leftoverKg },
+                        {
+                          label: 'Produto de estoque',
+                          value: selectedFeed.product ? `${selectedFeed.product.sku} — ${selectedFeed.product.name}` : '—',
+                        },
                       ],
+                    },
+                    { title: 'Registro e conferência', fields: recordMetaFields(selectedFeed) },
+                    {
+                      title: 'Histórico de alterações',
+                      content: <RecordHistorySection entity="DailyFeedConsumption" id={selectedFeed.id} />,
                     },
                   ]
                 : tab === 'ambiente' && selectedEnv

@@ -74,6 +74,8 @@ model AuditLog {
   entityId   String?
   beforeJson Json?
   afterJson  Json?
+  /// Justificativa informada pelo usuário em alterações/ajustes.
+  reason     String?
   ip         String?
   createdAt  DateTime @default(now())
 
@@ -103,6 +105,12 @@ enum AlertType {
   CASH_PROJECTION_BELOW_LIMIT
   BUDGET_PACE_WARNING
   PURCHASE_CASH_IMPACT
+  PRODUCTION_BELOW_STANDARD
+  FEED_VARIATION
+  PENDING_RECORDS
+  OPEN_OCCURRENCE
+  LOSS_ABOVE_LIMIT
+  MORTALITY_ABOVE_LIMIT
 }
 
 enum AlertStatus {
@@ -122,8 +130,54 @@ model Alert {
   dueAt       DateTime?
   createdAt   DateTime    @default(now())
   resolvedAt  DateTime?
+  /// Critério que disparou o alerta (ex.: "postura 78% vs padrão 85% (limite 5%)").
+  criteria       String?
+  priority       OccurrencePriority?
+  assigneeUserId String?
+  barnId         String?
+  flockLotId     String?
 
   @@index([status, type])
+}
+
+enum ConsumptionSyncMode {
+  ON_REVIEW
+  ON_RECORD
+  OFF
+}
+
+/// Configurações do módulo Operação (singleton id = "default").
+model OperationSettings {
+  id                  String              @id @default("default")
+  /// Quando baixar ração/insumos do estoque: após conferência, no registro ou nunca.
+  consumptionSyncMode ConsumptionSyncMode @default(ON_REVIEW)
+  /// Postura só alimenta o estoque de ovos após conferência.
+  eggSyncOnlyReviewed Boolean             @default(false)
+  /// Conta do plano de contas usada nas baixas de consumo (padrão: conta de estoque).
+  stockChartAccountId String?
+
+  // --- Alertas operacionais ---
+  enableProductionBelowStandard Boolean @default(true)
+  /// Postura % abaixo do padrão da linhagem em mais que este valor (pontos percentuais).
+  productionBelowStandardPct    Decimal @default(5) @db.Decimal(5, 2)
+  enableFeedVariation           Boolean @default(true)
+  /// Variação do consumo diário de ração vs. média dos 7 dias anteriores (%).
+  feedVariationPct              Decimal @default(15) @db.Decimal(5, 2)
+  enablePendingRecords          Boolean @default(true)
+  /// Após esta hora (0-23), lote sem postura/ração do dia anterior gera alerta.
+  pendingRecordsAfterHour       Int     @default(9)
+  enableOpenOccurrence          Boolean @default(true)
+  /// Prioridade mínima para alertar ocorrência aberta.
+  openOccurrenceMinPriority     OccurrencePriority @default(HIGH)
+  /// Ocorrência aberta há mais de N horas gera alerta.
+  openOccurrenceMaxHours        Int     @default(24)
+  enableLossAboveLimit          Boolean @default(true)
+  /// (trincados+sujos+deformados+descarte) / produzidos acima deste % no dia.
+  lossAboveLimitPct             Decimal @default(3) @db.Decimal(5, 2)
+  enableMortalityAboveLimit     Boolean @default(true)
+  /// Mortalidade diária acima deste % das aves vivas.
+  mortalityDailyLimitPct        Decimal @default(0.1) @db.Decimal(6, 3)
+  updatedAt                     DateTime @updatedAt @default(now())
 }
 
 model SyncConflict {
@@ -193,16 +247,29 @@ model BudgetLine {
   @@unique([yearMonth, chartAccountId])
 }
 
+enum BarnSituation {
+  IN_PRODUCTION
+  EMPTY
+  CLEANING
+  MAINTENANCE
+}
+
 model Barn {
-  id              String               @id @default(uuid())
-  controlNumber   Int                  @unique @default(autoincrement())
-  code            String               @unique
-  name            String
-  capacity        Int?
-  isActive        Boolean              @default(true)
-  flockLots       FlockLot[]
-  envReadings     EnvironmentalReading[]
-  roleAssignments UserRoleAssignment[]
+  id                String               @id @default(uuid())
+  controlNumber     Int                  @unique @default(autoincrement())
+  code              String               @unique
+  name              String
+  capacity          Int?
+  isActive          Boolean              @default(true)
+  situation         BarnSituation        @default(EMPTY)
+  responsibleUserId String?
+  notes             String?
+  flockLots         FlockLot[]
+  envReadings       EnvironmentalReading[]
+  roleAssignments   UserRoleAssignment[]
+  occurrences       OperationalOccurrence[]
+  supplyConsumptions SupplyConsumption[]
+  losses            OperationalLoss[]
 }
 
 model BreedLineage {
@@ -258,9 +325,48 @@ model FlockLot {
   healthEvents     HealthEvent[]
   feedTransfersOut FeedTransfer[]         @relation("FeedTransferFrom")
   feedTransfersIn  FeedTransfer[]         @relation("FeedTransferTo")
+  movements        FlockMovement[]
+  occurrences      OperationalOccurrence[]
+  supplyConsumptions SupplyConsumption[]
+  losses           OperationalLoss[]
+}
+
+/// Movimentação de aves do lote (entrada, transferência, saída, ajuste, encerramento).
+enum FlockMovementType {
+  ENTRY
+  TRANSFER_IN
+  TRANSFER_OUT
+  EXIT
+  ADJUST
+  CLOSE
+}
+
+model FlockMovement {
+  id               String            @id @default(uuid())
+  controlNumber    Int               @unique @default(autoincrement())
+  flockLotId       String
+  flockLot         FlockLot          @relation(fields: [flockLotId], references: [id], onDelete: Cascade)
+  date             DateTime          @db.Date
+  type             FlockMovementType
+  /// Quantidade informada. Para ADJUST pode ser negativa; para os demais é positiva e o sinal vem do tipo.
+  quantity         Int
+  counterpartLotId String?
+  reason           String?
+  createdByUserId  String?
+  createdAt        DateTime          @default(now())
+
+  @@index([flockLotId, date])
 }
 
 // --- Produção ---
+
+/// Ciclo de conferência dos registros operacionais diários.
+enum OperationRecordStatus {
+  PENDING
+  RECORDED
+  REVIEWED
+  ADJUSTED
+}
 
 model DailyEggProduction {
   id            String   @id @default(uuid())
@@ -278,6 +384,13 @@ model DailyEggProduction {
   discard       Int      @default(0)
   avgEggWeightG Decimal? @db.Decimal(6, 2)
   notes         String?
+  discardReason String?
+  status           OperationRecordStatus @default(RECORDED)
+  shift            String?
+  createdByUserId  String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt        DateTime              @default(now())
   updatedAt     DateTime @updatedAt
 
   eggStockLedger EggProductionStockLedger?
@@ -327,6 +440,12 @@ model DailyMortality {
   quantity   Int
   cause      MortalityCause  @default(UNKNOWN)
   causeNotes String?
+  status           OperationRecordStatus @default(RECORDED)
+  shift            String?
+  createdByUserId  String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt        DateTime              @default(now())
   updatedAt  DateTime        @updatedAt
 
   @@index([flockLotId, date])
@@ -340,9 +459,155 @@ model DailyFeedConsumption {
   date         DateTime @db.Date
   consumedKg   Decimal  @db.Decimal(12, 3)
   leftoverKg   Decimal  @default(0) @db.Decimal(12, 3)
+  /// Produto de estoque (ração) consumido — habilita baixa automática.
+  productId       String?
+  product         Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  stockLocationId String?
+  stockLocation   StockLocation? @relation(fields: [stockLocationId], references: [id], onDelete: SetNull)
+  /// Quantidade já baixada no estoque para este registro (idempotência por delta).
+  stockSyncedKg   Decimal        @default(0) @db.Decimal(12, 3)
+  status           OperationRecordStatus @default(RECORDED)
+  shift            String?
+  createdByUserId  String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt        DateTime              @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([flockLotId, date])
+}
+
+/// Consumo de insumos que não são ração diária (medicamentos, materiais, embalagens…).
+enum SupplyMovementKind {
+  CONSUMPTION
+  LOSS
+  ADJUST
+  TRANSFER
+  RETURN
+}
+
+model SupplyConsumption {
+  id               String                @id @default(uuid())
+  controlNumber    Int                   @unique @default(autoincrement())
+  date             DateTime              @db.Date
+  barnId           String?
+  barn             Barn?                 @relation(fields: [barnId], references: [id], onDelete: SetNull)
+  flockLotId       String?
+  flockLot         FlockLot?             @relation(fields: [flockLotId], references: [id], onDelete: SetNull)
+  productId        String
+  product          Product               @relation(fields: [productId], references: [id])
+  stockLocationId  String?
+  stockLocation    StockLocation?        @relation(fields: [stockLocationId], references: [id], onDelete: SetNull)
+  kind             SupplyMovementKind    @default(CONSUMPTION)
+  quantity         Decimal               @db.Decimal(14, 3)
+  unit             String                @default("UN")
+  notes            String?
+  /// Quantidade já baixada no estoque (idempotência por delta).
+  stockSyncedQty   Decimal               @default(0) @db.Decimal(14, 3)
+  status           OperationRecordStatus @default(RECORDED)
+  createdByUserId  String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([date])
+  @@index([productId, date])
+}
+
+/// Perdas operacionais fora da classificação de ovos da postura (ração, insumos, aves, equipamentos…).
+enum OperationalLossType {
+  EGG
+  FEED
+  SUPPLY
+  BIRD
+  EQUIPMENT
+  OTHER
+}
+
+model OperationalLoss {
+  id              String              @id @default(uuid())
+  controlNumber   Int                 @unique @default(autoincrement())
+  date            DateTime            @db.Date
+  type            OperationalLossType
+  barnId          String?
+  barn            Barn?               @relation(fields: [barnId], references: [id], onDelete: SetNull)
+  flockLotId      String?
+  flockLot        FlockLot?           @relation(fields: [flockLotId], references: [id], onDelete: SetNull)
+  productId       String?
+  product         Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  location        String?
+  quantity        Decimal             @db.Decimal(14, 3)
+  unit            String              @default("UN")
+  reason          String?
+  actionTaken     String?
+  notes           String?
+  /// Impacto financeiro estimado (informado ou calculado quando houver critério).
+  estimatedCost   Decimal?            @db.Decimal(14, 2)
+  createdByUserId String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([date])
+  @@index([type, date])
+}
+
+// --- Ocorrências operacionais ---
+
+enum OccurrenceType {
+  EQUIPMENT
+  WATER
+  POWER
+  ROUTINE
+  ENVIRONMENT
+  LOSS_INCREASE
+  PRODUCTION_ANOMALY
+  SANITARY
+  OTHER
+}
+
+enum OccurrencePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum OccurrenceStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+model OperationalOccurrence {
+  id                  String             @id @default(uuid())
+  controlNumber       Int                @unique @default(autoincrement())
+  occurredAt          DateTime
+  barnId              String?
+  barn                Barn?              @relation(fields: [barnId], references: [id], onDelete: SetNull)
+  flockLotId          String?
+  flockLot            FlockLot?          @relation(fields: [flockLotId], references: [id], onDelete: SetNull)
+  type                OccurrenceType     @default(OTHER)
+  location            String?
+  description         String
+  priority            OccurrencePriority @default(MEDIUM)
+  status              OccurrenceStatus   @default(OPEN)
+  actionTaken         String?
+  resolverUserId      String?
+  resolvedAt          DateTime?
+  /// Equipamento envolvido (patrimônio), quando aplicável.
+  assetId             String?
+  asset               Asset?             @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  /// Registro de manutenção aberto/relacionado a partir da ocorrência.
+  maintenanceRecordId String?            @unique
+  maintenanceRecord   MaintenanceRecord? @relation(fields: [maintenanceRecordId], references: [id], onDelete: SetNull)
+  createdByUserId     String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([status, priority])
+  @@index([occurredAt])
 }
 
 model FeedTransfer {
@@ -472,6 +737,9 @@ model Product {
   salesOrderItems SalesOrderItem[]
   employeeWithdrawals EmployeeProductWithdrawal[]
   priceHistory ProductPriceHistory[]
+  feedConsumptions DailyFeedConsumption[]
+  supplyConsumptions SupplyConsumption[]
+  operationalLosses OperationalLoss[]
 }
 
 model ProductPriceHistory {
@@ -502,6 +770,8 @@ model StockLocation {
   isActive  Boolean  @default(true)
   movements StockMovement[]
   receipts  StockReceipt[]
+  feedConsumptions DailyFeedConsumption[]
+  supplyConsumptions SupplyConsumption[]
 }
 
 model StockMovement {
@@ -892,6 +1162,7 @@ model Asset {
   barnId          String?
   acquiredAt      DateTime?
   maintenanceLogs MaintenanceRecord[]
+  occurrences     OperationalOccurrence[]
 }
 
 model MaintenanceRecord {
@@ -904,6 +1175,7 @@ model MaintenanceRecord {
   cost           Decimal?      @db.Decimal(14, 2)
   chartAccountId String?
   chartAccount   ChartAccount? @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+  occurrence     OperationalOccurrence?
 }
 
 enum ProjectStatus {

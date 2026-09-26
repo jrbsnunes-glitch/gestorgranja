@@ -5,7 +5,7 @@ import { RequirePermissions } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { CurrentUser } from '../auth/tenant.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
-import { CadastrosService } from './cadastros.service';
+import { type BarnPayload, CadastrosService } from './cadastros.service';
 
 @ApiTags('cadastros')
 @ApiBearerAuth()
@@ -20,19 +20,21 @@ export class CadastrosController {
     return this.cadastros.listBarns(user);
   }
 
+  @Get('barns/responsible-options')
+  @RequirePermissions('production.write', 'operation.settings', '*')
+  responsibleOptions(@CurrentUser() user: JwtPayload) {
+    return this.cadastros.listResponsibleOptions(user);
+  }
+
   @Post('barns')
-  @RequirePermissions('*')
-  createBarn(@CurrentUser() user: JwtPayload, @Body() body: { code: string; name: string; capacity?: number }) {
+  @RequirePermissions('operation.settings', '*')
+  createBarn(@CurrentUser() user: JwtPayload, @Body() body: BarnPayload) {
     return this.cadastros.createBarn(user, body);
   }
 
   @Patch('barns/:id')
-  @RequirePermissions('*')
-  updateBarn(
-    @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
-    @Body() body: { code?: string; name?: string; capacity?: number; isActive?: boolean },
-  ) {
+  @RequirePermissions('operation.settings', '*')
+  updateBarn(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() body: BarnPayload) {
     return this.cadastros.updateBarn(user, id, body);
   }
 

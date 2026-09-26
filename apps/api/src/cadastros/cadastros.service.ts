@@ -1,8 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
-import { FlockLotStatus } from '../generated/tenant-client';
+import { loadUserNames, userLabel } from '../common/user-names';
+import { BarnSituation, FlockLotStatus } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizePartnerPayload, type PartnerPayload } from './partner-payload';
+
+export type BarnPayload = {
+  code?: string;
+  name?: string;
+  capacity?: number | null;
+  isActive?: boolean;
+  situation?: BarnSituation;
+  responsibleUserId?: string | null;
+  notes?: string | null;
+};
 
 @Injectable()
 export class CadastrosService {
@@ -12,33 +23,69 @@ export class CadastrosService {
     return this.tenantPrisma.getClient(user.tenantSlug);
   }
 
-  listBarns(user: JwtPayload) {
-    return this.client(user).then((p) =>
-      p.barn.findMany({ orderBy: { code: 'asc' }, include: { _count: { select: { flockLots: true } } } }),
-    );
+  async listBarns(user: JwtPayload) {
+    const p = await this.client(user);
+    const rows = await p.barn.findMany({
+      orderBy: { code: 'asc' },
+      include: {
+        _count: { select: { flockLots: true } },
+        flockLots: {
+          where: { status: FlockLotStatus.ACTIVE },
+          select: { id: true, code: true, housedQty: true },
+        },
+      },
+    });
+    const names = await loadUserNames(p, rows.map((r) => r.responsibleUserId));
+    return rows.map(({ flockLots, ...b }) => ({
+      ...b,
+      responsibleName: userLabel(names, b.responsibleUserId),
+      activeLots: flockLots,
+      activeLotCount: flockLots.length,
+      housedActive: flockLots.reduce((s, l) => s + l.housedQty, 0),
+    }));
   }
 
-  createBarn(user: JwtPayload, data: { code: string; name: string; capacity?: number }) {
+  /** Usuários ativos para seleção de responsável (nome e login apenas). */
+  async listResponsibleOptions(user: JwtPayload) {
+    const p = await this.client(user);
+    return p.user.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, username: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  createBarn(user: JwtPayload, data: BarnPayload) {
+    if (!data.code?.trim() || !data.name?.trim()) {
+      throw new BadRequestException('Código e nome do galpão são obrigatórios.');
+    }
     return this.client(user).then((p) =>
       p.barn.create({
-        data: { code: data.code.trim(), name: data.name.trim(), capacity: data.capacity },
+        data: {
+          code: data.code!.trim(),
+          name: data.name!.trim(),
+          capacity: data.capacity ?? undefined,
+          situation: data.situation ?? undefined,
+          responsibleUserId: data.responsibleUserId || undefined,
+          notes: data.notes?.trim() || undefined,
+        },
       }),
     );
   }
 
-  updateBarn(
-    user: JwtPayload,
-    id: string,
-    data: { code?: string; name?: string; capacity?: number; isActive?: boolean },
-  ) {
+  updateBarn(user: JwtPayload, id: string, data: BarnPayload) {
     return this.client(user).then((p) =>
       p.barn.update({
         where: { id },
         data: {
           code: data.code?.trim(),
           name: data.name?.trim(),
-          capacity: data.capacity,
+          capacity: data.capacity === undefined ? undefined : data.capacity,
           isActive: data.isActive,
+          situation: data.situation,
+          responsibleUserId:
+            data.responsibleUserId === undefined ? undefined : data.responsibleUserId || null,
+          notes: data.notes === undefined ? undefined : data.notes?.trim() || null,
         },
       }),
     );

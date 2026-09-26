@@ -19,6 +19,7 @@ import { HealthModule } from './health/health.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NutritionModule } from './nutrition/nutrition.module';
+import { OperationModule } from './operation/operation.module';
 import { ProductionModule } from './production/production.module';
 import { LicensePortalModule } from './license-portal/license-portal.module';
 import { ProvisioningModule } from './provisioning/provisioning.module';
@@ -49,6 +50,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     ProductionModule,
     NutritionModule,
+    OperationModule,
     SanidadeModule,
     InventoryModule,
     PurchasingModule,

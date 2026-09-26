@@ -60,7 +60,15 @@ function withPontoItem(items: NavItem[], session: SessionUser, sub: TenantSubscr
 
 const MODULE_ACCESS: Record<string, string[]> = {
   dashboard: ['reports.read', 'production.read', 'finance.write', 'hr.read', 'sales.read', 'cash.read'],
-  operacao: ['production.read', 'production.write', 'health.write', 'nutrition.write'],
+  operacao: [
+    'production.read',
+    'production.write',
+    'production.review',
+    'occurrences.write',
+    'operation.settings',
+    'health.write',
+    'nutrition.write',
+  ],
   produtos: ['cadastros.read', 'cadastros.write', 'inventory.write'],
   estoque: ['inventory.write', 'purchasing.write'],
   comercial: ['sales.read', 'sales.write'],
@@ -130,7 +138,9 @@ export function filterModuleTabs(
   }
 
   if (isFieldOperatorLike(session) && mod.id === 'operacao') {
-    return mod.tabs.filter((t) => t.id === 'producao');
+    const allowed = new Set(['producao', 'registro-diario']);
+    if (hasAnyPermission(session, ['occurrences.write'])) allowed.add('ocorrencias');
+    return mod.tabs.filter((t) => allowed.has(t.id));
   }
 
   if (isFieldOperatorLike(session) && mod.id === 'rh') {
@@ -147,16 +157,21 @@ export function filterModuleTabs(
   }
 
   if (mod.id === 'operacao') {
-    const tabs: typeof mod.tabs = [];
-    if (hasAnyPermission(session, ['production.read', 'production.write'])) {
-      const p = mod.tabs.find((t) => t.id === 'producao');
-      if (p) tabs.push(p);
-    }
-    if (hasAnyPermission(session, ['health.write'])) {
-      const s = mod.tabs.find((t) => t.id === 'sanidade');
-      if (s) tabs.push(s);
-    }
-    return tabs.filter(Boolean);
+    const prod = hasAnyPermission(session, ['production.read', 'production.write', 'production.review']);
+    const TAB_RULES: Record<string, boolean> = {
+      dashboard: prod,
+      'registro-diario': prod,
+      producao: prod,
+      lotes: prod,
+      galpoes: prod,
+      ocorrencias: prod || hasAnyPermission(session, ['occurrences.write']),
+      insumos: hasAnyPermission(session, ['production.write', 'inventory.write']),
+      perdas: prod,
+      pendencias: prod,
+      sanidade: hasAnyPermission(session, ['health.write']),
+      configuracoes: hasAnyPermission(session, ['operation.settings']),
+    };
+    return mod.tabs.filter((t) => TAB_RULES[t.id] ?? false);
   }
 
   if (mod.id === 'estoque') {

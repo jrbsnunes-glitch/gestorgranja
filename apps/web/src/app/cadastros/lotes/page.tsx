@@ -11,6 +11,7 @@ import {
   useCrudList,
 } from '@/components/crud';
 import { ListToolbar, PaginatedTable, RowActions, usePagination, type ModalMode } from '@/components/list-crud';
+import { FlockMovementsModal, type FlockBalance } from '@/components/operation/flock-movements-modal';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
@@ -23,6 +24,7 @@ type Lot = {
   housedQty: number;
   mortalityTotal: number;
   liveBirds: number;
+  balance?: FlockBalance;
   housingDate: string;
   status: string;
   eggType: string | null;
@@ -42,6 +44,7 @@ export default function LotesPage() {
   const [modal, setModal] = useState<ModalMode>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [movementsOpen, setMovementsOpen] = useState(false);
   const [selected, setSelected] = useState<Lot | null>(null);
 
   const list = useCrudList({
@@ -111,14 +114,26 @@ export default function LotesPage() {
     String(l.mortalityTotal ?? 0),
     String(l.liveBirds ?? l.housedQty),
     labelEnum(l.status),
-    <RowActions
-      key={l.id}
-      onView={() => {
-        setSelected(l);
-        setViewOpen(true);
-      }}
-      onEdit={() => openForm('edit', l)}
-    />,
+    <span key={l.id} className="flex flex-wrap items-center gap-1.5 max-sm:w-full max-sm:justify-end">
+      <RowActions
+        onView={() => {
+          setSelected(l);
+          setViewOpen(true);
+        }}
+        onEdit={() => openForm('edit', l)}
+      />
+      <Button
+        type="button"
+        variant="secondary"
+        className="px-2 py-1 text-xs"
+        onClick={() => {
+          setSelected(l);
+          setMovementsOpen(true);
+        }}
+      >
+        Movimentações
+      </Button>
+    </span>,
   ]);
 
   return (
@@ -256,8 +271,11 @@ export default function LotesPage() {
                   fields: [
                     { label: 'Data de alojamento', value: new Date(selected.housingDate).toLocaleDateString('pt-BR') },
                     { label: 'Aves alojadas', value: selected.housedQty },
+                    { label: 'Entradas (movimentações)', value: selected.balance?.movementsIn ?? 0 },
+                    { label: 'Saídas (movimentações)', value: selected.balance?.movementsOut ?? 0 },
+                    { label: 'Ajustes autorizados', value: selected.balance?.adjustments ?? 0 },
                     { label: 'Mortalidade acumulada', value: selected.mortalityTotal ?? 0 },
-                    { label: 'Aves vivas (estim.)', value: selected.liveBirds ?? selected.housedQty },
+                    { label: 'Aves vivas (calculado)', value: selected.liveBirds ?? selected.housedQty },
                     { label: 'Tipo de ovo', value: labelEnum(selected.eggType) },
                     { label: 'Lote fornecedor', value: selected.supplierBatch ?? '—' },
                     {
@@ -273,6 +291,14 @@ export default function LotesPage() {
               ]
             : []
         }
+      />
+
+      <FlockMovementsModal
+        open={movementsOpen}
+        onClose={() => setMovementsOpen(false)}
+        lot={selected ? { id: selected.id, code: selected.code, status: selected.status } : null}
+        lots={lots.map((l) => ({ id: l.id, code: l.code }))}
+        onChanged={load}
       />
 
       <ModuleReportsModal

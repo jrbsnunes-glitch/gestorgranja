@@ -64,7 +64,8 @@ type Dashboard = {
   currentLayRatePct: number | null;
   mortalityAccumulated: number;
   feedConversion: number | null;
-  layRateSeries: { date: string; layRatePct: number; commercialEggs: number }[];
+  feedConversionWindowDays?: number;
+  layRateSeries: { date: string; layRatePct: number; commercialEggs: number; standardLayRatePct?: number | null }[];
 };
 
 type EggInventory = {
@@ -80,9 +81,11 @@ export default function DashboardPage() {
   const [lots, setLots] = useState<Lot[]>([]);
   const [lotId, setLotId] = useState<string>('');
   const [data, setData] = useState<Dashboard | null>(null);
-  const [cost, setCost] = useState<{ costPerDozen: number | null; commercialEggs: number } | null>(
-    null,
-  );
+  const [cost, setCost] = useState<{
+    costPerDozen: number | null;
+    commercialEggs: number;
+    costSource?: 'linked' | 'average' | 'none';
+  } | null>(null);
   const [eggInventory, setEggInventory] = useState<EggInventory | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
 
@@ -97,7 +100,7 @@ export default function DashboardPage() {
     if (!lotId) return;
     void Promise.all([
       apiFetch<Dashboard>(`/v1/reports/dashboard/${lotId}`).then(setData),
-      apiFetch<{ costPerDozen: number | null; commercialEggs: number }>(
+      apiFetch<{ costPerDozen: number | null; commercialEggs: number; costSource?: 'linked' | 'average' | 'none' }>(
         `/v1/reports/cost-per-dozen/${lotId}`,
       ).then(setCost),
       apiFetch<EggInventory>('/v1/reports/egg-inventory').then(setEggInventory),
@@ -123,7 +126,8 @@ export default function DashboardPage() {
     data?.layRateSeries.map((p) => ({
       date: formatCalendarDatePtBR(p.date),
       real: p.layRatePct,
-      padrao: data.standardLayRatePct ?? 0,
+      // padrão da linhagem na idade do lote em cada dia (não um valor fixo)
+      padrao: p.standardLayRatePct ?? data.standardLayRatePct ?? 0,
       commercialEggs: p.commercialEggs,
     })) ?? [];
 
@@ -167,12 +171,22 @@ export default function DashboardPage() {
         </Card>
         <Card title="Conversão alimentar">
           <p className="text-2xl font-semibold">{data?.feedConversion ?? '—'}</p>
+          <p className="text-xs text-slate-500">
+            kg ração / kg ovos · janela de {data?.feedConversionWindowDays ?? 0} dia(s)
+          </p>
         </Card>
         <Card title="Custo por dúzia (estim.)">
           <p className="text-2xl font-semibold">
             {cost?.costPerDozen != null ? `R$ ${cost.costPerDozen.toFixed(2)}` : '—'}
           </p>
-          <p className="text-xs text-slate-500">Ovos comerciais: {cost?.commercialEggs ?? '—'}</p>
+          <p className="text-xs text-slate-500">
+            Ovos comerciais: {cost?.commercialEggs ?? '—'}
+            {cost?.costSource === 'linked'
+              ? ' · ração baixada do estoque para este lote'
+              : cost?.costSource === 'average'
+                ? ' · estimado pelo custo médio da ração'
+                : ''}
+          </p>
         </Card>
       </div>
 

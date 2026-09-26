@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Audited } from '../audit/audit.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
@@ -18,7 +17,6 @@ export class NutritionController {
 
   @Post('daily-feed')
   @RequirePermissions('nutrition.write', 'sync.write', '*')
-  @Audited('DailyFeedConsumption')
   upsert(@CurrentUser() user: JwtPayload, @Body() dto: UpsertFeedDto) {
     return this.nutrition.upsertFeed(user, dto);
   }

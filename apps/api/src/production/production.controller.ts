@@ -6,6 +6,7 @@ import { RequirePermissions } from '../auth/permissions.decorator';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { CurrentUser } from '../auth/tenant.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
+import { CreateFlockMovementDto } from './dto/create-flock-movement.dto';
 import { UpsertDailyEggDto } from './dto/upsert-daily-egg.dto';
 import { UpsertDailyMortalityDto } from './dto/upsert-daily-mortality.dto';
 import { EggProductionStockService } from './egg-production-stock.service';
@@ -25,6 +26,34 @@ export class ProductionController {
   @RequirePermissions('production.read', '*')
   listLots(@CurrentUser() user: JwtPayload) {
     return this.production.listLots(user);
+  }
+
+  @Get('lots/:id/balance')
+  @RequirePermissions('production.read', '*')
+  lotBalance(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.production.lotBalance(user, id);
+  }
+
+  @Get('lots/:id/movements')
+  @RequirePermissions('production.read', '*')
+  listMovements(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.production.listFlockMovements(user, id);
+  }
+
+  @Post('lots/:id/movements')
+  @RequirePermissions('production.write', '*')
+  createMovement(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CreateFlockMovementDto,
+  ) {
+    return this.production.createFlockMovement(user, id, dto);
+  }
+
+  @Get('records/:entity/:id/history')
+  @RequirePermissions('production.read', '*')
+  recordHistory(@CurrentUser() user: JwtPayload, @Param('entity') entity: string, @Param('id') id: string) {
+    return this.production.recordHistory(user, entity, id);
   }
 
   @Post('environmental')

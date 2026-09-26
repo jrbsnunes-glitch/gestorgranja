@@ -27,4 +27,14 @@ export class UpsertDailyMortalityDto {
   @IsString()
   @IsOptional()
   causeNotes?: string;
+
+  @ApiPropertyOptional({ description: 'Turno, quando aplicável.' })
+  @IsString()
+  @IsOptional()
+  shift?: string;
+
+  @ApiPropertyOptional({ description: 'Justificativa da alteração (gravada na auditoria).' })
+  @IsString()
+  @IsOptional()
+  reason?: string;
 }
