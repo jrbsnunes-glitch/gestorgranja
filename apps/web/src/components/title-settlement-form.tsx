@@ -3,10 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { Field, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
-
-function money(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+import { formatBrl } from '@/lib/money';
 
 type Props = {
   formId: string;
@@ -60,8 +57,8 @@ export function TitleSettlementForm({
   return (
     <form id={formId} onSubmit={handleSubmit} className="space-y-3">
       <p className="text-sm text-slate-600">
-        Valor do título: {money(titleAmount)} — Já {kind === 'payable' ? 'pago' : 'recebido'}:{' '}
-        {money(amountPaid)} — <strong>Saldo em aberto: {money(remaining)}</strong>
+        Valor do título: {formatBrl(titleAmount)} — Já {kind === 'payable' ? 'pago' : 'recebido'}:{' '}
+        {formatBrl(amountPaid)} — <strong>Saldo em aberto: {formatBrl(remaining)}</strong>
       </p>
       <Field label="Valor desta baixa (R$)">
         <input
@@ -78,7 +75,7 @@ export function TitleSettlementForm({
       </Field>
       {payAmount > 0 && payAmount < remaining - 0.004 ? (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Baixa parcial: após este lançamento restará <strong>{money(afterBalance)}</strong> em aberto.
+          Baixa parcial: após este lançamento restará <strong>{formatBrl(afterBalance)}</strong> em aberto.
         </p>
       ) : null}
       {payAmount >= remaining - 0.004 && remaining > 0 ? (

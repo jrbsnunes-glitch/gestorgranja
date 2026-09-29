@@ -10,6 +10,7 @@ import {
   type StockReceiptsReportFilters,
   type StockReceiptsReportVariant,
 } from '@/lib/stock-receipts-report-query';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type NoteRow = {
@@ -76,10 +77,6 @@ function parseFilters(sp: URLSearchParams): StockReceiptsReportFilters | null {
     controlMax: sp.get('controlMax') ?? '',
     partnerId: sp.get('partnerId') ?? '',
   };
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function fmtQty(n: number) {
@@ -178,7 +175,7 @@ function PrintBody() {
                     <td className="py-2 pr-2 text-xs">{r.nfeAccessKey ?? '—'}</td>
                     <td className="py-2 pr-2 text-xs">{r.stockLocation ?? '—'}</td>
                     <td className="py-2 pr-2 text-right tabular-nums">{r.itemCount}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(r.totalAmount)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.totalAmount)}</td>
                   </tr>
                 ))
               )}
@@ -191,7 +188,7 @@ function PrintBody() {
                   </td>
                   <td className="py-2 pr-2 text-right tabular-nums">{data.totals.itemLineCount}</td>
                   <td className="py-2 pr-2 text-right tabular-nums">
-                    {fmtMoney(data.totals.totalAmount)}
+                    {formatBrl(data.totals.totalAmount)}
                   </td>
                 </tr>
               </tfoot>
@@ -211,7 +208,7 @@ function PrintBody() {
                   {rec.invoiceNumber ? ` · NF ${rec.invoiceNumber}` : ''}
                   <span className="font-normal text-slate-600">
                     {' '}
-                    — recebido {fmtDt(rec.receivedAt)} · total {fmtMoney(rec.totalAmount)}
+                    — recebido {fmtDt(rec.receivedAt)} · total {formatBrl(rec.totalAmount)}
                   </span>
                 </h3>
                 <table className="mt-2 w-full border-collapse text-sm">
@@ -234,8 +231,8 @@ function PrintBody() {
                         <td className="py-1 pr-2 text-right tabular-nums">
                           {fmtQty(it.quantity)} {it.productUnit}
                         </td>
-                        <td className="py-1 pr-2 text-right tabular-nums">{fmtMoney(it.unitCost)}</td>
-                        <td className="py-1 pr-2 text-right tabular-nums">{fmtMoney(it.lineTotal)}</td>
+                        <td className="py-1 pr-2 text-right tabular-nums">{formatBrl(it.unitCost)}</td>
+                        <td className="py-1 pr-2 text-right tabular-nums">{formatBrl(it.lineTotal)}</td>
                         <td className="py-1 pr-2 text-xs">{it.batchCode ?? '—'}</td>
                         <td className="py-1 text-xs">
                           {it.expiresAt
@@ -252,7 +249,7 @@ function PrintBody() {
           {data.receipts && data.receipts.length > 0 ? (
             <p className="border-t border-slate-300 pt-2 text-sm font-medium text-slate-800">
               Totais: {data.totals.receiptCount} nota(s) · {data.totals.itemLineCount} linha(s) de produto
-              · {fmtMoney(data.totals.totalAmount)}
+              · {formatBrl(data.totals.totalAmount)}
             </p>
           ) : null}
         </div>

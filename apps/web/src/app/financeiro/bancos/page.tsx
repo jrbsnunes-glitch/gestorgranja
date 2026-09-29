@@ -9,6 +9,7 @@ import { ResponsiveTableWrap } from '@/components/responsive-table-wrap';
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
 import { apiFetch } from '@/lib/api';
+import { formatBrl } from '@/lib/money';
 import { navigateToReportPrint } from '@/lib/report-print-nav';
 
 type BankRow = {
@@ -28,10 +29,6 @@ type BudgetProgressRow = {
   remaining: number;
   chartAccount: { code: string; name: string };
 };
-
-function money(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 function progressBarClass(usedPct: number | null) {
   if (usedPct == null) return 'bg-slate-300';
@@ -134,7 +131,7 @@ export default function FinanceiroBancosPage() {
               <span>
                 {b.bankName} — ag. {b.agency} c/c {b.account}
               </span>
-              <span className="font-medium tabular-nums">R$ {Number(b.balance).toFixed(2)}</span>
+              <span className="font-medium tabular-nums">{formatBrl(Number(b.balance))}</span>
             </li>
           ))}
         </ul>
@@ -180,9 +177,9 @@ export default function FinanceiroBancosPage() {
                     <td className="py-2">
                       {b.chartAccount.code} — {b.chartAccount.name}
                     </td>
-                    <td className="py-2 text-right tabular-nums">{money(b.amountPlanned)}</td>
-                    <td className="py-2 text-right tabular-nums">{money(b.actual)}</td>
-                    <td className="py-2 text-right tabular-nums">{money(b.remaining)}</td>
+                    <td className="py-2 text-right tabular-nums">{formatBrl(b.amountPlanned)}</td>
+                    <td className="py-2 text-right tabular-nums">{formatBrl(b.actual)}</td>
+                    <td className="py-2 text-right tabular-nums">{formatBrl(b.remaining)}</td>
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">

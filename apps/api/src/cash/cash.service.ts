@@ -1,7 +1,26 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { summarizeCashSession } from './cash-session-summary.util';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CashMovementType, CashSessionStatus } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+
+function hasPerm(user: JwtPayload, ...codes: string[]) {
+  if (user.permissions.includes('*')) return true;
+  return codes.some((c) => user.permissions.includes(c));
+}
+
+function reconciliationLabel(status: CashSessionStatus) {
+  switch (status) {
+    case CashSessionStatus.OPEN:
+      return 'Aberto';
+    case CashSessionStatus.PENDING_RECONCILIATION:
+      return 'Pendente conferência';
+    case CashSessionStatus.RECONCILED:
+      return 'Conferido';
+    default:
+      return String(status);
+  }
+}
 
 @Injectable()
 export class CashService {
@@ -86,6 +105,123 @@ export class CashService {
         },
       }),
     );
+  }
+
+  async listSessionsSummary(
+    user: JwtPayload,
+    query: { status?: string; from?: string; to?: string; take?: number; skip?: number },
+  ) {
+    const prisma = await this.db(user);
+    const take = Math.min(Math.max(query.take ?? 100, 1), 200);
+    const skip = Math.max(query.skip ?? 0, 0);
+    const openedAt: { gte?: Date; lte?: Date } = {};
+    if (query.from) openedAt.gte = new Date(`${query.from.slice(0, 10)}T00:00:00.000Z`);
+    if (query.to) openedAt.lte = new Date(`${query.to.slice(0, 10)}T23:59:59.999Z`);
+
+    const statusFilter =
+      query.status === 'OPEN' ||
+      query.status === 'PENDING_RECONCILIATION' ||
+      query.status === 'RECONCILED'
+        ? (query.status as CashSessionStatus)
+        : undefined;
+
+    const rows = await prisma.cashRegisterSession.findMany({
+      where: {
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(Object.keys(openedAt).length ? { openedAt } : {}),
+      },
+      orderBy: { openedAt: 'desc' },
+      take,
+      skip,
+      include: {
+        user: { select: { id: true, name: true, username: true } },
+        movements: { select: { type: true, amount: true, isExpense: true } },
+      },
+    });
+
+    return rows.map((s) => {
+      const summary = summarizeCashSession(
+        Number(s.openingBalance),
+        s.movements.map((m) => ({ type: m.type, amount: Number(m.amount), isExpense: m.isExpense })),
+      );
+      const closing = s.closingBalance != null ? Number(s.closingBalance) : null;
+      const variance =
+        closing != null ? Math.round((closing - summary.expectedBalance) * 100) / 100 : null;
+      return {
+        id: s.id,
+        controlNumber: s.controlNumber,
+        status: s.status,
+        reconciliationStatusLabel: reconciliationLabel(s.status),
+        openedAt: s.openedAt,
+        closedAt: s.closedAt,
+        openingBalance: Number(s.openingBalance),
+        closingBalance: closing,
+        salesInflow: Math.round(summary.salesInflow * 100) / 100,
+        expectedBalance: Math.round(summary.expectedBalance * 100) / 100,
+        variance,
+        isMine: s.userId === user.sub,
+        user: s.user,
+      };
+    });
+  }
+
+  async getSessionManagement(user: JwtPayload, sessionId: string) {
+    const prisma = await this.db(user);
+    const session = await prisma.cashRegisterSession.findUnique({
+      where: { id: sessionId },
+      include: this.sessionWithMovementsInclude(),
+    });
+    if (!session) throw new NotFoundException();
+
+    const isOwner = session.userId === user.sub;
+    let mode: 'operate' | 'reconcile' | 'view' = 'view';
+
+    if (session.status === CashSessionStatus.OPEN) {
+      if (isOwner && hasPerm(user, 'cash.write')) mode = 'operate';
+      else if (hasPerm(user, 'cash.read', 'cash.reconcile')) mode = 'view';
+      else throw new ForbiddenException('Sem permissão para ver este caixa.');
+    } else if (session.status === CashSessionStatus.PENDING_RECONCILIATION) {
+      if (hasPerm(user, 'cash.reconcile', 'cash.write', '*')) mode = 'reconcile';
+      else if (hasPerm(user, 'cash.read')) mode = 'view';
+      else throw new ForbiddenException('Sem permissão para conferir este caixa.');
+    } else if (session.status === CashSessionStatus.RECONCILED) {
+      if (!hasPerm(user, 'cash.read', 'cash.reconcile', 'cash.write')) {
+        throw new ForbiddenException('Sem permissão para ver este caixa.');
+      }
+      mode = 'view';
+    }
+
+    const summary = summarizeCashSession(
+      Number(session.openingBalance),
+      session.movements.map((m) => ({
+        type: m.type,
+        amount: Number(m.amount),
+        isExpense: m.isExpense,
+      })),
+    );
+    const closing = session.closingBalance != null ? Number(session.closingBalance) : null;
+    return {
+      mode,
+      isOwner,
+      summary: {
+        ...summary,
+        closingBalance: closing,
+        variance:
+          closing != null ? Math.round((closing - summary.expectedBalance) * 100) / 100 : null,
+      },
+      session,
+    };
+  }
+
+  async countSessionsByStatus(user: JwtPayload) {
+    const prisma = await this.db(user);
+    const [open, pending] = await Promise.all([
+      prisma.cashRegisterSession.count({ where: { status: CashSessionStatus.OPEN } }),
+      prisma.cashRegisterSession.count({
+        where: { status: CashSessionStatus.PENDING_RECONCILIATION },
+      }),
+    ]);
+    return { open, pendingReconciliation: pending };
   }
 
   async addMovement(
@@ -196,16 +332,36 @@ export class CashService {
     return { ok: true };
   }
 
-  async requestClose(user: JwtPayload, sessionId: string, closingBalance: number, closingNotes?: string) {
+  async requestClose(
+    user: JwtPayload,
+    sessionId: string,
+    closingBalance: number,
+    closingNotes?: string,
+    closingByMethod?: Record<string, number>,
+  ) {
     const prisma = await this.db(user);
     const session = await prisma.cashRegisterSession.findUnique({ where: { id: sessionId } });
     if (!session || session.userId !== user.sub) throw new NotFoundException();
     if (session.status !== CashSessionStatus.OPEN) throw new BadRequestException('Caixa não está aberto');
+
+    let breakdown: Record<string, number> | undefined;
+    if (closingByMethod && typeof closingByMethod === 'object') {
+      breakdown = {};
+      for (const [k, v] of Object.entries(closingByMethod)) {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n < 0) {
+          throw new BadRequestException(`Valor inválido para ${k}`);
+        }
+        if (n > 0) breakdown[k.toUpperCase()] = Math.round(n * 100) / 100;
+      }
+    }
+
     return prisma.cashRegisterSession.update({
       where: { id: sessionId },
       data: {
         status: CashSessionStatus.PENDING_RECONCILIATION,
         closingBalance,
+        closingBreakdown: breakdown ?? undefined,
         closingNotes,
         closedAt: new Date(),
       },

@@ -10,6 +10,7 @@ import {
   buildStockMovementsReportApiPath,
   type StockMovementsReportFilters,
 } from '@/lib/stock-movements-report-query';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type ReportRow = {
@@ -63,10 +64,6 @@ function parseFilters(sp: URLSearchParams): StockMovementsReportFilters | null {
 
 function fmtQty(n: number) {
   return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function fmtDt(iso: string) {
@@ -173,7 +170,7 @@ function PrintBody() {
                       {fmtQty(r.quantity)} {r.productUnit}
                     </td>
                     <td className="py-2 pr-2 text-right tabular-nums">
-                      {r.unitCost != null ? fmtMoney(r.unitCost) : '—'}
+                      {r.unitCost != null ? formatBrl(r.unitCost) : '—'}
                     </td>
                     <td className="py-2 pr-2 text-xs">{r.stockLocation ?? '—'}</td>
                     <td className="py-2 text-xs text-slate-700">{r.reference ?? '—'}</td>
@@ -193,7 +190,7 @@ function PrintBody() {
                     <div>Ajuste: {fmtQty(data.totals.quantityAdjust)}</div>
                   </td>
                   <td className="py-2 pr-2 text-right tabular-nums" colSpan={3}>
-                    Valor (qtd. × custo): {fmtMoney(data.totals.stockValue)}
+                    Valor (qtd. × custo): {formatBrl(data.totals.stockValue)}
                   </td>
                 </tr>
               </tfoot>

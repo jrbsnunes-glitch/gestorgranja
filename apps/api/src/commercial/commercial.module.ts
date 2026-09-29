@@ -7,5 +7,6 @@ import { CommercialService } from './commercial.service';
   imports: [AuthModule],
   controllers: [CommercialController],
   providers: [CommercialService],
+  exports: [CommercialService],
 })
 export class CommercialModule {}

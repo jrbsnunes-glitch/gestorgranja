@@ -374,4 +374,73 @@ export class InventoryService {
     }
     return { productId, balance };
   }
+
+  async dashboard(user: JwtPayload) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const now = new Date();
+    const d7 = new Date(now);
+    d7.setDate(d7.getDate() - 7);
+    const d30 = new Date(now);
+    d30.setDate(d30.getDate() - 30);
+
+    const products = await prisma.product.findMany({
+      include: {
+        group: { select: { id: true, code: true, name: true } },
+        fiscalSituation: { select: { id: true, code: true, description: true } },
+      },
+    });
+    const productIds = products.map((p) => p.id);
+    const costMap = await this.costMapForProducts(prisma, productIds);
+    const mapped = products.map((p) => mapProductRow(p, costMap));
+
+    const critical = mapped.filter((p) => p.minStockQty > 0 && p.stockQty < p.minStockQty);
+    const criticalValue = Math.round(
+      critical.reduce((s, p) => s + p.stockQty * p.averageCost, 0) * 100,
+    ) / 100;
+
+    const [out7, out30, quotingPurchases, recentReceipts] = await Promise.all([
+      prisma.stockMovement.groupBy({
+        by: ['productId'],
+        where: { type: StockMovementType.OUT, movedAt: { gte: d7 } },
+        _sum: { quantity: true },
+      }),
+      prisma.stockMovement.groupBy({
+        by: ['productId'],
+        where: { type: StockMovementType.OUT, movedAt: { gte: d30 } },
+        _sum: { quantity: true },
+      }),
+      prisma.purchaseRequest.count({ where: { status: { in: ['DRAFT', 'QUOTING'] } } }),
+      prisma.stockReceipt.count({
+        where: { receivedAt: { gte: d30 } },
+      }),
+    ]);
+
+    const productName = new Map(mapped.map((p) => [p.id, { sku: p.sku, name: p.name }]));
+    const topOut = (rows: typeof out30, limit: number) =>
+      rows
+        .map((r) => ({
+          productId: r.productId,
+          quantity: Number(r._sum.quantity ?? 0),
+          product: productName.get(r.productId) ?? { sku: '—', name: '—' },
+        }))
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, limit);
+
+    return {
+      criticalCount: critical.length,
+      criticalValue,
+      criticalProducts: critical.slice(0, 8).map((p) => ({
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        stockQty: p.stockQty,
+        minStockQty: p.minStockQty,
+      })),
+      topOut7d: topOut(out7, 5),
+      topOut30d: topOut(out30, 5),
+      purchaseRequestsOpen: quotingPurchases,
+      stockReceiptsLast30d: recentReceipts,
+      productCount: mapped.length,
+    };
+  }
 }

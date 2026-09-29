@@ -18,6 +18,12 @@ import { InventoryService } from './inventory.service';
 export class InventoryController {
   constructor(private readonly inventory: InventoryService) {}
 
+  @Get('dashboard')
+  @RequirePermissions('inventory.write', 'purchasing.write', '*')
+  dashboard(@CurrentUser() user: JwtPayload) {
+    return this.inventory.dashboard(user);
+  }
+
   @Get('product-groups')
   @RequirePermissions('inventory.write', '*')
   listGroups(@CurrentUser() user: JwtPayload) {

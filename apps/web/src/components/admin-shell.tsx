@@ -5,6 +5,7 @@ import { AppNav } from '@/components/app-nav';
 import { SidebarBrand } from '@/components/sidebar-brand';
 import { useShellTitle, useShellTitleContext } from '@/components/shell-title-context';
 import { getToken, logout, requireAuth } from '@/lib/auth';
+import { APP_VERSION } from '@/lib/app-version';
 import { readSession, sessionDisplayName } from '@/lib/session';
 import { useIsMobile } from '@/lib/use-mobile';
 
@@ -65,6 +66,7 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
       </div>
       <AppNav onNavigate={() => setNavOpen(false)} />
       <div className="mt-auto border-t border-slate-100 pt-4">
+        <p className="mb-2 px-1 text-center text-[11px] tabular-nums text-slate-400">v{APP_VERSION}</p>
         {displayName ? (
           <p className="mb-2 truncate px-1 text-sm font-medium text-slate-800" title={displayName}>
             {displayName}

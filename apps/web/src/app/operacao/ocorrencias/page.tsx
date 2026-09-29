@@ -21,6 +21,7 @@ import {
   useBarnOptions,
   useLotOptions,
 } from '@/lib/operation-options';
+import { formatBrl } from '@/lib/money';
 import { readSession, sessionHasPermission } from '@/lib/session';
 
 type Occurrence = {
@@ -415,7 +416,7 @@ export default function OcorrenciasPage() {
                       label: 'Manutenção vinculada',
                       value: selected.maintenanceRecord
                         ? `${selected.maintenanceRecord.kind} em ${new Date(selected.maintenanceRecord.performedAt).toLocaleDateString('pt-BR')}${
-                            selected.maintenanceRecord.cost ? ` — R$ ${Number(selected.maintenanceRecord.cost).toFixed(2)}` : ''
+                            selected.maintenanceRecord.cost ? ` — ${formatBrl(Number(selected.maintenanceRecord.cost))}` : ''
                           }`
                         : '—',
                     },

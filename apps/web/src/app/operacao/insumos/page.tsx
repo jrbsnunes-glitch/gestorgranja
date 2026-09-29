@@ -7,6 +7,7 @@ import { FormCadastroModal, PageIntro, RecordViewModal, useCrudList } from '@/co
 import { ListToolbar, PaginatedTable, RowActions, usePagination, type ModalMode } from '@/components/list-crud';
 import { RecordHistorySection } from '@/components/operation/record-history-section';
 import { RecordStatusBadge } from '@/components/operation/record-status-badge';
+import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
@@ -183,16 +184,12 @@ export default function InsumosPage() {
             </select>
           </Field>
           <div className="md:col-span-2">
-            <Field label="Produto (estoque)">
-              <select name="productId" className={inputClass} required defaultValue={editing?.product.id ?? ''}>
-                <option value="">Selecione</option>
-                {(nonFeedProducts.length ? nonFeedProducts : products).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} — {p.name} ({labelEnum(p.type)})
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <ProductLookupField
+              name="productId"
+              required
+              label="Produto (estoque)"
+              defaultValue={editing?.product.id ?? ''}
+            />
           </div>
           <Field label="Quantidade">
             <input name="quantity" type="number" step="0.001" min={0} className={inputClass} required defaultValue={editing?.quantity ?? ''} />

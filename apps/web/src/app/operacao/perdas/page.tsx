@@ -6,11 +6,13 @@ import { AdminShell } from '@/components/admin-shell';
 import { FormCadastroModal, PageIntro, RecordViewModal, useCrudList } from '@/components/crud';
 import { ListToolbar, PaginatedTable, RowActions, usePagination, type ModalMode } from '@/components/list-crud';
 import { RecordHistorySection } from '@/components/operation/record-history-section';
+import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { OPERATIONAL_LOSS_TYPES, labelEnum } from '@/lib/labels';
 import { lotLabel, todayIso, useBarnOptions, useLotOptions, useProductOptions } from '@/lib/operation-options';
+import { formatBrl } from '@/lib/money';
 import { readSession, sessionHasPermission } from '@/lib/session';
 
 type LossRow = {
@@ -120,7 +122,7 @@ export default function PerdasPage() {
       />
       {list.filtered.length ? (
         <p className="mb-2 text-xs text-slate-600">
-          {list.filtered.length} registro(s) · custo estimado total: R$ {totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          {list.filtered.length} registro(s) · custo estimado total: {formatBrl(totalCost)}
         </p>
       ) : null}
       <PaginatedTable
@@ -132,7 +134,7 @@ export default function PerdasPage() {
           `${Number(r.quantity).toLocaleString('pt-BR')} ${r.unit}`,
           [r.barn?.name, r.flockLot?.code, r.location].filter(Boolean).join(' · ') || '—',
           r.reason ?? '—',
-          r.estimatedCost ? Number(r.estimatedCost).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—',
+          formatBrl(r.estimatedCost ? Number(r.estimatedCost) : null),
           <RowActions
             key={r.id}
             onView={() => {
@@ -203,18 +205,12 @@ export default function PerdasPage() {
             </select>
           </Field>
           {type === 'FEED' || type === 'SUPPLY' ? (
-            <Field label="Produto (estoque)">
-              <select name="productId" className={inputClass} defaultValue={editing?.product?.id ?? ''}>
-                <option value="">—</option>
-                {products
-                  .filter((p) => (type === 'FEED' ? p.type === 'FEED' : p.type !== 'FEED'))
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.sku} — {p.name}
-                    </option>
-                  ))}
-              </select>
-            </Field>
+            <ProductLookupField
+              name="productId"
+              label="Produto (estoque)"
+              allowEmpty
+              defaultValue={editing?.product?.id ?? ''}
+            />
           ) : null}
           <Field label="Local">
             <input name="location" className={inputClass} defaultValue={editing?.location ?? ''} placeholder="Sala de ovos, silo 2, corredor…" />
@@ -260,7 +256,7 @@ export default function PerdasPage() {
                     { label: 'Ação tomada', value: selected.actionTaken ?? '—' },
                     {
                       label: 'Custo estimado',
-                      value: selected.estimatedCost ? `R$ ${Number(selected.estimatedCost).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—',
+                      value: formatBrl(Number(selected.estimatedCost)),
                     },
                     { label: 'Observações', value: selected.notes ?? '—' },
                     { label: 'Registrado por', value: selected.createdByName ?? '—' },

@@ -44,6 +44,8 @@ export class FinanceDashboardService {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const in3 = new Date(today);
+    in3.setDate(in3.getDate() + 3);
     const in7 = new Date(today);
     in7.setDate(in7.getDate() + 7);
     const in30 = new Date(today);
@@ -67,6 +69,7 @@ export class FinanceDashboardService {
 
     let cpOpen = 0;
     let cpOverdue = 0;
+    let cpDue3 = 0;
     let cpDue7 = 0;
     let cpDue30 = 0;
     for (const p of payables) {
@@ -74,12 +77,15 @@ export class FinanceDashboardService {
       const bal = titleBalance(p.amount, p.amountPaid);
       cpOpen += bal;
       if (daysOverdue(p.dueDate, today) > 0) cpOverdue += bal;
+      if (p.dueDate <= in3) cpDue3 += bal;
       if (p.dueDate <= in7) cpDue7 += bal;
       if (p.dueDate <= in30) cpDue30 += bal;
     }
 
     let crOpen = 0;
     let crOverdue = 0;
+    let crDueToday = 0;
+    let crDue3 = 0;
     let crDue7 = 0;
     let crDue30 = 0;
     const byPartner = new Map<string, { name: string; open: number }>();
@@ -88,6 +94,8 @@ export class FinanceDashboardService {
       const bal = titleBalance(r.amount, r.amountPaid);
       crOpen += bal;
       if (daysOverdue(r.dueDate, today) > 0) crOverdue += bal;
+      else if (localDateKey(r.dueDate) === localDateKey(today)) crDueToday += bal;
+      if (r.dueDate <= in3) crDue3 += bal;
       if (r.dueDate <= in7) crDue7 += bal;
       if (r.dueDate <= in30) crDue30 += bal;
       const cur = byPartner.get(r.partnerId) ?? { name: r.partner.name, open: 0 };
@@ -116,8 +124,16 @@ export class FinanceDashboardService {
     const budgetProgress = await this.budget.listWithProgress(user, ym);
 
     return {
-      payables: { open: cpOpen, overdue: cpOverdue, dueNext7: cpDue7, dueNext30: cpDue30 },
-      receivables: { open: crOpen, overdue: crOverdue, dueNext7: crDue7, dueNext30: crDue30 },
+      payables: { open: cpOpen, overdue: cpOverdue, dueNext3: cpDue3, dueNext7: cpDue7, dueNext30: cpDue30 },
+      receivables: {
+        open: crOpen,
+        overdue: crOverdue,
+        dueToday: crDueToday,
+        dueNext3: crDue3,
+        dueNext7: crDue7,
+        dueNext30: crDue30,
+      },
+      openAlertsCount: alerts.length,
       topClients,
       alerts: alerts.map((a) => ({ ...a, message: humanizeUserMessage(a.message) })),
       cashBase,

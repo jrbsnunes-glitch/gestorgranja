@@ -11,6 +11,7 @@ import {
 } from '@/lib/finance-titles-report-query';
 import { apiFetch } from '@/lib/api';
 import { ReportPrintActions } from '@/components/report-print-actions';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type ReportRow = {
@@ -47,10 +48,6 @@ function parseFilters(sp: URLSearchParams): FinanceTitlesReportFilters | null {
     includePartialPayment: bool('includePartialPayment'),
     includePartialOpen: bool('includePartialOpen'),
   };
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function PrintBody() {
@@ -140,9 +137,9 @@ function PrintBody() {
                       <td className="py-2 pr-2 whitespace-nowrap">
                         {new Date(r.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}
                       </td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(r.amount)}</td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(r.amountPaid)}</td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(r.balance)}</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.amount)}</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.amountPaid)}</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.balance)}</td>
                       <td className="py-2 text-xs text-slate-700">
                         {r.buckets.map((b) => FINANCE_TITLE_BUCKET_LABELS[b] ?? b).join(', ')}
                       </td>
@@ -156,9 +153,9 @@ function PrintBody() {
                     <td colSpan={4} className="py-2 pr-2 text-right">
                       Totais
                     </td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(totals.amount)}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(totals.paid)}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(totals.balance)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(totals.amount)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(totals.paid)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(totals.balance)}</td>
                     <td />
                   </tr>
                 </tfoot>

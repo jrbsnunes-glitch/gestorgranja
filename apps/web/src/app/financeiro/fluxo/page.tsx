@@ -17,6 +17,7 @@ import { ErrorBox, PageCard, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { CASH_FLOW_KINDS, defaultCashFlowReportFilters } from '@/lib/cash-flow-report-query';
 import { errorMessage } from '@/lib/labels';
+import { formatBrl } from '@/lib/money';
 
 type CashFlow = {
   period: { from: string; to: string };
@@ -43,10 +44,6 @@ type FlowFilters = {
   includePurchases: boolean;
   includeBankBalance: boolean;
 };
-
-function money(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 function filtersActive(f: FlowFilters): boolean {
   const d = defaultCashFlowReportFilters();
@@ -184,7 +181,7 @@ export default function FinanceiroFluxoPage() {
       {data ? (
         <PageCard title={`Período ${data.period.from} a ${data.period.to}`}>
           <p className="mb-3 text-sm text-slate-600">
-            Saldo de abertura {money(data.openingBalance)}
+            Saldo de abertura {formatBrl(data.openingBalance)}
             {applied.kind ? ` — filtro: ${applied.kind}` : ''}
           </p>
           <ResponsiveTableWrap>
@@ -212,9 +209,9 @@ export default function FinanceiroFluxoPage() {
                       <td className="py-2">{r.date}</td>
                       <td className="py-2">{r.kind}</td>
                       <td className="py-2">{r.description}</td>
-                      <td className="py-2 text-right tabular-nums">{r.inflow ? money(r.inflow) : '—'}</td>
-                      <td className="py-2 text-right tabular-nums">{r.outflow ? money(r.outflow) : '—'}</td>
-                      <td className="py-2 text-right tabular-nums">{money(r.balance)}</td>
+                      <td className="py-2 text-right tabular-nums">{r.inflow ? formatBrl(r.inflow) : '—'}</td>
+                      <td className="py-2 text-right tabular-nums">{r.outflow ? formatBrl(r.outflow) : '—'}</td>
+                      <td className="py-2 text-right tabular-nums">{formatBrl(r.balance)}</td>
                     </tr>
                   ))
                 )}
@@ -224,9 +221,9 @@ export default function FinanceiroFluxoPage() {
                   <td className="py-2" colSpan={3}>
                     Totais do período
                   </td>
-                  <td className="py-2 text-right tabular-nums">{money(data.totals.inflow)}</td>
-                  <td className="py-2 text-right tabular-nums">{money(data.totals.outflow)}</td>
-                  <td className="py-2 text-right tabular-nums">{money(data.closingBalance)}</td>
+                  <td className="py-2 text-right tabular-nums">{formatBrl(data.totals.inflow)}</td>
+                  <td className="py-2 text-right tabular-nums">{formatBrl(data.totals.outflow)}</td>
+                  <td className="py-2 text-right tabular-nums">{formatBrl(data.closingBalance)}</td>
                 </tr>
               </tfoot>
             </table>

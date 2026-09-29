@@ -4,16 +4,13 @@ import { Suspense, useEffect, useState } from 'react';
 import { StandardReportHeader } from '@/components/crud/standard-report-header';
 import { ReportPrintActions } from '@/components/report-print-actions';
 import { apiFetch } from '@/lib/api';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type Aging = {
   buckets: { current: number; d1_30: number; d31_60: number; d61_90: number; d90plus: number };
   rows: { controlNumber: number; partnerName: string; dueDate: string; balance: number; bucket: string; overdueDays: number }[];
 };
-
-function fmt(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 function AgingBody() {
   const [data, setData] = useState<Aging | null>(null);
@@ -31,11 +28,11 @@ function AgingBody() {
       {data ? (
         <>
           <div className="mb-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
-            <p>A vencer: {fmt(data.buckets.current)}</p>
-            <p>1–30: {fmt(data.buckets.d1_30)}</p>
-            <p>31–60: {fmt(data.buckets.d31_60)}</p>
-            <p>61–90: {fmt(data.buckets.d61_90)}</p>
-            <p>90+: {fmt(data.buckets.d90plus)}</p>
+            <p>A vencer: {formatBrl(data.buckets.current)}</p>
+            <p>1–30: {formatBrl(data.buckets.d1_30)}</p>
+            <p>31–60: {formatBrl(data.buckets.d31_60)}</p>
+            <p>61–90: {formatBrl(data.buckets.d61_90)}</p>
+            <p>90+: {formatBrl(data.buckets.d90plus)}</p>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -54,7 +51,7 @@ function AgingBody() {
                   <td>{r.partnerName}</td>
                   <td>{r.dueDate}</td>
                   <td>{r.bucket}</td>
-                  <td className="text-right">{fmt(r.balance)}</td>
+                  <td className="text-right">{formatBrl(r.balance)}</td>
                 </tr>
               ))}
             </tbody>

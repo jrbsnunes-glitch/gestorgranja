@@ -55,12 +55,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
   if (!res.ok) {
     const text = await res.text();
-    if (
-      res.status >= 500 &&
-      (!text.trim() ||
-        /internal server error/i.test(text) ||
-        /ECONNREFUSED|failed to proxy/i.test(text))
-    ) {
+    const proxyOrDown =
+      /ECONNREFUSED|failed to proxy|socket hang up|Bad Gateway/i.test(text) ||
+      res.status === 502 ||
+      res.status === 503 ||
+      res.status === 504;
+    if (proxyOrDown || (res.status >= 500 && !text.trim())) {
       throw new Error(apiUnavailableMessage(base));
     }
     throw new Error(formatApiError(text || res.statusText));

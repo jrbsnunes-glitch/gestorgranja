@@ -29,7 +29,6 @@ export function ModalBackdrop({
     <div
       className={`fixed inset-0 z-50 flex ${alignClass} ${className}`}
       role="presentation"
-      onClick={onClose}
     >
       <div
         className={

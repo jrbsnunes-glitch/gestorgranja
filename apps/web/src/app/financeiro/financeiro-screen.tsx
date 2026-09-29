@@ -13,10 +13,12 @@ import {
 import { ListToolbar, PaginatedTable, RowActions, usePagination } from '@/components/list-crud';
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
+import { PartnerLookupField } from '@/components/partner-lookup-field';
 import { FinanceTitlesReportLauncher } from '@/components/finance-titles-report-launcher';
 import { TitleSettlementForm } from '@/components/title-settlement-form';
 import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
+import { formatBrl } from '@/lib/money';
 
 type Partner = { id: string; name: string };
 type ChartAccountRef = { id: string; code: string; name: string };
@@ -111,7 +113,27 @@ function TitleScheduleFields({
   );
 }
 
-export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
+export type FinanceListFilter = { dueDays?: number; overdueOnly?: boolean };
+
+function matchDueFilter(dueDate: string, filter?: FinanceListFilter) {
+  if (!filter?.dueDays && !filter?.overdueOnly) return true;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dueDate);
+  due.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (filter.overdueOnly) return diffDays < 0;
+  if (filter.dueDays != null) return diffDays >= 0 && diffDays <= filter.dueDays;
+  return true;
+}
+
+export function FinanceiroScreen({
+  tab,
+  listFilter,
+}: {
+  tab: FinanceiroTab;
+  listFilter?: FinanceListFilter;
+}) {
   const [payables, setPayables] = useState<Payable[]>([]);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -126,13 +148,15 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
   const [settlementOpen, setSettlementOpen] = useState<'pay' | 'rec' | null>(null);
   const [fixedRecurring, setFixedRecurring] = useState(false);
 
+  const payFiltered = payables.filter((p) => matchDueFilter(p.dueDate, listFilter));
+
   const payList = useCrudList({
-    items: payables,
+    items: payFiltered,
     searchFields: (p) => [p.description, p.partner.name, p.approvalStatus, p.chartAccount.code],
   });
   const payPag = usePagination(payList.filtered);
 
-  const recOpenOnly = receivables.filter((r) => !r.settled);
+  const recOpenOnly = receivables.filter((r) => !r.settled && matchDueFilter(r.dueDate, listFilter));
   const recList = useCrudList({
     items: recOpenOnly,
     searchFields: (r) => [
@@ -334,7 +358,7 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
             rows={payPag.slice.map((p) => [
               p.description,
               p.partner.name,
-              `R$ ${Number(p.amount).toFixed(2)}`,
+              formatBrl(Number(p.amount)),
               new Date(p.dueDate).toLocaleDateString('pt-BR'),
               labelEnum(p.approvalStatus),
               p.approvalStatus === 'PENDING' ? (
@@ -372,7 +396,7 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
                   <li key={c.partnerName} className="flex justify-between">
                     <span>{c.partnerName}</span>
                     <span className="tabular-nums">
-                      R$ {c.openBalance.toFixed(2)} ({c.sharePct.toFixed(1)}%)
+                      {formatBrl(c.openBalance)} ({c.sharePct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%)
                     </span>
                   </li>
                 ))}
@@ -399,7 +423,7 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
                 r.partner.name,
                 new Date(r.dueDate).toLocaleDateString('pt-BR'),
                 r.overdueDays && r.overdueDays > 0 ? `${r.overdueDays}d` : '—',
-                `R$ ${(r.balance ?? Number(r.amount)).toFixed(2)}`,
+                formatBrl(r.balance ?? Number(r.amount)),
                 <RowActions
                   key={r.id}
                   onView={() => {
@@ -436,15 +460,7 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
         }
       >
         <form id="payable-form" onSubmit={createPayable}>
-          <Field label="Parceiro">
-            <select name="partnerId" className={inputClass} required>
-              {partners.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <PartnerLookupField role="supplier" name="partnerId" required label="Fornecedor / parceiro" />
           <Field label="Conta contábil (despesa/custo)">
             <ChartAccountSelect flow="payable" required />
           </Field>
@@ -474,15 +490,7 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
         }
       >
         <form id="receivable-form" onSubmit={createReceivable}>
-          <Field label="Parceiro">
-            <select name="partnerId" className={inputClass} required>
-              {partners.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <PartnerLookupField role="customer" name="partnerId" required label="Cliente / parceiro" />
           <Field label="Conta contábil (receita)">
             <ChartAccountSelect flow="receivable" required />
           </Field>
@@ -509,7 +517,7 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
                       label: 'Conta contábil',
                       value: `${viewPay.chartAccount.code} — ${viewPay.chartAccount.name}`,
                     },
-                    { label: 'Valor', value: `R$ ${Number(viewPay.amount).toFixed(2)}` },
+                    { label: 'Valor', value: formatBrl(Number(viewPay.amount)) },
                     {
                       label: 'Vencimento',
                       value: new Date(viewPay.dueDate).toLocaleDateString('pt-BR'),
@@ -517,11 +525,11 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
                     { label: 'Status', value: labelEnum(viewPay.approvalStatus) },
                     {
                       label: 'Pago',
-                      value: `R$ ${titlePaidAmount(viewPay.amount, viewPay.amountPaid).toFixed(2)}`,
+                      value: formatBrl(titlePaidAmount(viewPay.amount, viewPay.amountPaid)),
                     },
                     {
                       label: 'Saldo',
-                      value: `R$ ${titleRemaining(viewPay.amount, viewPay.amountPaid).toFixed(2)}`,
+                      value: formatBrl(titleRemaining(viewPay.amount, viewPay.amountPaid)),
                     },
                     ...(viewPay.settlementNotes
                       ? [{ label: 'Obs. baixa', value: viewPay.settlementNotes }]
@@ -569,7 +577,7 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
                       label: 'Conta contábil',
                       value: `${viewRec.chartAccount.code} — ${viewRec.chartAccount.name}`,
                     },
-                    { label: 'Valor', value: `R$ ${Number(viewRec.amount).toFixed(2)}` },
+                    { label: 'Valor', value: formatBrl(Number(viewRec.amount)) },
                     {
                       label: 'Vencimento',
                       value: new Date(viewRec.dueDate).toLocaleDateString('pt-BR'),
@@ -577,11 +585,11 @@ export function FinanceiroScreen({ tab }: { tab: FinanceiroTab }) {
                     { label: 'Status', value: labelEnum(viewRec.approvalStatus) },
                     {
                       label: 'Pago',
-                      value: `R$ ${Number(viewRec.amountPaid ?? 0).toFixed(2)}`,
+                      value: formatBrl(Number(viewRec.amountPaid ?? 0)),
                     },
                     {
                       label: 'Saldo',
-                      value: `R$ ${(viewRec.balance ?? titleRemaining(viewRec.amount, viewRec.amountPaid)).toFixed(2)}`,
+                      value: formatBrl(viewRec.balance ?? titleRemaining(viewRec.amount, viewRec.amountPaid)),
                     },
                     ...(viewRec.settlementNotes
                       ? [{ label: 'Obs. baixa', value: viewRec.settlementNotes }]

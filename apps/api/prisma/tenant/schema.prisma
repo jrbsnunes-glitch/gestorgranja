@@ -1053,6 +1053,21 @@ model BankAccount {
 
 // --- Comercial ---
 
+model PaymentForm {
+  id            String       @id @default(uuid())
+  controlNumber Int          @unique @default(autoincrement())
+  name          String
+  /// CASH, PIX, CARD, TRANSFER, OTHER — usado no movimento de caixa
+  kind          String
+  colorHex      String       @default("#0f766e")
+  sortOrder     Int          @default(0)
+  isActive      Boolean      @default(true)
+  salesOrders            SalesOrder[]
+  secondarySalesOrders   SalesOrder[] @relation("SalesOrderSecondaryPayment")
+
+  @@index([isActive, sortOrder])
+}
+
 model SalesOrder {
   id            String           @id @default(uuid())
   controlNumber Int              @unique @default(autoincrement())
@@ -1061,6 +1076,11 @@ model SalesOrder {
   orderDate  DateTime         @default(now()) @db.Date
   status     String           @default("DRAFT")
   paymentMethod String?
+  paymentFormId String?
+  paymentForm   PaymentForm?   @relation(fields: [paymentFormId], references: [id], onDelete: SetNull)
+  primaryPaymentAmount Decimal? @db.Decimal(14, 2)
+  secondaryPaymentFormId String?
+  secondaryPaymentForm   PaymentForm? @relation("SalesOrderSecondaryPayment", fields: [secondaryPaymentFormId], references: [id], onDelete: SetNull)
   cashSessionId String?
   cashSession   CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   totalAmount Decimal         @default(0) @db.Decimal(14, 2)
@@ -1505,6 +1525,7 @@ model CashRegisterSession {
   status         CashSessionStatus @default(OPEN)
   openingBalance Decimal           @default(0) @db.Decimal(14, 2)
   closingBalance Decimal?          @db.Decimal(14, 2)
+  closingBreakdown Json?
   closingNotes   String?
   reconciledAt   DateTime?
   reconciledByUserId String?

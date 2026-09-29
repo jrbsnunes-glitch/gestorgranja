@@ -16,6 +16,7 @@ import {
 import { ErrorBox, Field, SubmitButton, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
+import { formatBrl } from '@/lib/money';
 
 type LinkUser = { id: string; username: string; name: string; employees: { id: string; name: string }[] };
 type Employee = {
@@ -334,7 +335,7 @@ export default function FuncionariosPage() {
           e.name,
           e.cpf ?? '—',
           e.jobTitle ?? '—',
-          `R$ ${Number(e.baseSalary).toFixed(2)}`,
+          formatBrl(Number(e.baseSalary)),
           e.payrollWithdrawalAuthorizedAt
             ? formatCalendarDatePtBR(e.payrollWithdrawalAuthorizedAt)
             : 'Pendente',
@@ -368,7 +369,7 @@ export default function FuncionariosPage() {
               ['Nome', selected.name],
               ['CPF', selected.cpf ?? '—'],
               ['Cargo', selected.jobTitle ?? '—'],
-              ['Salário base', `R$ ${Number(selected.baseSalary).toFixed(2)}`],
+              ['Salário base', formatBrl(Number(selected.baseSalary))],
               ['Dependentes (IRRF)', String(selected.irrfDependents ?? 0)],
               ['Admissão', selected.hiredAt ? formatCalendarDatePtBR(selected.hiredAt) : '—'],
               [

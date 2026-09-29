@@ -153,6 +153,27 @@ export class GeneralCadastrosController {
     return this.general.createStockLocation(user, body);
   }
 
+  @Get('payment-forms')
+  @RequirePermissions('cadastros.read', 'sales.read', 'sales.write', 'cash.read', '*')
+  paymentForms(@CurrentUser() user: JwtPayload, @Query('activeOnly') activeOnly?: string) {
+    return this.general.listPaymentForms(user, activeOnly === '1' || activeOnly === 'true');
+  }
+
+  @Post('payment-forms')
+  @RequirePermissions('cadastros.write', '*')
+  createPaymentForm(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { name: string; kind: string; colorHex?: string; sortOrder?: number },
+  ) {
+    return this.general.createPaymentForm(user, body);
+  }
+
+  @Patch('payment-forms/:id')
+  @RequirePermissions('cadastros.write', '*')
+  patchPaymentForm(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.general.updatePaymentForm(user, id, body);
+  }
+
   @Get('work-shifts')
   @RequirePermissions('cadastros.read', 'hr.read', '*')
   workShifts(@CurrentUser() user: JwtPayload) {

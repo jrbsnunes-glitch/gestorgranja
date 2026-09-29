@@ -11,6 +11,7 @@ import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/component
 import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
 import { currentYearMonthLocal } from '@/lib/calendar-date';
+import { formatBrl } from '@/lib/money';
 
 type PayrollLineItem = {
   kind: string;
@@ -258,10 +259,10 @@ function FolhaPageContent() {
             recordItems={lines}
             rows={lines.map((l) => [
               l.employee.name,
-              `R$ ${Number(l.payrollBaseDisplay ?? l.baseSalary).toFixed(2)}`,
-              `R$ ${Number(l.additions).toFixed(2)}`,
-              `R$ ${Number(l.deductions).toFixed(2)}`,
-              `R$ ${Number(l.netPay).toFixed(2)}`,
+              formatBrl(Number(l.payrollBaseDisplay ?? l.baseSalary)),
+              formatBrl(Number(l.additions)),
+              formatBrl(Number(l.deductions)),
+              formatBrl(Number(l.netPay)),
               <span key={l.id} className="max-w-xs text-xs text-slate-600">
                 {selected?.status !== 'CLOSED' ? (
                   <Button
@@ -277,7 +278,7 @@ function FolhaPageContent() {
                   <ul>
                     {l.items.map((i, idx) => (
                       <li key={idx}>
-                        {i.description}: R$ {Number(i.amount).toFixed(2)}
+                        {i.description}: {formatBrl(Number(i.amount))}
                       </li>
                     ))}
                   </ul>

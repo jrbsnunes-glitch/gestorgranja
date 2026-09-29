@@ -11,6 +11,7 @@ import {
   type PurchaseOrdersReportFilters,
   type PurchaseOrdersReportVariant,
 } from '@/lib/purchase-orders-report-query';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type OrderRow = {
@@ -78,10 +79,6 @@ function parseFilters(sp: URLSearchParams): PurchaseOrdersReportFilters | null {
     controlMax: sp.get('controlMax') ?? '',
     partnerId: sp.get('partnerId') ?? '',
   };
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function fmtQty(n: number) {
@@ -192,7 +189,7 @@ function PrintBody() {
                       <td className="py-2 pr-2 whitespace-nowrap">{fmtDt(r.orderedAt)}</td>
                       <td className="py-2 pr-2">{labelEnum(r.status)}</td>
                       <td className="py-2 pr-2 text-right tabular-nums">{r.itemCount}</td>
-                      <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(r.totalAmount)}</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.totalAmount)}</td>
                       <td className="py-2 text-xs text-slate-700">{flags || '—'}</td>
                     </tr>
                   );
@@ -207,7 +204,7 @@ function PrintBody() {
                   </td>
                   <td className="py-2 pr-2 text-right tabular-nums">{data.totals.itemLineCount}</td>
                   <td className="py-2 pr-2 text-right tabular-nums">
-                    {fmtMoney(data.totals.totalAmount)}
+                    {formatBrl(data.totals.totalAmount)}
                   </td>
                   <td />
                 </tr>
@@ -228,7 +225,7 @@ function PrintBody() {
                   <span className="font-normal text-slate-600">
                     {' '}
                     — {fmtDt(ord.orderedAt)} · {labelEnum(ord.status)} · total{' '}
-                    {fmtMoney(ord.totalAmount)}
+                    {formatBrl(ord.totalAmount)}
                   </span>
                 </h3>
                 {ord.items.length === 0 ? (
@@ -254,8 +251,8 @@ function PrintBody() {
                           <td className="py-1 pr-2 text-right tabular-nums">
                             {fmtQty(it.quantity)} {it.productUnit}
                           </td>
-                          <td className="py-1 pr-2 text-right tabular-nums">{fmtMoney(it.unitPrice)}</td>
-                          <td className="py-1 pr-2 text-right tabular-nums">{fmtMoney(it.lineTotal)}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums">{formatBrl(it.unitPrice)}</td>
+                          <td className="py-1 pr-2 text-right tabular-nums">{formatBrl(it.lineTotal)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -267,7 +264,7 @@ function PrintBody() {
           {data.orders && data.orders.length > 0 ? (
             <p className="border-t border-slate-300 pt-2 text-sm font-medium text-slate-800">
               Totais: {data.totals.orderCount} pedido(s) · {data.totals.itemLineCount} linha(s) de produto
-              · {fmtMoney(data.totals.totalAmount)}
+              · {formatBrl(data.totals.totalAmount)}
             </p>
           ) : null}
         </div>

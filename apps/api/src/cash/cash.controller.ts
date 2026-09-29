@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
@@ -36,6 +36,31 @@ export class CashController {
   @RequirePermissions('cash.read', 'cash.write', '*')
   sessions(@CurrentUser() user: JwtPayload) {
     return this.cash.listSessions(user);
+  }
+
+  @Get('sessions/summary')
+  @RequirePermissions('cash.read', 'cash.write', 'cash.reconcile', '*')
+  sessionsSummary(
+    @CurrentUser() user: JwtPayload,
+    @Query('status') status?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.cash.listSessionsSummary(user, {
+      status,
+      from,
+      to,
+      take: take ? Number(take) : undefined,
+      skip: skip ? Number(skip) : undefined,
+    });
+  }
+
+  @Get('sessions/:id/management')
+  @RequirePermissions('cash.read', 'cash.write', 'cash.reconcile', '*')
+  sessionManagement(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.cash.getSessionManagement(user, id);
   }
 
   @Get('sessions/:id/reconciliation')
@@ -108,9 +133,14 @@ export class CashController {
   close(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() body: { closingBalance: number; closingNotes?: string },
+    @Body()
+    body: {
+      closingBalance: number;
+      closingNotes?: string;
+      closingByMethod?: Record<string, number>;
+    },
   ) {
-    return this.cash.requestClose(user, id, body.closingBalance, body.closingNotes);
+    return this.cash.requestClose(user, id, body.closingBalance, body.closingNotes, body.closingByMethod);
   }
 
   @Patch('sessions/:id/reconcile')

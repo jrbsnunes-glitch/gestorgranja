@@ -166,6 +166,53 @@ export class GeneralCadastrosService {
     return this.db(user).then((p) => p.workShift.update({ where: { id }, data: data as never }));
   }
 
+  private static defaultPaymentForms() {
+    return [
+      { name: 'Dinheiro', kind: 'CASH', colorHex: '#059669', sortOrder: 10 },
+      { name: 'PIX', kind: 'PIX', colorHex: '#0284c7', sortOrder: 20 },
+      { name: 'Cartão', kind: 'CARD', colorHex: '#7c3aed', sortOrder: 30 },
+      { name: 'Transferência', kind: 'TRANSFER', colorHex: '#475569', sortOrder: 40 },
+    ];
+  }
+
+  async ensureDefaultPaymentForms(user: JwtPayload) {
+    const p = await this.db(user);
+    const count = await p.paymentForm.count();
+    if (count > 0) return;
+    for (const row of GeneralCadastrosService.defaultPaymentForms()) {
+      await p.paymentForm.create({ data: row });
+    }
+  }
+
+  async listPaymentForms(user: JwtPayload, activeOnly?: boolean) {
+    const p = await this.db(user);
+    await this.ensureDefaultPaymentForms(user);
+    return p.paymentForm.findMany({
+      where: activeOnly ? { isActive: true } : undefined,
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  createPaymentForm(
+    user: JwtPayload,
+    data: { name: string; kind: string; colorHex?: string; sortOrder?: number },
+  ) {
+    return this.db(user).then((p) =>
+      p.paymentForm.create({
+        data: {
+          name: data.name.trim(),
+          kind: data.kind.trim().toUpperCase(),
+          colorHex: data.colorHex?.trim() || '#0f766e',
+          sortOrder: data.sortOrder ?? 50,
+        },
+      }),
+    );
+  }
+
+  updatePaymentForm(user: JwtPayload, id: string, data: Record<string, unknown>) {
+    return this.db(user).then((p) => p.paymentForm.update({ where: { id }, data: data as never }));
+  }
+
   deleteWorkShift(user: JwtPayload, id: string) {
     return this.db(user).then(async (p) => {
       const linked = await p.employee.count({ where: { workShiftId: id } });

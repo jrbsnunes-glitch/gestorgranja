@@ -14,6 +14,12 @@ import { CommercialService } from './commercial.service';
 export class CommercialController {
   constructor(private readonly commercial: CommercialService) {}
 
+  @Get('stats')
+  @RequirePermissions('sales.read', 'sales.write', 'cash.read', '*')
+  stats(@CurrentUser() user: JwtPayload) {
+    return this.commercial.getSalesStats(user);
+  }
+
   @Get('orders')
   @RequirePermissions('sales.read', 'finance.write', '*')
   list(@CurrentUser() user: JwtPayload) {
@@ -30,5 +36,11 @@ export class CommercialController {
   @RequirePermissions('sales.write', '*')
   confirm(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.commercial.confirmOrder(user, id);
+  }
+
+  @Get('orders/:id/receipt')
+  @RequirePermissions('sales.read', 'sales.write', 'cash.read', '*')
+  receipt(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.commercial.getOrderReceipt(user, id);
   }
 }

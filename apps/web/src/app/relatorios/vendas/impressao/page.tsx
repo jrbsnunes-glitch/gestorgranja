@@ -11,6 +11,7 @@ import {
   type SalesOrdersReportFilters,
   type SalesOrdersReportVariant,
 } from '@/lib/sales-orders-report-query';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type EspelhoItem = {
@@ -95,10 +96,6 @@ function parseFilters(sp: URLSearchParams): SalesOrdersReportFilters | null {
     productId: sp.get('productId') ?? '',
     salesOrderId: sp.get('salesOrderId') ?? '',
   };
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function fmtQty(n: number) {
@@ -204,9 +201,9 @@ function PrintBody() {
                     <td className="py-2 pr-2 text-right tabular-nums">
                       {fmtQty(it.quantity)} {it.productUnit}
                     </td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(it.unitPrice)}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(it.discount)}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(it.lineTotal)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(it.unitPrice)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(it.discount)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(it.lineTotal)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -216,7 +213,7 @@ function PrintBody() {
                     Total da venda
                   </td>
                   <td className="py-2 pr-2 text-right tabular-nums">
-                    {fmtMoney(data.espelho.totalAmount)}
+                    {formatBrl(data.espelho.totalAmount)}
                   </td>
                 </tr>
               </tfoot>
@@ -259,7 +256,7 @@ function PrintBody() {
                     <td className="py-2 pr-2">{r.paymentMethod ? labelEnum(r.paymentMethod) : '—'}</td>
                     <td className="py-2 pr-2">{labelEnum(r.status)}</td>
                     <td className="py-2 pr-2 text-right tabular-nums">{r.itemCount}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(r.totalAmount)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.totalAmount)}</td>
                   </tr>
                 ))
               )}
@@ -271,7 +268,7 @@ function PrintBody() {
                     Totais ({data.totals.orderCount} venda(s))
                   </td>
                   <td className="py-2 pr-2 text-right tabular-nums">{data.totals.itemLineCount}</td>
-                  <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(data.totals.totalAmount)}</td>
+                  <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(data.totals.totalAmount)}</td>
                 </tr>
               </tfoot>
             ) : null}
@@ -303,7 +300,7 @@ function PrintBody() {
                     <td className="py-2 pr-2">{g.partnerName}</td>
                     <td className="py-2 pr-2 text-right tabular-nums">{g.orderCount}</td>
                     <td className="py-2 pr-2 text-right tabular-nums">{fmtQty(g.quantity)}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(g.totalAmount)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(g.totalAmount)}</td>
                   </tr>
                 ))
               )}
@@ -314,7 +311,7 @@ function PrintBody() {
                   <td className="py-2 pr-2 text-right">Totais gerais</td>
                   <td className="py-2 pr-2 text-right tabular-nums">{data.totals.orderCount}</td>
                   <td className="py-2 pr-2 text-right tabular-nums">{fmtQty(data.totals.quantity)}</td>
-                  <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(data.totals.totalAmount)}</td>
+                  <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(data.totals.totalAmount)}</td>
                 </tr>
               </tfoot>
             ) : null}
@@ -346,7 +343,7 @@ function PrintBody() {
                     <td className="py-2 pr-2">{g.productLabel}</td>
                     <td className="py-2 pr-2 text-right tabular-nums">{g.orderCount}</td>
                     <td className="py-2 pr-2 text-right tabular-nums">{fmtQty(g.quantity)}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(g.totalAmount)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(g.totalAmount)}</td>
                   </tr>
                 ))
               )}
@@ -359,7 +356,7 @@ function PrintBody() {
                   </td>
                   <td className="py-2 pr-2 text-right tabular-nums">{data.totals.itemLineCount}</td>
                   <td className="py-2 pr-2 text-right tabular-nums">{fmtQty(data.totals.quantity)}</td>
-                  <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(data.totals.totalAmount)}</td>
+                  <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(data.totals.totalAmount)}</td>
                 </tr>
               </tfoot>
             ) : null}

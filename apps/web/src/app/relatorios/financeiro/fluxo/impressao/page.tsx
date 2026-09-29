@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { StandardReportHeader } from '@/components/crud/standard-report-header';
 import { ReportPrintActions } from '@/components/report-print-actions';
 import { apiFetch } from '@/lib/api';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type CashFlow = {
@@ -15,10 +16,6 @@ type CashFlow = {
   totals: { inflow: number; outflow: number };
   rows: { date: string; kind: string; description: string; inflow: number; outflow: number; balance: number; projected: boolean }[];
 };
-
-function fmt(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 function Body() {
   const sp = useSearchParams();
@@ -43,7 +40,7 @@ function Body() {
               Período {data.period.from} a {data.period.to}
               {kindLabel ? ` — Tipo: ${kindLabel}` : ''}
               {' — '}
-              Abertura {fmt(data.openingBalance)}
+              Abertura {formatBrl(data.openingBalance)}
             </p>
           ) : null
         }
@@ -66,9 +63,9 @@ function Body() {
                 <td className="py-1">{r.date}</td>
                 <td>{r.kind}</td>
                 <td>{r.description}</td>
-                <td className="text-right">{r.inflow ? fmt(r.inflow) : '—'}</td>
-                <td className="text-right">{r.outflow ? fmt(r.outflow) : '—'}</td>
-                <td className="text-right">{fmt(r.balance)}</td>
+                <td className="text-right">{r.inflow ? formatBrl(r.inflow) : '—'}</td>
+                <td className="text-right">{r.outflow ? formatBrl(r.outflow) : '—'}</td>
+                <td className="text-right">{formatBrl(r.balance)}</td>
               </tr>
             ))}
           </tbody>
@@ -77,9 +74,9 @@ function Body() {
               <td colSpan={3} className="py-2">
                 Totais do período
               </td>
-              <td className="text-right">{fmt(data.totals.inflow)}</td>
-              <td className="text-right">{fmt(data.totals.outflow)}</td>
-              <td className="text-right">{fmt(data.closingBalance)}</td>
+              <td className="text-right">{formatBrl(data.totals.inflow)}</td>
+              <td className="text-right">{formatBrl(data.totals.outflow)}</td>
+              <td className="text-right">{formatBrl(data.closingBalance)}</td>
             </tr>
           </tfoot>
         </table>

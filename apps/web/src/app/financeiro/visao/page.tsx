@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { FormCadastroModal, PageIntro } from '@/components/crud';
+import { ClickableKpi } from '@/components/dashboard/kpi-card';
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { humanizeUserText } from '@/lib/humanize-user-text';
 import { errorMessage } from '@/lib/labels';
+import { formatBrl } from '@/lib/money';
 import {
   Bar,
   CartesianGrid,
@@ -39,8 +41,9 @@ type BudgetProgressRow = {
 };
 
 type Dashboard = {
-  payables: { open: number; overdue: number; dueNext7: number; dueNext30: number };
-  receivables: { open: number; overdue: number; dueNext7: number; dueNext30: number };
+  payables: { open: number; overdue: number; dueNext3: number; dueNext7: number; dueNext30: number };
+  receivables: { open: number; overdue: number; dueNext3: number; dueNext7: number; dueNext30: number };
+  openAlertsCount?: number;
   topClients: { partnerName: string; openBalance: number; sharePct: number }[];
   dailyFlow: DailyFlowPoint[];
   alerts: { id: string; title: string; message: string; type: string }[];
@@ -62,10 +65,6 @@ type AlertSettings = {
   purchaseImpactThresholdPct: string;
   budgetPaceWarningPct: string;
 };
-
-function money(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 export default function FinanceiroVisaoPage() {
   const [data, setData] = useState<Dashboard | null>(null);
@@ -111,8 +110,8 @@ export default function FinanceiroVisaoPage() {
   return (
     <AdminShell title="Financeiro — Visão">
       <PageIntro
-        title="Visão financeira"
-        description="Títulos em aberto, alertas e concentração de recebimentos. Para saldo e movimentação de caixa, use a aba Fluxo."
+        title="Visão geral financeira"
+        description="Títulos em aberto, alertas e fluxo. Caixa operacional está em Vendas e caixa."
       />
       <ErrorBox message={error} />
       <div className="mb-4">
@@ -122,19 +121,15 @@ export default function FinanceiroVisaoPage() {
       </div>
       {data ? (
         <>
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <PageCard title="CP em aberto">
-              <p className="text-2xl font-semibold text-slate-900">{money(data.payables.open)}</p>
-              <p className="text-xs text-slate-500">Vencidas: {money(data.payables.overdue)}</p>
-            </PageCard>
-            <PageCard title="CR em aberto">
-              <p className="text-2xl font-semibold text-slate-900">{money(data.receivables.open)}</p>
-              <p className="text-xs text-slate-500">Vencidas: {money(data.receivables.overdue)}</p>
-            </PageCard>
-            <PageCard title="Próx. 7 dias">
-              <p className="text-sm text-slate-600">Saídas CP: {money(data.payables.dueNext7)}</p>
-              <p className="text-sm text-slate-600">Entradas CR: {money(data.receivables.dueNext7)}</p>
-            </PageCard>
+          <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <ClickableKpi href="/financeiro/pagar?dueDays=3" label="CP vence em 3 dias" value={formatBrl(data.payables.dueNext3)} tone="warn" />
+            <ClickableKpi href="/financeiro/pagar?overdue=1" label="CP vencidas" value={formatBrl(data.payables.overdue)} tone={data.payables.overdue > 0 ? 'bad' : 'default'} />
+            <ClickableKpi href="/financeiro/receber?dueDays=3" label="CR vence em 3 dias" value={formatBrl(data.receivables.dueNext3)} />
+            <ClickableKpi href="/financeiro/receber?overdue=1" label="CR vencidas" value={formatBrl(data.receivables.overdue)} tone={data.receivables.overdue > 0 ? 'bad' : 'default'} />
+            <ClickableKpi href="/financeiro/pagar" label="CP em aberto" value={formatBrl(data.payables.open)} />
+            <ClickableKpi href="/financeiro/receber" label="CR em aberto" value={formatBrl(data.receivables.open)} />
+            <ClickableKpi href="/financeiro/fluxo" label="Fluxo (7 dias CP)" value={formatBrl(data.payables.dueNext7)} sub={`CR: ${formatBrl(data.receivables.dueNext7)}`} />
+            <ClickableKpi href="/alertas" label="Alertas abertos" value={String(data.openAlertsCount ?? data.alerts.length)} tone={(data.openAlertsCount ?? data.alerts.length) > 0 ? 'warn' : 'default'} />
           </div>
           {data.budgetProgress && data.budgetProgress.length > 0 ? (
             <PageCard title={`Orçamento vs realizado — ${data.budgetYearMonth ?? ''}`}>
@@ -146,7 +141,7 @@ export default function FinanceiroVisaoPage() {
                         {b.chartAccount.code} — {b.chartAccount.name}
                       </span>
                       <span className="tabular-nums text-slate-600">
-                        {money(b.actual)} / {money(b.amountPlanned)}
+                        {formatBrl(b.actual)} / {formatBrl(b.amountPlanned)}
                         {b.usedPct != null ? ` (${b.usedPct}%)` : ''}
                       </span>
                     </div>
@@ -182,7 +177,7 @@ export default function FinanceiroVisaoPage() {
                   <XAxis dataKey="date" tickFormatter={formatChartDate} tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 10 }} width={56} />
                   <Tooltip
-                    formatter={(v: number) => money(v)}
+                    formatter={(v: number) => formatBrl(v)}
                     labelFormatter={(l) => `Data: ${formatChartDate(String(l))}`}
                     contentStyle={{ fontSize: 12 }}
                   />
@@ -238,7 +233,7 @@ export default function FinanceiroVisaoPage() {
                   <li key={c.partnerName} className="flex justify-between gap-2">
                     <span>{c.partnerName}</span>
                     <span className="tabular-nums text-slate-700">
-                      {money(c.openBalance)} ({c.sharePct.toFixed(1)}%)
+                      {formatBrl(c.openBalance)} ({c.sharePct.toFixed(1)}%)
                     </span>
                   </li>
                 ))

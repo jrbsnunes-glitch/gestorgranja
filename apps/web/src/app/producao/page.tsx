@@ -22,6 +22,7 @@ import {
 } from '@/components/list-crud';
 import { RecordHistorySection } from '@/components/operation/record-history-section';
 import { RecordStatusBadge } from '@/components/operation/record-status-badge';
+import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import {
@@ -757,16 +758,13 @@ export default function ProducaoPage() {
                 defaultValue={editingFeed?.leftoverKg ?? 0}
               />
             </Field>
-            <Field label="Produto de estoque (ração) — opcional">
-              <select name="productId" className={inputClass} defaultValue={editingFeed?.productId ?? ''}>
-                <option value="">— não vincular ao estoque —</option>
-                {feedProducts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} — {p.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <ProductLookupField
+              name="productId"
+              label="Produto de estoque (ração) — opcional"
+              allowEmpty
+              defaultValue={editingFeed?.productId ?? ''}
+              placeholder="— não vincular ao estoque —"
+            />
             <Field label="Local de estoque (opcional)">
               <select name="stockLocationId" className={inputClass} defaultValue={editingFeed?.stockLocationId ?? ''}>
                 <option value="">—</option>

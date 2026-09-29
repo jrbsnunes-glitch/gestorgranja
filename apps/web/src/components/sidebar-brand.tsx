@@ -46,10 +46,14 @@ export function SidebarBrand() {
   const displayName = company?.tradeName ?? company?.legalName ?? 'GestorGranja';
 
   return (
-    <div className="min-w-0 flex-1">
-      <CompanyLogoImg logoRegistered={company?.logoUrl} variant="shell" className="mb-2" />
-      <p className="text-lg font-bold text-emerald-800">{displayName}</p>
-      <p className="text-xs text-slate-500">Painel gerencial</p>
+    <div className="min-w-0 flex-1 text-center">
+      <CompanyLogoImg
+        logoRegistered={company?.logoUrl}
+        variant="shell"
+        className="mx-auto mb-3 !h-[4.75rem] !max-w-[min(100%,13rem)] object-contain"
+      />
+      <p className="text-lg font-bold leading-tight text-emerald-800">{displayName}</p>
+      <p className="mt-0.5 text-xs text-slate-500">Painel gerencial</p>
     </div>
   );
 }

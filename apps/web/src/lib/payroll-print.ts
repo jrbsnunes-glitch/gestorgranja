@@ -1,3 +1,4 @@
+import { formatBrl } from '@/lib/money';
 import { navigateToReportPrint } from '@/lib/report-print-nav';
 
 export type PayrollPrintLine = {
@@ -98,7 +99,7 @@ function escapeHtml(text: string): string {
 }
 
 export function formatMoneyPtBR(value: number): string {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return formatBrl(value);
 }
 
 export function formatYearMonthPtBR(yearMonth: string): string {

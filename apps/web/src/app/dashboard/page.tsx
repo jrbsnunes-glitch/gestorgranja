@@ -1,239 +1,267 @@
 'use client';
 
+import Link from 'next/link';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { Card } from '@gestor-granja/ui';
-import { useCallback, useEffect, useState } from 'react';
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { AdminShell } from '@/components/admin-shell';
+import { PageIntro } from '@/components/crud';
+import { CompanyLogoImg } from '@/components/company-logo-img';
+import { ClickableKpi } from '@/components/dashboard/kpi-card';
 import { apiFetch } from '@/lib/api';
-import { formatCalendarDatePtBR, formatPercentPtBR } from '@/lib/calendar-date';
 import { DASHBOARD_REFRESH_EVENT } from '@/lib/dashboard-refresh';
+import { formatBrl, formatPct } from '@/lib/money';
+import { readSession, sessionDisplayName } from '@/lib/session';
 
-const DASHBOARD_POLL_MS = 30_000;
+const POLL_MS = 60_000;
 
-type LayChartPoint = {
-  date: string;
-  real: number;
-  padrao: number;
-  commercialEggs: number;
+type HomeDashboard = {
+  zootec?: {
+    lots: number;
+    liveBirds: number;
+    layRatePct: number | null;
+    awaitingReview: number;
+    openOccurrences: number;
+    criticalOccurrences: number;
+  };
+  finance?: {
+    payables: { dueNext3: number; overdue: number };
+    receivables: { dueToday: number; dueNext3: number; overdue: number };
+    cashBase: number;
+    openAlertsCount: number;
+  };
+  cash?: {
+    open: number;
+    pendingReconciliation: number;
+    salesDay: { count: number; totalAmount: number };
+    salesMonth: { count: number; totalAmount: number };
+  };
+  products?: {
+    criticalCount: number;
+    topOut30d: { productId: string; quantity: number; product: { sku: string; name: string } }[];
+    eggInventory: { totalEggs: number; boxes: number; cartons: number } | null;
+  };
 };
 
-function LayRateTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { payload: LayChartPoint }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
-  return (
-    <div className="rounded border border-slate-200 bg-white p-3 text-sm shadow-md">
-      <p className="font-medium text-slate-800">{label}</p>
-      <p className="mt-1 text-xs text-slate-500">Postura do dia (lote selecionado)</p>
-      <p className="mt-1 text-emerald-800">
-        Real: <span className="font-semibold">{formatPercentPtBR(row.real)}</span>
-      </p>
-      <p className="text-slate-600">
-        Padrão: <span className="font-semibold">{formatPercentPtBR(row.padrao)}</span>
-      </p>
-      <p className="mt-2 border-t border-slate-100 pt-2 text-slate-600">
-        Ovos comerciais:{' '}
-        <span className="font-semibold">{row.commercialEggs.toLocaleString('pt-BR')}</span> un.
-      </p>
-    </div>
-  );
+function eggStockSub(inv: { boxes: number; cartons?: number }) {
+  const boxes = inv.boxes.toLocaleString('pt-BR');
+  const cartons = (inv.cartons ?? 0).toLocaleString('pt-BR');
+  return `${boxes} caixa(s) · ${cartons} cartela(s)`;
 }
 
-type Lot = { id: string; code: string; barn: { name: string } };
-
-type Dashboard = {
-  ageDays: number;
-  liveBirds: number;
-  standardLayRatePct: number | null;
-  currentLayRatePct: number | null;
-  mortalityAccumulated: number;
-  feedConversion: number | null;
-  feedConversionWindowDays?: number;
-  layRateSeries: { date: string; layRatePct: number; commercialEggs: number; standardLayRatePct?: number | null }[];
-};
-
-type EggInventory = {
-  boxes: number;
-  cartons: number;
-  totalEggs: number;
-  eggsPerCarton: number;
-  cartonsPerBox: number;
-  eggsPerBox: number;
-};
+function KpiGrid({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6">{children}</div>;
+}
 
 export default function DashboardPage() {
-  const [lots, setLots] = useState<Lot[]>([]);
-  const [lotId, setLotId] = useState<string>('');
-  const [data, setData] = useState<Dashboard | null>(null);
-  const [cost, setCost] = useState<{
-    costPerDozen: number | null;
-    commercialEggs: number;
-    costSource?: 'linked' | 'average' | 'none';
-  } | null>(null);
-  const [eggInventory, setEggInventory] = useState<EggInventory | null>(null);
+  const [data, setData] = useState<HomeDashboard | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    void apiFetch<Lot[]>('/v1/production/lots').then((rows) => {
-      setLots(rows);
-      if (rows[0]) setLotId(rows[0].id);
-    });
+  const refresh = useCallback(() => {
+    setLoading(true);
+    void apiFetch<HomeDashboard>('/v1/home/dashboard')
+      .then((d) => {
+        setData(d);
+        setRefreshedAt(new Date());
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  const refreshDashboard = useCallback(() => {
-    if (!lotId) return;
-    void Promise.all([
-      apiFetch<Dashboard>(`/v1/reports/dashboard/${lotId}`).then(setData),
-      apiFetch<{ costPerDozen: number | null; commercialEggs: number; costSource?: 'linked' | 'average' | 'none' }>(
-        `/v1/reports/cost-per-dozen/${lotId}`,
-      ).then(setCost),
-      apiFetch<EggInventory>('/v1/reports/egg-inventory').then(setEggInventory),
-    ]).then(() => setRefreshedAt(new Date()));
-  }, [lotId]);
+  useEffect(() => {
+    refresh();
+    void apiFetch<{ logoUrl: string | null }>('/v1/cadastros/company')
+      .then((c) => setCompanyLogo(c.logoUrl))
+      .catch(() => undefined);
+  }, [refresh]);
 
   useEffect(() => {
-    refreshDashboard();
-  }, [refreshDashboard]);
-
-  useEffect(() => {
-    const id = window.setInterval(refreshDashboard, DASHBOARD_POLL_MS);
+    const id = window.setInterval(refresh, POLL_MS);
     return () => window.clearInterval(id);
-  }, [refreshDashboard]);
+  }, [refresh]);
 
   useEffect(() => {
-    const onRefresh = () => refreshDashboard();
+    const onRefresh = () => refresh();
     window.addEventListener(DASHBOARD_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(DASHBOARD_REFRESH_EVENT, onRefresh);
-  }, [refreshDashboard]);
+  }, [refresh]);
 
-  const chartData: LayChartPoint[] =
-    data?.layRateSeries.map((p) => ({
-      date: formatCalendarDatePtBR(p.date),
-      real: p.layRatePct,
-      // padrão da linhagem na idade do lote em cada dia (não um valor fixo)
-      padrao: p.standardLayRatePct ?? data.standardLayRatePct ?? 0,
-      commercialEggs: p.commercialEggs,
-    })) ?? [];
+  const displayName = sessionDisplayName(readSession());
+  const hasAnyBlock = Boolean(data?.zootec || data?.finance || data?.cash || data?.products);
 
   return (
-    <AdminShell title="Painel zootécnico">
-      <select
-        className="mb-4 rounded border border-slate-300 p-2 text-sm"
-        value={lotId}
-        onChange={(e) => setLotId(e.target.value)}
-      >
-        {lots.map((l) => (
-          <option key={l.id} value={l.id}>
-            {l.code} — {l.barn.name}
-          </option>
-        ))}
-      </select>
+    <AdminShell title="Painel">
+      <PageIntro
+        title="Painel — visão geral"
+        description="Indicadores zootécnicos, financeiros, caixa e estoque em um só lugar. Clique nos quadros para abrir o módulo correspondente."
+      />
 
-      {refreshedAt ? (
-        <p className="-mt-2 mb-4 text-xs text-slate-500">
-          Atualizado às {refreshedAt.toLocaleTimeString('pt-BR')} (atualiza a cada 30 s ou ao clicar
-          em Painel)
-        </p>
+      <div className="mb-3 flex flex-wrap items-center gap-4">
+        <CompanyLogoImg logoRegistered={companyLogo} variant="shell" className="h-12 w-auto shrink-0" />
+        <div className="min-w-0 text-sm">
+          <p className="font-medium text-slate-900">
+            {displayName ? `Olá, ${displayName}` : 'Bem-vindo(a)'}
+          </p>
+          {refreshedAt ? (
+            <p className="text-xs text-slate-500">
+              Atualizado às {refreshedAt.toLocaleTimeString('pt-BR')}
+              {loading ? ' · atualizando…' : null}
+            </p>
+          ) : loading ? (
+            <p className="text-xs text-slate-500">Carregando indicadores…</p>
+          ) : null}
+        </div>
+      </div>
+
+      {data?.zootec ? (
+        <Card title="Zootécnico" className="mb-4">
+          <KpiGrid>
+            <ClickableKpi href="/operacao" label="Lotes no escopo" value={String(data.zootec.lots)} />
+            <ClickableKpi
+              href="/operacao"
+              label="Aves vivas"
+              value={data.zootec.liveBirds.toLocaleString('pt-BR')}
+            />
+            <ClickableKpi href="/operacao" label="Postura média (30d)" value={formatPct(data.zootec.layRatePct)} tone="good" />
+            <ClickableKpi
+              href="/operacao/pendencias"
+              label="Registros a conferir"
+              value={String(data.zootec.awaitingReview)}
+              tone={data.zootec.awaitingReview > 0 ? 'warn' : 'good'}
+            />
+            <ClickableKpi
+              href="/operacao/ocorrencias"
+              label="Ocorrências abertas"
+              value={String(data.zootec.openOccurrences)}
+              sub={
+                data.zootec.criticalOccurrences > 0
+                  ? `${data.zootec.criticalOccurrences} crítica(s)/alta`
+                  : undefined
+              }
+              tone={data.zootec.criticalOccurrences > 0 ? 'bad' : data.zootec.openOccurrences ? 'warn' : 'good'}
+            />
+          </KpiGrid>
+          <Link href="/operacao" className="mt-3 inline-block text-sm font-medium text-emerald-800 hover:underline">
+            Ver painel zootécnico completo →
+          </Link>
+        </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card title="% Postura (atual)">
-          <p className="text-2xl font-semibold">
-            {data?.currentLayRatePct != null ? formatPercentPtBR(data.currentLayRatePct) : '—'}
-          </p>
-          <p className="text-xs text-slate-500">
-            Padrão linhagem:{' '}
-            {data?.standardLayRatePct != null ? formatPercentPtBR(data.standardLayRatePct) : '—'}
-          </p>
+      {data?.finance || data?.cash ? (
+        <Card title="Financeiro e caixa" className="mb-4">
+          <KpiGrid>
+            {data.finance ? (
+              <>
+                <ClickableKpi
+                  href="/financeiro/pagar?dueDays=3"
+                  label="Contas a pagar (3 dias)"
+                  value={formatBrl(data.finance.payables.dueNext3)}
+                  tone={data.finance.payables.dueNext3 > 0 ? 'warn' : 'default'}
+                />
+                <ClickableKpi
+                  href="/financeiro/pagar?overdue=1"
+                  label="Contas a pagar vencidas"
+                  value={formatBrl(data.finance.payables.overdue)}
+                  tone={data.finance.payables.overdue > 0 ? 'bad' : 'default'}
+                />
+                <ClickableKpi
+                  href="/financeiro/receber?dueDays=0"
+                  label="Contas a receber vencendo hoje"
+                  value={formatBrl(data.finance.receivables.dueToday ?? 0)}
+                  tone={(data.finance.receivables.dueToday ?? 0) > 0 ? 'good' : 'default'}
+                />
+                <ClickableKpi
+                  href="/financeiro/receber?overdue=1"
+                  label="Contas a receber vencidas"
+                  value={formatBrl(data.finance.receivables.overdue)}
+                  tone={data.finance.receivables.overdue > 0 ? 'bad' : 'default'}
+                />
+                <ClickableKpi href="/financeiro/bancos" label="Saldo bancos (base)" value={formatBrl(data.finance.cashBase)} />
+                <ClickableKpi
+                  href="/alertas"
+                  label="Alertas financeiros"
+                  value={String(data.finance.openAlertsCount)}
+                  tone={data.finance.openAlertsCount > 0 ? 'warn' : 'default'}
+                />
+              </>
+            ) : null}
+            {data.cash ? (
+              <>
+                <ClickableKpi
+                  href="/vendas/caixa"
+                  label="Caixas abertos"
+                  value={String(data.cash.open)}
+                  tone={data.cash.open > 0 ? 'good' : 'default'}
+                />
+                <ClickableKpi
+                  href="/vendas/caixa?status=PENDING_RECONCILIATION"
+                  label="Pendente de conferência"
+                  value={String(data.cash.pendingReconciliation)}
+                  tone={data.cash.pendingReconciliation > 0 ? 'warn' : 'default'}
+                />
+                <ClickableKpi
+                  href="/vendas"
+                  label="Vendas hoje"
+                  value={formatBrl(data.cash.salesDay.totalAmount)}
+                  sub={`${data.cash.salesDay.count} pedido(s)`}
+                  tone={data.cash.salesDay.count > 0 ? 'good' : 'default'}
+                />
+                <ClickableKpi
+                  href="/vendas"
+                  label="Vendas no mês"
+                  value={formatBrl(data.cash.salesMonth.totalAmount)}
+                  sub={`${data.cash.salesMonth.count} pedido(s)`}
+                  tone={data.cash.salesMonth.count > 0 ? 'good' : 'default'}
+                />
+              </>
+            ) : null}
+          </KpiGrid>
+          <Link href="/financeiro/visao" className="mt-3 inline-block text-sm font-medium text-emerald-800 hover:underline">
+            Visão financeira →
+          </Link>
         </Card>
-        <Card title="Aves vivas">
-          <p className="text-2xl font-semibold">{data?.liveBirds ?? '—'}</p>
-          <p className="text-xs text-slate-500">Idade: {data?.ageDays ?? '—'} dias</p>
-        </Card>
-        <Card title="Mortalidade acum.">
-          <p className="text-2xl font-semibold">{data?.mortalityAccumulated ?? '—'}</p>
-        </Card>
-        <Card title="Conversão alimentar">
-          <p className="text-2xl font-semibold">{data?.feedConversion ?? '—'}</p>
-          <p className="text-xs text-slate-500">
-            kg ração / kg ovos · janela de {data?.feedConversionWindowDays ?? 0} dia(s)
-          </p>
-        </Card>
-        <Card title="Custo por dúzia (estim.)">
-          <p className="text-2xl font-semibold">
-            {cost?.costPerDozen != null ? `R$ ${cost.costPerDozen.toFixed(2)}` : '—'}
-          </p>
-          <p className="text-xs text-slate-500">
-            Ovos comerciais: {cost?.commercialEggs ?? '—'}
-            {cost?.costSource === 'linked'
-              ? ' · ração baixada do estoque para este lote'
-              : cost?.costSource === 'average'
-                ? ' · estimado pelo custo médio da ração'
-                : ''}
-          </p>
-        </Card>
-      </div>
+      ) : null}
 
-      <Card title="Postura real vs padrão (%)" className="mt-6 h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
-            <YAxis domain={[0, 100]} />
-            <Tooltip content={<LayRateTooltip />} />
-            <Legend />
-            <Line type="monotone" dataKey="real" stroke="#047857" name="Real" />
-            <Line type="monotone" dataKey="padrao" stroke="#94a3b8" name="Padrão" strokeDasharray="4 4" />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
+      {data?.products ? (
+        <Card title="Produtos e estoque" className="mb-4">
+          <KpiGrid>
+            <ClickableKpi
+              href="/estoque"
+              label="Estoque crítico"
+              value={String(data.products.criticalCount)}
+              tone={data.products.criticalCount > 0 ? 'bad' : 'good'}
+            />
+            {data.products.eggInventory ? (
+              <ClickableKpi
+                href="/estoque"
+                label="Ovos em estoque"
+                value={data.products.eggInventory.totalEggs.toLocaleString('pt-BR')}
+                sub={eggStockSub(data.products.eggInventory)}
+              />
+            ) : null}
+            {data.products.topOut30d.map((row) => (
+              <ClickableKpi
+                key={row.productId}
+                href="/estoque/movimentos"
+                label={`Saídas 30d — ${row.product.sku}`}
+                value={row.quantity.toLocaleString('pt-BR')}
+                sub={row.product.name}
+              />
+            ))}
+            <ClickableKpi href="/produtos" label="Cadastro de produtos" value="Abrir" sub="Consultar saldos e preços" />
+          </KpiGrid>
+          <Link href="/estoque" className="mt-3 inline-block text-sm font-medium text-emerald-800 hover:underline">
+            Painel de estoque →
+          </Link>
+        </Card>
+      ) : null}
 
-      <p className="mt-4 text-sm text-slate-600">
-        Estoque de ovos (saldo das movimentações — não confundir com a postura de um único dia no
-        gráfico):
-      </p>
-      <div className="mt-2 grid gap-4 md:grid-cols-3">
-        <Card title="Quantidade de caixa de ovos">
-          <p className="text-2xl font-semibold">
-            {eggInventory != null ? eggInventory.boxes.toLocaleString('pt-BR') : '—'}
-          </p>
-          <p className="text-xs text-slate-500">
-            {eggInventory
-              ? `${eggInventory.cartonsPerBox} cartelas/caixa · ${eggInventory.eggsPerBox} ovos/caixa`
-              : '—'}
-          </p>
-        </Card>
-        <Card title="Quantidade de cartela de ovo">
-          <p className="text-2xl font-semibold">
-            {eggInventory != null ? eggInventory.cartons.toLocaleString('pt-BR') : '—'}
-          </p>
-          <p className="text-xs text-slate-500">
-            {eggInventory ? `${eggInventory.eggsPerCarton} ovos/cartela (avulsas)` : '—'}
-          </p>
-        </Card>
-        <Card title="Quantidade de ovos totais">
-          <p className="text-2xl font-semibold">
-            {eggInventory != null ? eggInventory.totalEggs.toLocaleString('pt-BR') : '—'}
-          </p>
-          <p className="text-xs text-slate-500">Caixas × ovos/caixa + cartelas × ovos/cartela</p>
-        </Card>
-      </div>
+      {!hasAnyBlock && !loading ? (
+        <p className="mt-4 text-center text-sm text-slate-500">
+          Nenhum bloco disponível para o seu perfil ou ainda carregando…
+        </p>
+      ) : null}
     </AdminShell>
   );
 }

@@ -23,6 +23,12 @@ import { RecurringFinanceService } from './recurring-finance.service';
     BudgetService,
     BankAccountService,
   ],
-  exports: [FinanceService, FinanceCashImpactService, CashFlowService, RecurringFinanceService],
+  exports: [
+    FinanceService,
+    FinanceCashImpactService,
+    CashFlowService,
+    RecurringFinanceService,
+    FinanceDashboardService,
+  ],
 })
 export class FinanceModule {}

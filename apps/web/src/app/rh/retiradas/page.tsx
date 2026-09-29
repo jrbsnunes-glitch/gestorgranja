@@ -13,9 +13,11 @@ import {
   usePagination,
   type ModalMode,
 } from '@/components/list-crud';
+import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR, yearMonthFromIso } from '@/lib/calendar-date';
+import { formatBrl } from '@/lib/money';
 
 type Employee = {
   id: string;
@@ -23,7 +25,6 @@ type Employee = {
   baseSalary: string;
   payrollWithdrawalAuthorizedAt: string | null;
 };
-type Product = { id: string; sku: string; name: string };
 type Withdrawal = {
   id: string;
   employeeId: string;
@@ -84,14 +85,9 @@ function statusLabel(status: string, competencia: string) {
   return status;
 }
 
-function money(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
 export default function RetiradasPage() {
   const [rows, setRows] = useState<Withdrawal[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [settings, setSettings] = useState<HrSettings | null>(null);
   const [warnings, setWarnings] = useState<WithdrawalWarningsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +146,6 @@ export default function RetiradasPage() {
     load();
     loadSettings();
     void apiFetch<Employee[]>('/v1/hr/employees').then(setEmployees);
-    void apiFetch<Product[]>('/v1/inventory/products').then(setProducts);
   }, [load, loadSettings]);
 
   async function saveSettings(e: FormEvent) {
@@ -311,7 +306,7 @@ export default function RetiradasPage() {
               <li key={`${a.employeeId}-${a.yearMonth}`} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
                 <span className="font-medium text-slate-900">{a.employeeName}</span>
                 <span className="text-slate-600"> — competência {a.yearMonth}: </span>
-                <span className="tabular-nums">{money(a.pendingTotal)}</span>
+                <span className="tabular-nums">{formatBrl(a.pendingTotal)}</span>
                 {a.usedPct != null ? <span className="text-slate-600"> ({a.usedPct}% do salário base)</span> : null}
                 {a.missingAuth ? (
                   <span className="ml-2 font-medium text-red-700">Sem autorização no cadastro</span>
@@ -345,7 +340,7 @@ export default function RetiradasPage() {
             r.employee.name,
             `${r.product.sku}`,
             String(r.quantity),
-            `R$ ${Number(r.totalAmount).toFixed(2)}`,
+            formatBrl(Number(r.totalAmount)),
             statusLabel(r.status, competencia),
             <RowActions
               key={r.id}
@@ -392,8 +387,8 @@ export default function RetiradasPage() {
               ],
               ['Produto', `${selected.product.sku} — ${selected.product.name}`],
               ['Quantidade', String(selected.quantity)],
-              ['Preço unitário', `R$ ${Number(selected.unitPrice).toFixed(2)}`],
-              ['Total', `R$ ${Number(selected.totalAmount).toFixed(2)}`],
+              ['Preço unitário', formatBrl(Number(selected.unitPrice))],
+              ['Total', formatBrl(Number(selected.totalAmount))],
               ['Status', statusLabel(selected.status, yearMonthFromIso(selected.withdrawnAt))],
               ['Observação', selected.notes ?? '—'],
             ]}
@@ -420,20 +415,11 @@ export default function RetiradasPage() {
                 Retiradas só são permitidas para funcionários com data de autorização em Funcionários → cadastro.
               </p>
             ) : null}
-            <Field label="Produto">
-              <select
-                name="productId"
-                className={inputClass}
-                required
-                defaultValue={selected?.productId ?? products[0]?.id ?? ''}
-              >
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} — {p.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <ProductLookupField
+              name="productId"
+              required
+              defaultValue={selected?.productId ?? ''}
+            />
             <Field label="Quantidade">
               <input
                 name="quantity"

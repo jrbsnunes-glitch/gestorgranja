@@ -17,11 +17,13 @@ import {
 import { Card } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { PageIntro } from '@/components/crud';
+import { Kpi } from '@/components/dashboard/kpi-card';
 import { RecordStatusBadge } from '@/components/operation/record-status-badge';
 import { ErrorBox, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { labelEnum } from '@/lib/labels';
+import { formatBrl } from '@/lib/money';
 import { lotLabel, todayIso, useBarnOptions, useLotOptions } from '@/lib/operation-options';
 
 type Dashboard = {
@@ -102,7 +104,6 @@ function daysAgo(n: number) {
 const nf = (n: number | null | undefined, digits = 0) =>
   n == null ? '—' : n.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const pf = (n: number | null | undefined, digits = 1) => (n == null ? '—' : `${nf(n, digits)}%`);
-const money = (n: number | null | undefined) => (n == null ? '—' : `R$ ${nf(n, 2)}`);
 
 const LAY_GAP_PP_HINT =
   'Pontos percentuais (p.p.): postura média do lote no período menos o padrão da linhagem na idade atual. Não é “% a mais”; é a diferença direta (ex.: 95% − 90% = +5 p.p.).';
@@ -127,23 +128,6 @@ function TableHeaderHint({ label, hint, align = 'left' }: { label: string; hint:
   );
 }
 
-function Kpi({ label, value, sub, tone = 'default' }: { label: string; value: string; sub?: string; tone?: 'default' | 'good' | 'warn' | 'bad' }) {
-  const cls =
-    tone === 'good'
-      ? 'border-emerald-200 bg-emerald-50'
-      : tone === 'warn'
-        ? 'border-amber-200 bg-amber-50'
-        : tone === 'bad'
-          ? 'border-red-200 bg-red-50'
-          : 'border-slate-200 bg-white';
-  return (
-    <div className={`rounded-lg border px-3 py-2 ${cls}`}>
-      <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="text-xl font-semibold text-slate-900">{value}</p>
-      {sub ? <p className="text-xs text-slate-500">{sub}</p> : null}
-    </div>
-  );
-}
 
 const QUICK_LINKS = [
   { href: '/operacao/registro-diario', label: 'Registro diário' },
@@ -271,8 +255,8 @@ export default function OperacaoDashboardPage() {
             <Kpi label="Perdas de ovos" value={pf(t.lossPct)} sub={`${nf(t.lossEggs)} trinc./sujos/deform./descarte`} tone={t.lossPct != null && t.lossPct > 3 ? 'warn' : 'default'} />
             <Kpi label="Mortalidade" value={nf(t.mortality)} sub={`${pf(t.mortalityPct, 2)} do alojado`} tone={t.mortality ? 'warn' : 'default'} />
             <Kpi label="Ração" value={`${nf(t.feedKg, 1)} kg`} sub={t.feedGPerBirdDay != null ? `${nf(t.feedGPerBirdDay, 1)} g/ave/dia` : undefined} />
-            <Kpi label="Custo ração" value={money(t.feedCost)} sub={t.costPerDozen != null ? `${money(t.costPerDozen)} / dúzia` : 'vincule produto na ração'} />
-            <Kpi label="Perdas operacionais" value={money(t.operationalLossCost)} sub="custo estimado no período" />
+            <Kpi label="Custo ração" value={formatBrl(t.feedCost)} sub={t.costPerDozen != null ? `${formatBrl(t.costPerDozen)} / dúzia` : 'vincule produto na ração'} />
+            <Kpi label="Perdas operacionais" value={formatBrl(t.operationalLossCost)} sub="custo estimado no período" />
             <Kpi label="Ocorrências abertas" value={nf(t.openOccurrences)} sub={`${t.criticalOccurrences} alta/crítica`} tone={t.criticalOccurrences ? 'bad' : t.openOccurrences ? 'warn' : 'good'} />
             <Kpi label="Registros a conferir" value={nf(t.awaitingReview)} tone={t.awaitingReview ? 'warn' : 'good'} />
           </div>
@@ -444,7 +428,7 @@ export default function OperacaoDashboardPage() {
                         <td className="px-2 py-1.5">{labelEnum(l.type)}</td>
                         <td className="px-2 py-1.5 text-right">{l.count}</td>
                         <td className="px-2 py-1.5 text-right">{nf(l.quantity, 1)}</td>
-                        <td className="px-2 py-1.5 text-right">{money(l.cost)}</td>
+                        <td className="px-2 py-1.5 text-right">{formatBrl(l.cost)}</td>
                       </tr>
                     ))}
                   </tbody>

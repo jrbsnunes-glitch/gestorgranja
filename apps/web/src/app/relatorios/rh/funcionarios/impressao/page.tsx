@@ -11,6 +11,7 @@ import {
   type HrEmployeesReportFilters,
   type HrEmployeesReportSort,
 } from '@/lib/hr-employees-report-query';
+import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type ReportRow = {
@@ -46,10 +47,6 @@ function parseFilters(sp: URLSearchParams): HrEmployeesReportFilters | null {
     controlMax: sp.get('controlMax') ?? '',
     sort: sort as HrEmployeesReportSort,
   };
-}
-
-function fmtMoney(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function PrintBody() {
@@ -134,7 +131,7 @@ function PrintBody() {
                     <td className="py-2 pr-2">{r.name}</td>
                     <td className="py-2 pr-2 whitespace-nowrap">{r.cpf ?? '—'}</td>
                     <td className="py-2 pr-2">{r.jobTitle ?? '—'}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(r.baseSalary)}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.baseSalary)}</td>
                     <td className="py-2 pr-2 whitespace-nowrap">
                       {r.hiredAt
                         ? new Date(r.hiredAt + 'T12:00:00').toLocaleDateString('pt-BR')
@@ -152,7 +149,7 @@ function PrintBody() {
                   <td colSpan={4} className="py-2 pr-2 text-right">
                     Totais ({data.totals.activeCount} ativo(s))
                   </td>
-                  <td className="py-2 pr-2 text-right tabular-nums">{fmtMoney(data.totals.totalSalary)}</td>
+                  <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(data.totals.totalSalary)}</td>
                   <td colSpan={3} className="py-2 text-right text-xs text-slate-600">
                     Soma dos salários base listados
                   </td>

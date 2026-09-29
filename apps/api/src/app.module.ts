@@ -16,6 +16,7 @@ import { FinanceModule } from './finance/finance.module';
 import { HrModule } from './hr/hr.module';
 import { FiscalModule } from './fiscal/fiscal.module';
 import { HealthModule } from './health/health.module';
+import { HomeModule } from './home/home.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NutritionModule } from './nutrition/nutrition.module';
@@ -67,6 +68,7 @@ import { UsersModule } from './users/users.module';
     ComplianceModule,
     AssetsModule,
     HealthModule,
+    HomeModule,
   ],
   providers: [
     {

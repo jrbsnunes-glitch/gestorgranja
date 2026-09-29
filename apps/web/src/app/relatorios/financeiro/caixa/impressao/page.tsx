@@ -14,6 +14,7 @@ import { ReportPrintActions } from '@/components/report-print-actions';
 import { splitMovementsBySection, type CashReportMovement } from '@/lib/cash-report-sections';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 import { labelEnum } from '@/lib/labels';
+import { formatBrl } from '@/lib/money';
 import {
   buildCashReportApiPath,
   type CashReportFilters,
@@ -59,10 +60,6 @@ type PeriodPayload = {
 };
 
 type Payload = ControlePayload | PeriodPayload;
-
-function fmt(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
 
 function fmtDt(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', {
@@ -129,7 +126,7 @@ function CorpSectionTable({
             rows.map((r) => (
               <tr key={r.id}>
                 <td>{fmtDt(r.createdAt)}</td>
-                <td className="num">{fmt(r.amount)}</td>
+                <td className="num">{formatBrl(r.amount)}</td>
                 <td>{r.paymentMethod ? labelEnum(r.paymentMethod) : '—'}</td>
                 <td>{r.reason ?? '—'}</td>
               </tr>
@@ -139,7 +136,7 @@ function CorpSectionTable({
         <tfoot>
           <tr>
             <td style={{ textAlign: 'right', fontWeight: 600 }}>Subtotal</td>
-            <td className="num">{fmt(total)}</td>
+            <td className="num">{formatBrl(total)}</td>
             <td colSpan={2} />
           </tr>
         </tfoot>
@@ -169,7 +166,7 @@ function SessionReport({ session }: { session: SessionBlock }) {
         </div>
         <div className="corp-info-cell">
           <span className="corp-info-label">Saldo inicial</span>
-          {fmt(session.openingBalance)}
+          {formatBrl(session.openingBalance)}
         </div>
         <div className="corp-info-cell">
           <span className="corp-info-label">Abertura</span>
@@ -208,24 +205,24 @@ function SessionReport({ session }: { session: SessionBlock }) {
           <tbody>
             <tr>
               <td>Total calculado (saldo inicial + entradas − saídas, incluindo despesas)</td>
-              <td className="num">{fmt(session.computedBalance)}</td>
+              <td className="num">{formatBrl(session.computedBalance)}</td>
             </tr>
             <tr>
               <td>Total apresentado pelo operador no fechamento</td>
               <td className="num">
-                {session.closingBalance != null ? fmt(session.closingBalance) : '—'}
+                {session.closingBalance != null ? formatBrl(session.closingBalance) : '—'}
               </td>
             </tr>
             <tr>
               <td>Diferença (calculado − apresentado)</td>
-              <td className="num">{diff != null ? fmt(diff) : '—'}</td>
+              <td className="num">{diff != null ? formatBrl(diff) : '—'}</td>
             </tr>
           </tbody>
         </table>
         <p className="corp-footnote" style={{ padding: '0.35rem 0.55rem' }}>
-          Movimentação: entradas {fmt(session.inflow)} · saídas {fmt(session.outflow)}
-          {session.expenses > 0 ? <> · despesas {fmt(session.expenses)}</> : null} · dinheiro esperado{' '}
-          {fmt(session.computedBalance)}
+          Movimentação: entradas {formatBrl(session.inflow)} · saídas {formatBrl(session.outflow)}
+          {session.expenses > 0 ? <> · despesas {formatBrl(session.expenses)}</> : null} · dinheiro esperado{' '}
+          {formatBrl(session.computedBalance)}
         </p>
       </div>
 
@@ -343,15 +340,15 @@ function PrintBody() {
               <div className="corp-kpi-row">
                 <div className="corp-kpi">
                   <div className="corp-kpi-label">Entradas</div>
-                  <div className="corp-kpi-value">{fmt(data.totals.inflow)}</div>
+                  <div className="corp-kpi-value">{formatBrl(data.totals.inflow)}</div>
                 </div>
                 <div className="corp-kpi">
                   <div className="corp-kpi-label">Saídas</div>
-                  <div className="corp-kpi-value">{fmt(data.totals.outflow)}</div>
+                  <div className="corp-kpi-value">{formatBrl(data.totals.outflow)}</div>
                 </div>
                 <div className="corp-kpi">
                   <div className="corp-kpi-label">Líquido</div>
-                  <div className="corp-kpi-value">{fmt(data.totals.net)}</div>
+                  <div className="corp-kpi-value">{formatBrl(data.totals.net)}</div>
                 </div>
                 <div className="corp-kpi">
                   <div className="corp-kpi-label">Sessões</div>

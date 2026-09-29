@@ -54,17 +54,21 @@ export const APP_MODULES: AppModule[] = [
     href: '/estoque',
     match: (p) => matchAny(p, ['/estoque', '/compras']),
     tabs: [
-      { id: 'movimentos', label: 'Movimentações', href: '/estoque' },
+      { id: 'dashboard', label: 'Visão geral', href: '/estoque' },
+      { id: 'movimentos', label: 'Movimentações', href: '/estoque/movimentos' },
       { id: 'entradas', label: 'Entradas (NF)', href: '/estoque/entradas' },
       { id: 'compras', label: 'Compras (pedidos)', href: '/compras' },
     ],
   },
   {
     id: 'comercial',
-    label: 'Comercial',
+    label: 'Vendas e caixa',
     href: '/vendas',
     match: (p) => pathUnder(p, '/vendas'),
-    tabs: [{ id: 'vendas', label: 'Vendas', href: '/vendas' }],
+    tabs: [
+      { id: 'vendas', label: 'Vendas', href: '/vendas' },
+      { id: 'caixa', label: 'Caixa', href: '/vendas/caixa' },
+    ],
   },
   {
     id: 'parceiros',
@@ -78,10 +82,9 @@ export const APP_MODULES: AppModule[] = [
     href: '/financeiro/visao',
     match: (p) => pathUnder(p, '/financeiro'),
     tabs: [
-      { id: 'visao', label: 'Visão', href: '/financeiro/visao' },
+      { id: 'visao', label: 'Visão geral', href: '/financeiro/visao' },
       { id: 'pagar', label: 'Pagar', href: '/financeiro/pagar' },
       { id: 'receber', label: 'Receber', href: '/financeiro/receber' },
-      { id: 'caixa', label: 'Caixa', href: '/financeiro/caixa' },
       { id: 'fluxo', label: 'Fluxo', href: '/financeiro/fluxo' },
       { id: 'bancos', label: 'Bancos', href: '/financeiro/bancos' },
     ],
@@ -112,11 +115,13 @@ export const APP_MODULES: AppModule[] = [
     id: 'cadastros',
     label: 'Cadastros',
     href: '/cadastros-gerais',
-    match: (p) => matchAny(p, ['/cadastros-gerais', '/cadastros/turnos', '/cadastros/plano-contas']),
+    match: (p) =>
+      matchAny(p, ['/cadastros-gerais', '/cadastros/turnos', '/cadastros/plano-contas', '/cadastros/formas-pagamento']),
     tabs: [
       { id: 'gerais', label: 'Cadastros gerais', href: '/cadastros-gerais' },
       { id: 'turnos', label: 'Turnos', href: '/cadastros/turnos' },
       { id: 'plano', label: 'Plano de contas', href: '/cadastros/plano-contas' },
+      { id: 'pagamento', label: 'Formas de pagamento', href: '/cadastros/formas-pagamento' },
     ],
   },
   {

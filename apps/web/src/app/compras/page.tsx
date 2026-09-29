@@ -21,10 +21,12 @@ import {
 } from '@/components/list-crud';
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
-import { PartnerSearchField } from '@/components/partner-search-field';
+import { PartnerLookupField } from '@/components/partner-lookup-field';
+import { ProductLookupField } from '@/components/product-lookup-field';
 import { PurchaseOrdersReportLauncher } from '@/components/purchase-orders-report-launcher';
 import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
+import { formatBrl } from '@/lib/money';
 
 type Product = { id: string; sku: string; name: string; unit: string };
 type StockLocation = { id: string; code: string; name: string };
@@ -70,10 +72,6 @@ type Request = {
 
 type LineDraft = { productId: string; quantity: string };
 
-function money(n: number) {
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
 /** Itens e cotações só enquanto não houver pedido gerado. */
 function canEditRequest(r: Request) {
   if (r.status === 'RECEIVED' || r.status === 'CANCELLED') return false;
@@ -111,7 +109,6 @@ function ItemsTable({ items }: { items: RequestItem[] }) {
 export default function ComprasPage() {
   const [tab, setTab] = useState('lista');
   const [rows, setRows] = useState<Request[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalMode>(null);
@@ -149,7 +146,6 @@ export default function ComprasPage() {
 
   useEffect(() => {
     void apiFetch<Partner[]>('/v1/cadastros/partners').then(setPartners);
-    void apiFetch<Product[]>('/v1/inventory/products').then(setProducts);
     void apiFetch<StockLocation[]>('/v1/cadastros/general/stock-locations').then(setStockLocations);
   }, []);
 
@@ -174,7 +170,7 @@ export default function ComprasPage() {
     setEditLines(
       req.items.length
         ? req.items.map((i) => ({ productId: i.productId, quantity: String(Number(i.quantity)) }))
-        : [{ productId: products[0]?.id ?? '', quantity: '1' }],
+        : [{ productId: '', quantity: '1' }],
     );
     setModal('edit');
   }
@@ -296,8 +292,8 @@ export default function ComprasPage() {
       );
       setImpactMsg(
         impact.highImpact
-          ? `Atenção: impacto elevado (R$ ${impact.totalImpact.toFixed(2)}) sobre caixa projetado.`
-          : `Impacto estimado: R$ ${impact.totalImpact.toFixed(2)}.`,
+          ? `Atenção: impacto elevado (${formatBrl(impact.totalImpact)}) sobre caixa projetado.`
+          : `Impacto estimado: ${formatBrl(impact.totalImpact)}.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao simular impacto');
@@ -315,13 +311,13 @@ export default function ComprasPage() {
       );
       setImpactMsg(
         impact.highImpact
-          ? `Atenção: impacto elevado (R$ ${impact.totalImpact.toFixed(2)}) sobre caixa projetado.`
-          : `Impacto estimado: R$ ${impact.totalImpact.toFixed(2)}.`,
+          ? `Atenção: impacto elevado (${formatBrl(impact.totalImpact)}) sobre caixa projetado.`
+          : `Impacto estimado: ${formatBrl(impact.totalImpact)}.`,
       );
       if (
         impact.highImpact &&
         !window.confirm(
-          `Impacto elevado no fluxo (R$ ${impact.totalImpact.toFixed(2)}). Confirmar geração do pedido mesmo assim?`,
+          `Impacto elevado no fluxo (${formatBrl(impact.totalImpact)}). Confirmar geração do pedido mesmo assim?`,
         )
       ) {
         return;
@@ -398,24 +394,16 @@ export default function ComprasPage() {
         {lines.map((line, idx) => (
           <div key={`${idPrefix}-${idx}`} className="flex flex-wrap items-end gap-2">
             <div className="min-w-[200px] flex-1">
-              <label className="mb-1 block text-xs text-slate-600">Produto</label>
-              <select
-                className={inputClass}
+              <ProductLookupField
+                label="Produto"
                 value={line.productId}
-                onChange={(ev) => {
+                onValueChange={(id) => {
                   const next = [...lines];
-                  next[idx] = { ...next[idx], productId: ev.target.value };
+                  next[idx] = { ...next[idx], productId: id };
                   setLines(next);
                 }}
                 required
-              >
-                <option value="">Selecione…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.sku} — {p.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div className="w-28">
               <label className="mb-1 block text-xs text-slate-600">Quantidade</label>
@@ -449,13 +437,10 @@ export default function ComprasPage() {
           type="button"
           variant="secondary"
           className="text-sm"
-          onClick={() => setLines([...lines, { productId: products[0]?.id ?? '', quantity: '1' }])}
+          onClick={() => setLines([...lines, { productId: '', quantity: '1' }])}
         >
           + Linha
         </Button>
-        {products.length === 0 ? (
-          <p className="text-xs text-amber-800">Cadastre produtos em Produtos / Estoque antes de comprar.</p>
-        ) : null}
       </div>
     );
   }
@@ -482,7 +467,7 @@ export default function ComprasPage() {
           <ListToolbar
             list={list}
             onInclude={() => {
-              setNewLines([{ productId: products[0]?.id ?? '', quantity: '1' }]);
+              setNewLines([{ productId: '', quantity: '1' }]);
               setModal('include');
             }}
             onReports={() => setReportsOpen(true)}
@@ -571,7 +556,7 @@ export default function ComprasPage() {
                     {
                       label: 'Cotações',
                       value:
-                        selected.quotes.map((q) => `${q.supplierName}: R$ ${q.totalAmount}`).join(' | ') || '—',
+                        selected.quotes.map((q) => `${q.supplierName}: ${formatBrl(Number(q.totalAmount))}`).join(' | ') || '—',
                     },
                   ],
                 },
@@ -607,8 +592,8 @@ export default function ComprasPage() {
                 <ul className="text-sm text-slate-700">
                   {selected.order.items.map((i) => (
                     <li key={i.productId}>
-                      {i.product.sku} — {Number(i.quantity).toFixed(3)} {i.product.unit} × R${' '}
-                      {Number(i.unitPrice).toFixed(4)}
+                      {i.product.sku} — {Number(i.quantity).toFixed(3)} {i.product.unit} ×{' '}
+                      {formatBrl(Number(i.unitPrice))}
                     </li>
                   ))}
                 </ul>
@@ -619,16 +604,13 @@ export default function ComprasPage() {
         {selected?.order && selected.status !== 'RECEIVED' ? (
           <form onSubmit={receiveOrder} className="mt-4 space-y-3 border-t pt-4">
             <p className="text-sm font-medium text-slate-800">Recebimento e entrada no estoque</p>
-            <Field label="Fornecedor (parceiro)">
-              <select name="partnerId" className={inputClass} required defaultValue={winningQuotePartnerId}>
-                <option value="">Selecione…</option>
-                {suppliers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <PartnerLookupField
+              role="supplier"
+              name="partnerId"
+              required
+              label="Fornecedor (parceiro)"
+              defaultValue={winningQuotePartnerId}
+            />
             <Field label="Local de estoque (opcional)">
               <select name="stockLocationId" className={inputClass} defaultValue="">
                 <option value="">Padrão / sem local</option>
@@ -653,16 +635,13 @@ export default function ComprasPage() {
         {selected?.order && !selected.order.payablesGenerated ? (
           <form onSubmit={generatePayables} className="mt-6 space-y-3 border-t pt-4">
             <p className="text-sm font-medium text-slate-800">Gerar contas a pagar (opcional)</p>
-            <Field label="Fornecedor (parceiro)">
-              <select name="partnerId" className={inputClass} required defaultValue={winningQuotePartnerId}>
-                <option value="">Selecione…</option>
-                {partners.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <PartnerLookupField
+              role="supplier"
+              name="partnerId"
+              required
+              label="Fornecedor (parceiro)"
+              defaultValue={winningQuotePartnerId}
+            />
             <Field label="Conta contábil">
               <ChartAccountSelect name="chartAccountId" flow="payable" required />
             </Field>
@@ -696,7 +675,7 @@ export default function ComprasPage() {
                 <ul className="space-y-1 text-sm text-slate-700">
                   {selected.quotes.map((q) => (
                     <li key={q.id}>
-                      {q.supplierName} — R$ {Number(q.totalAmount).toFixed(2)}
+                      {q.supplierName} — {formatBrl(Number(q.totalAmount))}
                     </li>
                   ))}
                 </ul>
@@ -708,12 +687,13 @@ export default function ComprasPage() {
                   {selected.quotes.length > 0 ? 'Adicionar outra cotação' : 'Primeira cotação'}
                 </p>
                 <form onSubmit={addQuote}>
-                  <PartnerSearchField
-                    partners={suppliers}
-                    partnerId={quoteSupplierId}
+                  <PartnerLookupField
+                    role="supplier"
+                    value={quoteSupplierId}
+                    onValueChange={(id) => setQuoteSupplierId(id)}
                     label="Fornecedor"
                     placeholder="Pesquisar no cadastro de fornecedores…"
-                    onPartnerIdChange={setQuoteSupplierId}
+                    required
                   />
                   <div className="my-3 rounded-md border border-slate-200 p-3">
                     <p className="mb-2 text-xs font-medium text-slate-700">Preço unitário por produto</p>
@@ -736,7 +716,7 @@ export default function ComprasPage() {
                         />
                       </div>
                     ))}
-                    <p className="text-sm font-medium text-slate-800">Total: {money(quoteTotalPreview)}</p>
+                    <p className="text-sm font-medium text-slate-800">Total: {formatBrl(quoteTotalPreview)}</p>
                   </div>
                   <Field label="1º vencimento">
                     <input name="dueDate" type="date" className={inputClass} required />
@@ -765,7 +745,7 @@ export default function ComprasPage() {
                   >
                     {selected.quotes.map((q) => (
                       <option key={q.id} value={q.id}>
-                        {q.supplierName} — R$ {q.totalAmount}
+                        {q.supplierName} — {formatBrl(Number(q.totalAmount))}
                       </option>
                     ))}
                   </select>

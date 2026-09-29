@@ -13,11 +13,12 @@ import {
 import { ListToolbar, PaginatedTable, RowActions, usePagination, type ModalMode } from '@/components/list-crud';
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
+import { PartnerLookupField } from '@/components/partner-lookup-field';
+import { ProductLookupField } from '@/components/product-lookup-field';
 import { StockReceiptsReportLauncher } from '@/components/stock-receipts-report-launcher';
 import { apiFetch } from '@/lib/api';
+import { formatBrl } from '@/lib/money';
 
-type Partner = { id: string; name: string };
-type Product = { id: string; sku: string; name: string };
 type StockLoc = { id: string; code: string; name: string };
 type Receipt = {
   id: string;
@@ -31,8 +32,6 @@ type Receipt = {
 
 export default function EntradasEstoquePage() {
   const [rows, setRows] = useState<Receipt[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [locais, setLocais] = useState<StockLoc[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalMode>(null);
@@ -52,8 +51,6 @@ export default function EntradasEstoquePage() {
 
   useEffect(() => {
     load();
-    void apiFetch<Partner[]>('/v1/cadastros/partners').then(setPartners);
-    void apiFetch<Product[]>('/v1/inventory/products').then(setProducts);
     void apiFetch<StockLoc[]>('/v1/cadastros/general/stock-locations').then(setLocais);
   }, [load]);
 
@@ -115,7 +112,7 @@ export default function EntradasEstoquePage() {
             r.invoiceNumber ?? '—',
             r.nfeAccessKey ? `${r.nfeAccessKey.slice(0, 8)}…` : '—',
             r.stockLocation?.code ?? '—',
-            `R$ ${Number(r.totalAmount).toFixed(2)}`,
+            formatBrl(Number(r.totalAmount)),
             <RowActions
               key={r.id}
               onView={() => {
@@ -147,15 +144,7 @@ export default function EntradasEstoquePage() {
         }
       >
         <form id="receipt-form" onSubmit={save} className="grid md:grid-cols-2 md:gap-x-4">
-          <Field label="Fornecedor">
-            <select name="partnerId" className={inputClass} required>
-              {partners.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <PartnerLookupField role="supplier" name="partnerId" required />
           <Field label="Número NF">
             <input name="invoiceNumber" className={inputClass} />
           </Field>
@@ -181,15 +170,7 @@ export default function EntradasEstoquePage() {
           <Field label="Conta contábil (estoque)">
             <ChartAccountSelect flow="stock" allowEmpty emptyLabel="Automático (padrão)" />
           </Field>
-          <Field label="Produto">
-            <select name="productId" className={inputClass} required>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.sku} — {p.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <ProductLookupField name="productId" required />
           <Field label="Quantidade">
             <input name="quantity" type="number" step="0.001" min={0} className={inputClass} required />
           </Field>
@@ -221,7 +202,7 @@ export default function EntradasEstoquePage() {
                     { label: 'Número NF', value: selected.invoiceNumber },
                     { label: 'Chave NFe', value: selected.nfeAccessKey },
                     { label: 'Local', value: selected.stockLocation?.code },
-                    { label: 'Total', value: `R$ ${Number(selected.totalAmount).toFixed(2)}` },
+                    { label: 'Total', value: formatBrl(Number(selected.totalAmount)) },
                   ],
                 },
               ]
