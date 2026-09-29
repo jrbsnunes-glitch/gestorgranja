@@ -31,11 +31,18 @@ export class EggProductionStockService {
       cfg = await prisma.eggStockConfig.create({ data: { id: 'default' } });
     }
     if (!cfg.chartAccountId) {
-      const chartAccountId = await defaultEggStockChartAccountId(prisma);
-      cfg = await prisma.eggStockConfig.update({
-        where: { id: 'default' },
-        data: { chartAccountId },
-      });
+      try {
+        const chartAccountId = await defaultEggStockChartAccountId(prisma);
+        cfg = await prisma.eggStockConfig.update({
+          where: { id: 'default' },
+          data: { chartAccountId },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Integração postura: conta contábil padrão não encontrada (${tenantSlug}). Selecione manualmente no formulário.`,
+        );
+        this.logger.debug(String(err));
+      }
     }
     return cfg;
   }

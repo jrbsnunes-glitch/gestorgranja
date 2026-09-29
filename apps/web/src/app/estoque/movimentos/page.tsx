@@ -46,6 +46,8 @@ export default function EstoquePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [eggConfig, setEggConfig] = useState<EggStockConfig | null>(null);
+  const [eggConfigLoading, setEggConfigLoading] = useState(true);
+  const [eggConfigLoadFailed, setEggConfigLoadFailed] = useState(false);
   const [resyncMsg, setResyncMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalMode>(null);
@@ -63,7 +65,21 @@ export default function EstoquePage() {
   const load = useCallback(() => {
     void apiFetch<Product[]>('/v1/inventory/products').then(setProducts);
     void apiFetch<Movement[]>('/v1/inventory/movements').then(setMovements);
-    void apiFetch<EggStockConfig>('/v1/production/egg-stock-config').then(setEggConfig);
+    setEggConfigLoading(true);
+    void apiFetch<EggStockConfig>('/v1/production/egg-stock-config')
+      .then((cfg) => {
+        if (!cfg || typeof cfg !== 'object') {
+          throw new Error('Resposta inválida da API ao carregar integração postura.');
+        }
+        setEggConfig(cfg);
+        setEggConfigLoadFailed(false);
+      })
+      .catch((e) => {
+        setEggConfig(null);
+        setEggConfigLoadFailed(true);
+        setError(e instanceof Error ? e.message : 'Não foi possível carregar a configuração da postura.');
+      })
+      .finally(() => setEggConfigLoading(false));
   }, []);
 
   useEffect(() => {
@@ -305,8 +321,17 @@ export default function EstoquePage() {
                 </Button>
               </div>
             </form>
-          ) : (
+          ) : eggConfigLoadFailed ? (
+            <p className="text-sm text-red-700">
+              Não foi possível carregar a configuração. Confira permissões (produção/estoque), migrations do tenant
+              (tabela EggStockConfig) e o plano de contas; recarregue a página ou contate o suporte.
+            </p>
+          ) : eggConfigLoading ? (
             <p className="text-sm text-zinc-500">Carregando…</p>
+          ) : (
+            <p className="text-sm text-red-700">
+              Configuração indisponível. Atualize o sistema no servidor (deploy recente) e recarregue a página.
+            </p>
           )}
         </PageCard>
       )}

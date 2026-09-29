@@ -108,7 +108,12 @@ export class ProductionController {
   }
 
   @Get('egg-stock-config')
-  @RequirePermissions('production.read', 'inventory.write', '*')
+  @RequirePermissions(
+    'production.read',
+    'inventory.write',
+    'operation.settings',
+    '*',
+  )
   eggStockConfig(@CurrentUser() user: JwtPayload) {
     return this.eggStock.getConfig(user.tenantSlug);
   }
