@@ -246,6 +246,9 @@ export class CashService {
       throw new BadRequestException('Só é possível lançar com caixa aberto ou em conferência.');
     }
     const isExpense = Boolean(data.isExpense);
+    if (data.type === 'OUT' && !isExpense) {
+      throw new BadRequestException('Registre retiradas do caixa como despesa (com classificação contábil).');
+    }
     if (isExpense && data.type !== 'OUT') {
       throw new BadRequestException('Despesa deve ser registrada como saída');
     }
@@ -293,6 +296,9 @@ export class CashService {
     if (!existing) throw new NotFoundException();
     const type = (data.type ?? existing.type) as CashMovementType;
     const isExpense = data.isExpense !== undefined ? Boolean(data.isExpense) : existing.isExpense;
+    if (type === CashMovementType.OUT && !isExpense) {
+      throw new BadRequestException('Registre retiradas do caixa como despesa (com classificação contábil).');
+    }
     if (isExpense && type !== CashMovementType.OUT) {
       throw new BadRequestException('Despesa deve ser registrada como saída');
     }

@@ -191,7 +191,7 @@ function SessionReport({ session }: { session: SessionBlock }) {
         rows={split.receivablesAtCash}
         total={split.totalReceivablesAtCash}
       />
-      <CorpSectionTable index={3} title="Despesas e saídas" rows={split.expenses} total={split.totalExpenses} />
+      <CorpSectionTable index={3} title="Despesas" rows={split.expenses} total={split.totalExpenses} />
 
       <div className="corp-reconcile">
         <p className="corp-reconcile-title">4. Conferência — total do caixa × total apresentado</p>
@@ -204,7 +204,7 @@ function SessionReport({ session }: { session: SessionBlock }) {
           </thead>
           <tbody>
             <tr>
-              <td>Total calculado (saldo inicial + entradas − saídas, incluindo despesas)</td>
+              <td>Total calculado (saldo inicial + entradas − despesas)</td>
               <td className="num">{formatBrl(session.computedBalance)}</td>
             </tr>
             <tr>
@@ -343,7 +343,7 @@ function PrintBody() {
                   <div className="corp-kpi-value">{formatBrl(data.totals.inflow)}</div>
                 </div>
                 <div className="corp-kpi">
-                  <div className="corp-kpi-label">Saídas</div>
+                  <div className="corp-kpi-label">Despesas</div>
                   <div className="corp-kpi-value">{formatBrl(data.totals.outflow)}</div>
                 </div>
                 <div className="corp-kpi">

@@ -70,6 +70,5 @@ export function summarizeCashSession(
 
 export function cashMovementKindLabel(m: { type: string; isExpense?: boolean }): string {
   if (m.type === 'IN') return 'Entrada';
-  if (m.isExpense) return 'Despesa';
-  return 'Saída';
+  return 'Despesa';
 }

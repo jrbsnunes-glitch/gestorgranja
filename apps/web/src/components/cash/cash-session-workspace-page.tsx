@@ -80,7 +80,7 @@ type PendingReconcileSession = {
   movements: Movement[];
 };
 
-type MovementKind = 'IN' | 'OUT' | 'EXPENSE';
+type MovementKind = 'IN' | 'EXPENSE';
 
 type ManagementLoad = {
   mode: 'operate' | 'reconcile' | 'view';
@@ -366,8 +366,8 @@ export function CashSessionWorkspacePage({
     setError(null);
     const fd = new FormData(e.currentTarget);
     const kind = (fd.get('movementKind') as MovementKind) || reconcileMovementKind;
-    const isExpense = kind === 'EXPENSE';
     const type = kind === 'IN' ? 'IN' : 'OUT';
+    const isExpense = type === 'OUT';
     try {
       await apiFetch(`/v1/cash/sessions/${reconcileDetail.id}/movements`, {
         method: 'POST',
@@ -390,7 +390,7 @@ export function CashSessionWorkspacePage({
 
   function startEditReconcileMovement(m: Movement) {
     setReconcileEditing(m);
-    setReconcileEditKind(m.type === 'IN' ? 'IN' : m.isExpense ? 'EXPENSE' : 'OUT');
+    setReconcileEditKind(m.type === 'IN' ? 'IN' : 'EXPENSE');
   }
 
   async function saveReconcileMovementEdit(e: FormEvent<HTMLFormElement>) {
@@ -399,8 +399,8 @@ export function CashSessionWorkspacePage({
     setError(null);
     const fd = new FormData(e.currentTarget);
     const kind = (fd.get('editMovementKind') as MovementKind) || reconcileEditKind;
-    const isExpense = kind === 'EXPENSE';
     const type = kind === 'IN' ? 'IN' : 'OUT';
+    const isExpense = type === 'OUT';
     try {
       await apiFetch(
         `/v1/cash/sessions/${reconcileDetail.id}/movements/${reconcileEditing.id}`,
@@ -577,15 +577,11 @@ export function CashSessionWorkspacePage({
                 <p className="font-medium text-slate-900">Conferência (dinheiro esperado no caixa)</p>
                 <ul className="mt-2 grid gap-1 sm:grid-cols-2">
                   <li>Entradas: {formatBrl(sessionSummary.inflow)}</li>
-                  <li>Saídas: {formatBrl(sessionSummary.outflow)}</li>
-                  <li>Despesas (em dinheiro): {formatBrl(sessionSummary.expenses)}</li>
-                  <li className="font-semibold text-emerald-900">
+                  <li>Despesas: {formatBrl(sessionSummary.outflow)}</li>
+                  <li className="font-semibold text-emerald-900 sm:col-span-2">
                     Saldo esperado: {formatBrl(sessionSummary.expectedBalance)}
                   </li>
                 </ul>
-                <p className="mt-2 text-xs text-slate-500">
-                  Despesas entram no total de saídas e reduzem o dinheiro na conferência do fechamento.
-                </p>
               </div>
             ) : null}
             <ListToolbar list={movList} onReports={() => setReportsOpen(true)} showPrint={false} searchPlaceholder="Tipo, motivo…" />
@@ -646,12 +642,8 @@ export function CashSessionWorkspacePage({
                     <dd className="font-medium tabular-nums">{formatBrl(sessionSummary.inflow)}</dd>
                   </div>
                   <div>
-                    <dt className="text-slate-500">Saídas (incl. despesas)</dt>
+                    <dt className="text-slate-500">Despesas</dt>
                     <dd className="font-medium tabular-nums">{formatBrl(sessionSummary.outflow)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-slate-500">Despesas em dinheiro</dt>
-                    <dd className="font-medium tabular-nums">{formatBrl(sessionSummary.expenses)}</dd>
                   </div>
                   {closeByPayment?.methods.map((method) => (
                     <div key={method}>
@@ -885,8 +877,7 @@ export function CashSessionWorkspacePage({
                 <p className="font-medium text-slate-900">Totais da sessão</p>
                 <ul className="mt-2 grid gap-1 sm:grid-cols-2">
                   <li>Entradas: {formatBrl(reconcileSummary.inflow)}</li>
-                  <li>Saídas: {formatBrl(reconcileSummary.outflow)}</li>
-                  <li>Despesas: {formatBrl(reconcileSummary.expenses)}</li>
+                  <li>Despesas: {formatBrl(reconcileSummary.outflow)}</li>
                   <li className="font-semibold text-emerald-900">
                     Esperado (sistema): {formatBrl(reconcileSummary.expectedBalance)}
                   </li>
@@ -934,7 +925,6 @@ export function CashSessionWorkspacePage({
                     onChange={(e) => setReconcileMovementKind(e.target.value as MovementKind)}
                   >
                     <option value="IN">Entrada</option>
-                    <option value="OUT">Saída</option>
                     <option value="EXPENSE">Despesa</option>
                   </select>
                 </Field>
@@ -984,7 +974,6 @@ export function CashSessionWorkspacePage({
                       onChange={(e) => setReconcileEditKind(e.target.value as MovementKind)}
                     >
                       <option value="IN">Entrada</option>
-                      <option value="OUT">Saída</option>
                       <option value="EXPENSE">Despesa</option>
                     </select>
                   </Field>
