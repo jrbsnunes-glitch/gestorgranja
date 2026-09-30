@@ -5,12 +5,15 @@ import {
   AccountReceivable,
   AlertStatus,
   AlertType,
+  CashMovementType,
   CashSessionStatus,
   Partner,
+  Prisma,
 } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { humanizeUserMessage } from '../common/humanize-user-message.util';
 import { BudgetService } from './budget.service';
+import { localDateKey } from './finance-date.util';
 import { daysOverdue, dec, isPayableSettled, isReceivableSettled, titleBalance } from './finance-title-utils';
 
 const FINANCE_ALERT_TYPES: AlertType[] = [
@@ -21,9 +24,11 @@ const FINANCE_ALERT_TYPES: AlertType[] = [
   AlertType.PURCHASE_CASH_IMPACT,
 ];
 
-function localDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+const DASHBOARD_CASH_SESSION_STATUSES: CashSessionStatus[] = [
+  CashSessionStatus.OPEN,
+  CashSessionStatus.PENDING_RECONCILIATION,
+  CashSessionStatus.RECONCILED,
+];
 
 export type DailyFlowPoint = {
   date: string;
@@ -51,7 +56,14 @@ export class FinanceDashboardService {
     const in30 = new Date(today);
     in30.setDate(in30.getDate() + 30);
 
-    const [payables, receivables, alerts, bankAccounts, reconciledSessions] = await Promise.all([
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const flowHorizonEnd = new Date(today);
+    flowHorizonEnd.setDate(flowHorizonEnd.getDate() + 30);
+    flowHorizonEnd.setHours(23, 59, 59, 999);
+
+    const [payables, receivables, alerts, bankAccounts, reconciledSessions, cashMovements] =
+      await Promise.all([
       prisma.accountPayable.findMany({ include: { partner: true } }),
       prisma.accountReceivable.findMany({ include: { partner: true } }),
       prisma.alert.findMany({
@@ -64,6 +76,12 @@ export class FinanceDashboardService {
         where: { status: CashSessionStatus.RECONCILED },
         take: 20,
         orderBy: { closedAt: 'desc' },
+      }),
+      prisma.cashMovement.findMany({
+        where: {
+          createdAt: { gte: monthStart, lte: flowHorizonEnd },
+          session: { status: { in: DASHBOARD_CASH_SESSION_STATUSES } },
+        },
       }),
     ]);
 
@@ -118,7 +136,7 @@ export class FinanceDashboardService {
       cashBase += dec(reconciledSessions[0].closingBalance);
     }
 
-    const dailyFlow = this.buildDailyFlow(today, payables, receivables);
+    const dailyFlow = this.buildDailyFlow(today, payables, receivables, cashMovements);
 
     const ym = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     const budgetProgress = await this.budget.listWithProgress(user, ym);
@@ -147,9 +165,11 @@ export class FinanceDashboardService {
     today: Date,
     payables: (AccountPayable & { partner: Partner })[],
     receivables: (AccountReceivable & { partner: Partner })[],
+    cashMovements: { type: CashMovementType; amount: Prisma.Decimal; createdAt: Date }[],
   ): DailyFlowPoint[] {
-    const daysBack = 7;
     const daysForward = 30;
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
     const map = new Map<string, DailyFlowPoint>();
 
     const ensure = (date: string): DailyFlowPoint => {
@@ -161,9 +181,9 @@ export class FinanceDashboardService {
       return row;
     };
 
-    for (let i = -daysBack; i <= daysForward; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
+    const lastChartDay = new Date(today);
+    lastChartDay.setDate(lastChartDay.getDate() + daysForward);
+    for (let d = new Date(monthStart); d <= lastChartDay; d.setDate(d.getDate() + 1)) {
       ensure(localDateKey(d));
     }
 
@@ -172,8 +192,8 @@ export class FinanceDashboardService {
       if (map.has(dueKey) && !isPayableSettled(p)) {
         ensure(dueKey).cpAVencer += titleBalance(p.amount, p.amountPaid);
       }
-      if (isPayableSettled(p) && p.paidAt) {
-        const paidKey = localDateKey(p.paidAt);
+      if (isPayableSettled(p)) {
+        const paidKey = localDateKey(p.paidAt ?? p.dueDate);
         if (map.has(paidKey)) {
           ensure(paidKey).saidas += dec(p.amountPaid);
         }
@@ -185,12 +205,20 @@ export class FinanceDashboardService {
       if (map.has(dueKey) && !isReceivableSettled(r)) {
         ensure(dueKey).crAVencer += titleBalance(r.amount, r.amountPaid);
       }
-      if (isReceivableSettled(r) && r.receivedAt) {
-        const recvKey = localDateKey(r.receivedAt);
+      if (isReceivableSettled(r)) {
+        const recvKey = localDateKey(r.receivedAt ?? r.dueDate);
         if (map.has(recvKey)) {
           ensure(recvKey).entradas += dec(r.amountPaid);
         }
       }
+    }
+
+    for (const m of cashMovements) {
+      const key = localDateKey(m.createdAt);
+      if (!map.has(key)) continue;
+      const v = dec(m.amount);
+      if (m.type === CashMovementType.IN) ensure(key).entradas += v;
+      else ensure(key).saidas += v;
     }
 
     for (const row of map.values()) {

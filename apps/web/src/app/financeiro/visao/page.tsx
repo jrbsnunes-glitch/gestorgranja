@@ -167,8 +167,8 @@ export default function FinanceiroVisaoPage() {
           ) : null}
           <PageCard title="Entradas, saídas e vencimentos">
             <p className="mb-3 text-xs text-slate-500">
-              Últimos 7 dias: recebimentos e pagamentos registrados. Próximos 30 dias: títulos em aberto com vencimento
-              na data (contas a receber e a pagar).
+              Desde o início do mês: recebimentos, pagamentos e movimentos de caixa (inclui despesas). Próximos 30 dias:
+              títulos em aberto com vencimento na data (contas a receber e a pagar).
             </p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">

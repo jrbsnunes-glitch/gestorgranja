@@ -2,7 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CashMovementType, CashSessionStatus } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+import { dateKeyInRange, localDateKey } from './finance-date.util';
 import { dec, isPayableSettled, isReceivableSettled, parsePaymentTerms, titleBalance } from './finance-title-utils';
+
+const CASH_FLOW_SESSION_STATUSES: CashSessionStatus[] = [
+  CashSessionStatus.OPEN,
+  CashSessionStatus.PENDING_RECONCILIATION,
+  CashSessionStatus.RECONCILED,
+];
 
 export type CashFlowQuery = {
   from?: string;
@@ -44,19 +51,21 @@ export class CashFlowService {
     const payables = await prisma.accountPayable.findMany();
     for (const p of payables) {
       const settled = isPayableSettled(p);
-      const paidAt = p.paidAt;
-      if (settled && paidAt && paidAt >= from && paidAt <= to) {
+      if (settled) {
+        const when = p.paidAt ?? p.dueDate;
+        if (dateKeyInRange(when, from, to)) {
+          rows.push({
+            date: localDateKey(when),
+            kind: 'Contas a pagar pagas',
+            description: p.description,
+            inflow: 0,
+            outflow: dec(p.amountPaid),
+            projected: false,
+          });
+        }
+      } else if (includePayables && dateKeyInRange(p.dueDate, from, to)) {
         rows.push({
-          date: paidAt.toISOString().slice(0, 10),
-          kind: 'Contas a pagar pagas',
-          description: p.description,
-          inflow: 0,
-          outflow: dec(p.amountPaid),
-          projected: false,
-        });
-      } else if (includePayables && !settled && p.dueDate >= from && p.dueDate <= to) {
-        rows.push({
-          date: p.dueDate.toISOString().slice(0, 10),
+          date: localDateKey(p.dueDate),
           kind: 'Contas a pagar previstas',
           description: p.description,
           inflow: 0,
@@ -69,19 +78,21 @@ export class CashFlowService {
     const receivables = await prisma.accountReceivable.findMany();
     for (const r of receivables) {
       const settled = isReceivableSettled(r);
-      const receivedAt = r.receivedAt;
-      if (settled && receivedAt && receivedAt >= from && receivedAt <= to) {
+      if (settled) {
+        const when = r.receivedAt ?? r.dueDate;
+        if (dateKeyInRange(when, from, to)) {
+          rows.push({
+            date: localDateKey(when),
+            kind: 'Contas a receber recebidas',
+            description: r.description,
+            inflow: dec(r.amountPaid),
+            outflow: 0,
+            projected: false,
+          });
+        }
+      } else if (includeReceivables && dateKeyInRange(r.dueDate, from, to)) {
         rows.push({
-          date: receivedAt.toISOString().slice(0, 10),
-          kind: 'Contas a receber recebidas',
-          description: r.description,
-          inflow: dec(r.amountPaid),
-          outflow: 0,
-          projected: false,
-        });
-      } else if (includeReceivables && !settled && r.dueDate >= from && r.dueDate <= to) {
-        rows.push({
-          date: r.dueDate.toISOString().slice(0, 10),
+          date: localDateKey(r.dueDate),
           kind: 'Contas a receber previstas',
           description: r.description,
           inflow: titleBalance(r.amount, r.amountPaid),
@@ -99,7 +110,7 @@ export class CashFlowService {
         const terms = parsePaymentTerms(o.paymentTermsJson);
         for (const t of terms) {
           const d = new Date(t.dueDate + 'T12:00:00');
-          if (d >= from && d <= to) {
+          if (dateKeyInRange(d, from, to)) {
             rows.push({
               date: t.dueDate,
               kind: 'Compra prevista',
@@ -114,14 +125,15 @@ export class CashFlowService {
     }
 
     const movements = await prisma.cashMovement.findMany({
-      where: { createdAt: { gte: from, lte: to } },
-      include: { session: true },
+      where: {
+        createdAt: { gte: from, lte: to },
+        session: { status: { in: CASH_FLOW_SESSION_STATUSES } },
+      },
     });
     for (const m of movements) {
-      if (m.session.status !== CashSessionStatus.RECONCILED && m.session.status !== CashSessionStatus.OPEN) continue;
       const amt = dec(m.amount);
       rows.push({
-        date: m.createdAt.toISOString().slice(0, 10),
+        date: localDateKey(m.createdAt),
         kind: 'Caixa',
         description: m.reason ?? m.type,
         inflow: m.type === CashMovementType.IN ? amt : 0,
@@ -155,7 +167,7 @@ export class CashFlowService {
     );
 
     return {
-      period: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
+      period: { from: localDateKey(from), to: localDateKey(to) },
       kindFilter: kindFilter || null,
       openingBalance: opening,
       closingBalance: running,

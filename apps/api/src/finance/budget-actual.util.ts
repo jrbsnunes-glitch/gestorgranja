@@ -1,3 +1,4 @@
+import { CashMovementType, CashSessionStatus } from '../generated/tenant-client';
 import type { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { dec } from './finance-title-utils';
 
@@ -31,6 +32,25 @@ export async function computeBudgetActual(
     },
   });
   actual += maintenance.reduce((s, r) => s + dec(r.cost ?? 0), 0);
+
+  const cashExpenses = await prisma.cashMovement.findMany({
+    where: {
+      chartAccountId,
+      isExpense: true,
+      type: CashMovementType.OUT,
+      createdAt: { gte: from, lte: to },
+      session: {
+        status: {
+          in: [
+            CashSessionStatus.OPEN,
+            CashSessionStatus.PENDING_RECONCILIATION,
+            CashSessionStatus.RECONCILED,
+          ],
+        },
+      },
+    },
+  });
+  actual += cashExpenses.reduce((s, m) => s + dec(m.amount), 0);
 
   return Math.round(actual * 100) / 100;
 }
