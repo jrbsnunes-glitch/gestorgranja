@@ -129,17 +129,6 @@ function TableHeaderHint({ label, hint, align = 'left' }: { label: string; hint:
 }
 
 
-const QUICK_LINKS = [
-  { href: '/operacao/registro-diario', label: 'Registro diário' },
-  { href: '/producao', label: 'Lançar produção' },
-  { href: '/operacao/pendencias', label: 'Pendências' },
-  { href: '/operacao/ocorrencias', label: 'Ocorrências' },
-  { href: '/operacao/insumos', label: 'Insumos' },
-  { href: '/operacao/perdas', label: 'Perdas' },
-  { href: '/cadastros/lotes', label: 'Lotes' },
-  { href: '/cadastros/galpoes', label: 'Galpões' },
-];
-
 export default function OperacaoDashboardPage() {
   const [from, setFrom] = useState(daysAgo(29));
   const [to, setTo] = useState(todayIso());
@@ -181,14 +170,6 @@ export default function OperacaoDashboardPage() {
         description="Indicadores de produção, perdas, ração, mortalidade e ocorrências com filtro por período, galpão e lote. Compare com o padrão da linhagem e acompanhe as pendências do dia."
       />
       <ErrorBox message={error} />
-
-      <div className="mb-3 flex flex-wrap gap-2 text-xs">
-        {QUICK_LINKS.map((l) => (
-          <Link key={l.href} href={l.href} className="rounded border border-slate-200 bg-white px-2.5 py-1.5 hover:bg-slate-50">
-            {l.label}
-          </Link>
-        ))}
-      </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <label className="text-xs text-slate-600">
