@@ -220,7 +220,7 @@ export default function EmpresaFiscalPage() {
                     ? ''
                     : ' · Certificado não enviado'}
               </p>
-              <SubmitButton>Salvar</SubmitButton>
+              <SubmitButton label="Salvar" />
             </form>
           </PageCard>
 

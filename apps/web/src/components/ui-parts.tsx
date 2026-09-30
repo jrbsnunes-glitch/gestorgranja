@@ -8,13 +8,16 @@ export function PageCard({
   title,
   children,
   action,
+  className,
 }: {
   title?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
+  className?: string;
 }) {
+  const cardClass = ['mb-6', className].filter(Boolean).join(' ');
   return (
-    <Card title={title} className="mb-6">
+    <Card title={title} className={cardClass}>
       {action ? <div className="mb-4">{action}</div> : null}
       {children}
     </Card>

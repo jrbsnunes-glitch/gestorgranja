@@ -87,7 +87,13 @@ export function OperationNatureLookupField({
             placeholder="Clique em Pesquisar…"
             disabled={disabled}
           />
-          <Button type="button" variant="secondary" size="sm" onClick={() => setSearchOpen(true)} disabled={disabled}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="shrink-0 px-3 py-2 text-sm"
+            onClick={() => setSearchOpen(true)}
+            disabled={disabled}
+          >
             Pesquisar
           </Button>
         </div>
