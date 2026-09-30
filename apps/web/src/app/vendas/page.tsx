@@ -159,6 +159,11 @@ export default function VendasPage() {
         title="Vendas"
         description="Confirme vendas no seu caixa aberto; os valores entram automaticamente como entrada no caixa."
       />
+      <p className="-mt-2 mb-4 text-sm">
+        <Link href="/vendas/documentos-fiscais" className="text-emerald-800 underline">
+          NF-e / NFC-e — documentos fiscais
+        </Link>
+      </p>
       <ErrorBox message={error} />
 
       <section className="mb-6 overflow-hidden rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-slate-50 shadow-sm">

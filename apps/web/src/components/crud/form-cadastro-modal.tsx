@@ -43,9 +43,7 @@ export function FormCadastroModal({
           {hint ? <p className="mt-0.5 text-sm text-slate-500">{hint}</p> : null}
           {headerExtra}
         </div>
-        <div
-          className={`min-h-0 flex-1 ${dense ? 'overflow-visible' : 'overflow-y-auto'} ${pad}`}
-        >
+        <div className={`min-h-0 flex-1 overflow-y-auto ${pad}`}>
           {children}
         </div>
         <div className={`flex shrink-0 flex-wrap gap-2 border-t border-slate-100 ${footPad}`}>{footer}</div>

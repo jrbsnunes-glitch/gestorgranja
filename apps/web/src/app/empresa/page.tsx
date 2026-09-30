@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
@@ -22,6 +23,12 @@ type Company = {
   phone: string | null;
   email: string | null;
   logoUrl: string | null;
+  taxRegime: number | null;
+  cnae: string | null;
+  municipalIbgeCode: string | null;
+  street: string | null;
+  addressNumber: string | null;
+  district: string | null;
 };
 
 export default function EmpresaPage() {
@@ -71,6 +78,12 @@ export default function EmpresaPage() {
       zipCode: String(fd.get('zipCode') ?? '').trim() || null,
       phone: String(fd.get('phone') ?? '').trim() || null,
       email: String(fd.get('email') ?? '').trim() || null,
+      taxRegime: fd.get('taxRegime') ? Number(fd.get('taxRegime')) : null,
+      cnae: String(fd.get('cnae') ?? '').trim() || null,
+      municipalIbgeCode: String(fd.get('municipalIbgeCode') ?? '').trim() || null,
+      street: String(fd.get('street') ?? '').trim() || null,
+      addressNumber: String(fd.get('addressNumber') ?? '').trim() || null,
+      district: String(fd.get('district') ?? '').trim() || null,
     };
     try {
       const updated = await apiFetch<Company>('/v1/cadastros/company', {
@@ -121,6 +134,11 @@ export default function EmpresaPage() {
         title="Cadastro da empresa"
         description="Dados da razão social, endereço e logo usados em relatórios e documentos."
       />
+      <p className="mb-4 text-sm">
+        <Link href="/empresa/fiscal" className="font-medium text-emerald-800 underline">
+          Emissor fiscal (certificado, CSC, SEFAZ)
+        </Link>
+      </p>
       <ErrorBox message={error} />
 
       <PageCard title="Identidade visual">
@@ -187,6 +205,25 @@ export default function EmpresaPage() {
             <Field label="Inscrição estadual">
               <input name="stateReg" className={inputClass} defaultValue={company.stateReg ?? ''} />
             </Field>
+            <Field label="CRT (regime tributário)">
+              <select name="taxRegime" className={inputClass} defaultValue={company.taxRegime ?? ''}>
+                <option value="">—</option>
+                <option value="1">1 — Simples Nacional</option>
+                <option value="2">2 — Simples (excesso sublimite)</option>
+                <option value="3">3 — Regime normal</option>
+              </select>
+            </Field>
+            <Field label="CNAE fiscal">
+              <input name="cnae" className={inputClass} defaultValue={company.cnae ?? ''} placeholder="0115599" />
+            </Field>
+            <Field label="Código IBGE município">
+              <input
+                name="municipalIbgeCode"
+                className={inputClass}
+                defaultValue={company.municipalIbgeCode ?? ''}
+                placeholder="1302603 (Manaus)"
+              />
+            </Field>
           </div>
         </PageCard>
 
@@ -197,6 +234,15 @@ export default function EmpresaPage() {
                 <input name="address" className={inputClass} defaultValue={company.address ?? ''} />
               </Field>
             </div>
+            <Field label="Logradouro (NF-e)">
+              <input name="street" className={inputClass} defaultValue={company.street ?? ''} />
+            </Field>
+            <Field label="Número">
+              <input name="addressNumber" className={inputClass} defaultValue={company.addressNumber ?? ''} />
+            </Field>
+            <Field label="Bairro">
+              <input name="district" className={inputClass} defaultValue={company.district ?? ''} />
+            </Field>
             <Field label="Cidade">
               <input name="city" className={inputClass} defaultValue={company.city ?? ''} />
             </Field>

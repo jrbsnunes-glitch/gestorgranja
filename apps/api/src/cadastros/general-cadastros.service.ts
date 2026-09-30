@@ -62,14 +62,83 @@ export class GeneralCadastrosService {
     return this.db(user).then((p) => p.bank.update({ where: { id }, data }));
   }
 
-  listFiscalSituations(user: JwtPayload) {
-    return this.db(user).then((p) => p.productFiscalSituation.findMany({ orderBy: { code: 'asc' } }));
+  listFiscalSituations(user: JwtPayload, activeOnly?: boolean) {
+    return this.db(user).then((p) =>
+      p.productFiscalSituation.findMany({
+        where: activeOnly ? { isActive: true } : undefined,
+        orderBy: { code: 'asc' },
+      }),
+    );
   }
 
-  createFiscalSituation(user: JwtPayload, data: { code: string; description: string }) {
+  createFiscalSituation(
+    user: JwtPayload,
+    data: {
+      code: string;
+      description: string;
+      ncm?: string;
+      cest?: string;
+      fiscalCst?: string;
+      ibsCst?: string;
+      ibsClassTrib?: string;
+    },
+  ) {
     return this.db(user).then((p) =>
-      p.productFiscalSituation.create({ data: { code: data.code.trim(), description: data.description.trim() } }),
+      p.productFiscalSituation.create({
+        data: {
+          code: data.code.trim(),
+          description: data.description.trim(),
+          ncm: data.ncm?.trim() || null,
+          cest: data.cest?.trim() || null,
+          fiscalCst: data.fiscalCst?.trim() || null,
+          ibsCst: data.ibsCst?.trim() || null,
+          ibsClassTrib: data.ibsClassTrib?.trim() || null,
+        },
+      }),
     );
+  }
+
+  updateFiscalSituation(user: JwtPayload, id: string, data: Record<string, unknown>) {
+    return this.db(user).then((p) => p.productFiscalSituation.update({ where: { id }, data: data as never }));
+  }
+
+  listOperationNatures(user: JwtPayload, activeOnly?: boolean) {
+    return this.db(user).then((p) =>
+      p.operationNature.findMany({
+        where: activeOnly ? { isActive: true } : undefined,
+        orderBy: { code: 'asc' },
+      }),
+    );
+  }
+
+  createOperationNature(
+    user: JwtPayload,
+    data: {
+      code: string;
+      description: string;
+      cfopInternal: string;
+      cfopExternal: string;
+    },
+  ) {
+    const cfopInternal = data.cfopInternal.replace(/\D/g, '').slice(0, 4);
+    const cfopExternal = data.cfopExternal.replace(/\D/g, '').slice(0, 4);
+    if (cfopInternal.length !== 4 || cfopExternal.length !== 4) {
+      throw new BadRequestException('CFOP interno e externo devem ter 4 dígitos');
+    }
+    return this.db(user).then((p) =>
+      p.operationNature.create({
+        data: {
+          code: data.code.trim(),
+          description: data.description.trim(),
+          cfopInternal,
+          cfopExternal,
+        },
+      }),
+    );
+  }
+
+  updateOperationNature(user: JwtPayload, id: string, data: Record<string, unknown>) {
+    return this.db(user).then((p) => p.operationNature.update({ where: { id }, data: data as never }));
   }
 
   listStockLocations(user: JwtPayload) {

@@ -7,14 +7,13 @@ import { useShellTitle, useShellTitleContext } from '@/components/shell-title-co
 import { getToken, logout, requireAuth } from '@/lib/auth';
 import { APP_VERSION } from '@/lib/app-version';
 import { readSession, sessionDisplayName } from '@/lib/session';
-import { useIsMobile } from '@/lib/use-mobile';
+import { MOBILE_MEDIA_QUERY } from '@/lib/use-mobile';
 
 /** Frame persistente (layout) — não desmonta entre navegações. */
 export function AdminShellFrame({ children }: { children: React.ReactNode }) {
   const { state } = useShellTitleContext();
-  const [authOk, setAuthOk] = useState(() => typeof window !== 'undefined' && !!getToken());
+  const [authOk, setAuthOk] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
-  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!getToken()) {
@@ -25,8 +24,14 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isMobile) setNavOpen(false);
-  }, [isMobile]);
+    const mq = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const closeIfDesktop = () => {
+      if (!mq.matches) setNavOpen(false);
+    };
+    closeIfDesktop();
+    mq.addEventListener('change', closeIfDesktop);
+    return () => mq.removeEventListener('change', closeIfDesktop);
+  }, []);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -49,11 +54,11 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
   const description = state.description;
   const displayName = sessionDisplayName(readSession());
 
-  const sidebar = (
+  const sidebar = (mobile: boolean) => (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-6 flex items-start justify-between gap-2">
         <SidebarBrand />
-        {isMobile ? (
+        {mobile ? (
           <button
             type="button"
             className="rounded-md p-2 text-slate-600 hover:bg-slate-100"
@@ -85,47 +90,45 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen min-h-[100dvh] flex-col md:flex-row">
-      {isMobile ? (
-        <>
-          <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-3 safe-top">
-            <button
-              type="button"
-              className="flex min-h-11 min-w-11 items-center justify-center rounded-md border border-slate-200 text-slate-700"
-              aria-label="Abrir menu"
-              aria-expanded={navOpen}
-              onClick={() => setNavOpen(true)}
-            >
-              ☰
-            </button>
-            <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900">{title}</h1>
-          </header>
-          {navOpen ? (
-            <button
-              type="button"
-              className="fixed inset-0 z-40 bg-black/40"
-              aria-label="Fechar menu"
-              onClick={() => setNavOpen(false)}
-            />
-          ) : null}
-          <aside
-            className={`fixed inset-y-0 left-0 z-50 flex w-[min(100vw-3rem,17.5rem)] transform flex-col border-r border-slate-200 bg-white p-4 shadow-xl transition-transform duration-200 ease-out safe-top safe-bottom ${
-              navOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}
-          >
-            {sidebar}
-          </aside>
-        </>
-      ) : (
-        <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white p-4">{sidebar}</aside>
-      )}
+      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-3 safe-top md:hidden">
+        <button
+          type="button"
+          className="flex min-h-11 min-w-11 items-center justify-center rounded-md border border-slate-200 text-slate-700"
+          aria-label="Abrir menu"
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen(true)}
+        >
+          ☰
+        </button>
+        <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900">{title}</h1>
+      </header>
+
+      {navOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          aria-label="Fechar menu"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(100vw-3rem,17.5rem)] transform flex-col border-r border-slate-200 bg-white p-4 shadow-xl transition-transform duration-200 ease-out safe-top safe-bottom md:hidden ${
+          navOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {sidebar(true)}
+      </aside>
+
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white p-4 md:flex">
+        {sidebar(false)}
+      </aside>
 
       <main className="flex-1 p-3 pb-6 md:p-6 md:pb-8 safe-bottom">
-        {!isMobile ? (
-          <header className="mb-6">
-            <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-            {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
-          </header>
-        ) : null}
+        <header className="mb-6 hidden md:block">
+          <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
+          {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+        </header>
         {children}
       </main>
     </div>

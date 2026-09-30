@@ -4,6 +4,8 @@ import { useCallback, useState } from 'react';
 import { Field, SubmitButton, inputClass } from '@/components/ui-parts';
 import { fetchAddressByCep, formatCep } from '@/lib/viacep';
 
+export type PartnerIeMode = 'nao_contribuinte' | 'contribuinte' | 'isento';
+
 export type PartnerFormValues = {
   personType: 'PF' | 'PJ';
   name: string;
@@ -42,6 +44,13 @@ export const emptyPartnerForm = (personType: 'PF' | 'PJ' = 'PJ'): PartnerFormVal
   state: '',
 });
 
+export function partnerIeModeFromRegistration(stateRegistration?: string | null): PartnerIeMode {
+  const t = (stateRegistration ?? '').trim().toUpperCase();
+  if (!t) return 'nao_contribuinte';
+  if (t === 'ISENTO') return 'isento';
+  return 'contribuinte';
+}
+
 export function partnerToForm(p: Partial<PartnerFormValues> & { personType?: string }): PartnerFormValues {
   return {
     ...emptyPartnerForm((p.personType as 'PF' | 'PJ') ?? 'PJ'),
@@ -67,6 +76,9 @@ export function PartnerForm({
   hideSubmit?: boolean;
 }) {
   const [form, setForm] = useState(initial);
+  const [ieMode, setIeMode] = useState<PartnerIeMode>(() =>
+    partnerIeModeFromRegistration(initial.stateRegistration),
+  );
   const [cepHint, setCepHint] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
 
@@ -111,7 +123,9 @@ export function PartnerForm({
       id={formId}
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit(form);
+        const stateRegistration =
+          ieMode === 'nao_contribuinte' ? '' : ieMode === 'isento' ? 'ISENTO' : form.stateRegistration.trim();
+        void onSubmit({ ...form, stateRegistration });
       }}
     >
       <Field label="Tipo de pessoa">
@@ -160,14 +174,43 @@ export function PartnerForm({
         </Field>
       )}
 
-      {showStateRegistration && form.personType === 'PJ' ? (
-        <Field label="Inscrição estadual (IE)">
-          <input
-            className={inputClass}
-            value={form.stateRegistration}
-            onChange={(e) => set('stateRegistration', e.target.value)}
-          />
-        </Field>
+      {showStateRegistration ? (
+        <div className="mb-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+          <Field label="Situação ICMS (NF-e)">
+            <select
+              className={inputClass}
+              value={ieMode}
+              onChange={(e) => {
+                const mode = e.target.value as PartnerIeMode;
+                setIeMode(mode);
+                if (mode === 'isento') set('stateRegistration', 'ISENTO');
+                if (mode === 'nao_contribuinte') set('stateRegistration', '');
+              }}
+            >
+              <option value="nao_contribuinte">Não contribuinte (consumidor final)</option>
+              <option value="contribuinte">Contribuinte ICMS (informar IE)</option>
+              <option value="isento">Isento de IE</option>
+            </select>
+          </Field>
+          {ieMode === 'contribuinte' ? (
+            <Field label="Inscrição estadual (IE)">
+              <input
+                className={inputClass}
+                required
+                value={form.stateRegistration}
+                onChange={(e) => set('stateRegistration', e.target.value)}
+                placeholder="Somente números ou conforme cadastro na SEFAZ"
+              />
+            </Field>
+          ) : null}
+          <p className="text-xs text-slate-600">
+            {ieMode === 'nao_contribuinte'
+              ? 'A NF-e será emitida como operação com consumidor final (sem IE no XML).'
+              : ieMode === 'isento'
+                ? 'Será informado indIEDest isento na NF-e.'
+                : 'A NF-e usará a IE informada (operação B2B, indFinal normal).'}
+          </p>
+        </div>
       ) : null}
 
       <div className="grid gap-0 sm:grid-cols-2 sm:gap-x-3">

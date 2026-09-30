@@ -127,15 +127,39 @@ export class GeneralCadastrosController {
   }
 
   @Get('general/fiscal-situations')
-  @RequirePermissions('cadastros.read', '*')
-  fiscal(@CurrentUser() user: JwtPayload) {
-    return this.general.listFiscalSituations(user);
+  @RequirePermissions('cadastros.read', 'fiscal.read', 'inventory.write', '*')
+  fiscal(@CurrentUser() user: JwtPayload, @Query('activeOnly') activeOnly?: string) {
+    return this.general.listFiscalSituations(user, activeOnly === '1' || activeOnly === 'true');
   }
 
   @Post('general/fiscal-situations')
   @RequirePermissions('cadastros.write', '*')
-  createFiscal(@CurrentUser() user: JwtPayload, @Body() body: { code: string; description: string }) {
-    return this.general.createFiscalSituation(user, body);
+  createFiscal(@CurrentUser() user: JwtPayload, @Body() body: Record<string, unknown>) {
+    return this.general.createFiscalSituation(user, body as never);
+  }
+
+  @Patch('general/fiscal-situations/:id')
+  @RequirePermissions('cadastros.write', '*')
+  patchFiscal(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.general.updateFiscalSituation(user, id, body);
+  }
+
+  @Get('general/operation-natures')
+  @RequirePermissions('cadastros.read', 'fiscal.read', 'sales.write', '*')
+  operationNatures(@CurrentUser() user: JwtPayload, @Query('activeOnly') activeOnly?: string) {
+    return this.general.listOperationNatures(user, activeOnly === '1' || activeOnly === 'true');
+  }
+
+  @Post('general/operation-natures')
+  @RequirePermissions('cadastros.write', '*')
+  createOperationNature(@CurrentUser() user: JwtPayload, @Body() body: Record<string, unknown>) {
+    return this.general.createOperationNature(user, body as never);
+  }
+
+  @Patch('general/operation-natures/:id')
+  @RequirePermissions('cadastros.write', '*')
+  patchOperationNature(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.general.updateOperationNature(user, id, body);
   }
 
   @Get('general/stock-locations')

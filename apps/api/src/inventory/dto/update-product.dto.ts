@@ -40,15 +40,10 @@ export class UpdateProductDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
-  ncm?: string | null;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
   fiscalOrigin?: string | null;
 
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
-  fiscalCst?: string | null;
+  gtin?: string | null;
 }

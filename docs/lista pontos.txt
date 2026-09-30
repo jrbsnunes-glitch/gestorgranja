@@ -1,0 +1,567 @@
+1. OBJETIVO DO MÓDULO
+
+Quero que a aba Operação seja o centro de registro e acompanhamento das atividades produtivas da Granja Aurora.
+
+O objetivo não é apenas registrar quantas aves existem ou quantos ovos foram produzidos. O módulo deve permitir acompanhar a operação ao longo do tempo, identificar alterações, comparar os resultados com padrões definidos e fornecer dados confiáveis para os demais módulos do sistema.
+
+A operação deve alimentar principalmente:
+
+* Estoque e consumo de insumos;
+* Compras;
+* Manutenção;
+* Custos de produção;
+* Financeiro;
+* Comercial;
+* Relatórios e apoio à decisão.
+
+A lógica principal é:
+
+REGISTRO OPERACIONAL → DADO HISTÓRICO → INDICADOR → ANÁLISE → ALERTA → AÇÃO DA GESTÃO
+
+O sistema deve apoiar a decisão humana. Não deve afirmar uma causa ou tomar uma decisão sem que existam dados e regras suficientes.
+
+⸻
+
+2. PRINCÍPIO DE DESENVOLVIMENTO
+
+Antes de construir apenas as telas, precisamos definir a estrutura dos dados e as relações entre as entidades.
+
+A operação deve estar vinculada, quando aplicável, a:
+
+* Data e horário;
+* Galpão;
+* Lote;
+* Categoria ou grupo de aves;
+* Responsável pelo registro;
+* Tipo de atividade;
+* Quantidade;
+* Unidade de medida;
+* Observações;
+* Anexos, quando necessários;
+* Status de conferência ou aprovação.
+
+O sistema deve manter o histórico dos registros. Uma alteração não deve apagar o histórico original sem controle, justificativa e registro de quem realizou a alteração.
+
+Também deve ser possível identificar dados pendentes, incompletos, ajustados ou ainda não conferidos.
+
+⸻
+
+3. ESTRUTURA DA ABA OPERAÇÃO
+
+Sugestão de organização interna:
+
+1. Dashboard da Operação;
+2. Registro Diário;
+3. Produção de Ovos;
+4. Aves e Lotes;
+5. Mortalidade e Ocorrências;
+6. Consumo de Insumos;
+7. Perdas e Quebras;
+8. Galpões;
+9. Histórico e Indicadores;
+10. Pendências e Alertas.
+
+A organização final pode ser ajustada conforme a estrutura existente do sistema, desde que as funcionalidades e relações sejam preservadas.
+
+⸻
+
+4. DASHBOARD DA OPERAÇÃO
+
+O dashboard deve apresentar uma visão rápida da situação operacional.
+
+Indicadores principais
+
+* Postura real;
+* Padrão ou meta de postura, quando definido;
+* Aves vivas;
+* Mortalidade do dia;
+* Mortalidade acumulada;
+* Ovos produzidos;
+* Ovos aproveitáveis;
+* Ovos quebrados;
+* Ovos descartados;
+* Consumo de ração;
+* Conversão alimentar, quando os dados necessários estiverem disponíveis;
+* Custo estimado por unidade, quando o cálculo estiver validado;
+* Registros pendentes;
+* Ocorrências abertas.
+
+Filtros
+
+O usuário deve poder filtrar por:
+
+* Período;
+* Galpão;
+* Lote;
+* Grupo de aves;
+* Situação operacional.
+
+O dashboard precisa mostrar claramente os filtros ativos e a data/hora da última atualização.
+
+Gráficos sugeridos
+
+1. Postura real x padrão
+
+Comparar a produção real com o padrão de referência aplicável ao lote ou grupo.
+
+O sistema deve permitir visualizar a evolução por dia e por período.
+
+2. Produção por galpão
+
+Comparar a quantidade produzida em cada galpão, respeitando os filtros selecionados.
+
+3. Mortalidade
+
+Mostrar a evolução diária e acumulada, com possibilidade de detalhamento por galpão e lote.
+
+4. Consumo x produção
+
+Relacionar o consumo de insumos com a produção, desde que os dados estejam disponíveis e sejam comparáveis.
+
+5. Perdas e aproveitamento
+
+Apresentar a quantidade de ovos produzidos, aproveitados, quebrados e descartados.
+
+Os gráficos devem permitir abrir os detalhes que deram origem aos indicadores.
+
+⸻
+
+5. REGISTRO DIÁRIO DA OPERAÇÃO
+
+Criar uma área para registrar as informações diárias da operação.
+
+O registro pode ser preenchido por uma pessoa responsável por cada galpão, setor ou atividade, conforme a definição da empresa.
+
+Dados básicos
+
+* Data;
+* Turno, quando aplicável;
+* Galpão;
+* Lote;
+* Responsável;
+* Horário do registro;
+* Status: pendente, registrado, conferido ou ajustado.
+
+Informações possíveis
+
+* Quantidade de aves vivas;
+* Mortalidade;
+* Produção de ovos;
+* Quebras;
+* Descartes;
+* Consumo de ração;
+* Consumo de água, se houver medição;
+* Ocorrências;
+* Observações da rotina.
+
+O sistema não deve obrigar o preenchimento de informações que a granja ainda não possui condições de medir. Os campos devem ser configuráveis conforme o processo real.
+
+Regras
+
+* Evitar registros duplicados para a mesma combinação de data, galpão, lote e tipo de atividade, quando isso não for permitido.
+* Validar unidades de medida.
+* Indicar campos obrigatórios.
+* Identificar registros incompletos.
+* Permitir correção autorizada.
+* Manter histórico de alterações.
+* Informar quem registrou e quem conferiu.
+
+⸻
+
+6. PRODUÇÃO DE OVOS
+
+A produção deve ser registrada de forma que o sistema consiga diferenciar produção bruta, perdas e quantidade aproveitável.
+
+Informações
+
+* Data da produção;
+* Galpão;
+* Lote;
+* Quantidade produzida;
+* Unidade de medida;
+* Classificação, quando aplicável;
+* Quantidade aproveitável;
+* Quantidade quebrada;
+* Quantidade descartada;
+* Motivo do descarte, quando registrado;
+* Responsável;
+* Observações.
+
+Regras de consistência
+
+O sistema deve permitir conferir se:
+
+Produção registrada = quantidade aproveitável + perdas classificadas + outras destinações registradas
+
+A fórmula final deve considerar as categorias efetivamente adotadas pela empresa e não deve presumir que toda diferença seja uma perda sem investigação.
+
+O sistema também deve evitar confundir:
+
+* Produção de um único dia;
+* Saldo de estoque de ovos;
+* Entradas e saídas de ovos;
+* Quantidade de caixas;
+* Quantidade de cartelas;
+* Quantidade total de ovos.
+
+A produção alimenta o estoque de ovos somente quando o registro for validado e a regra de integração estiver definida.
+
+⸻
+
+7. AVES E LOTES
+
+Criar uma estrutura que permita acompanhar as aves ao longo do ciclo produtivo.
+
+Cadastro e acompanhamento
+
+* Identificação do lote;
+* Galpão;
+* Data de entrada ou alojamento;
+* Quantidade inicial;
+* Categoria ou linhagem, quando aplicável;
+* Idade do lote;
+* Quantidade atual estimada ou registrada;
+* Histórico de movimentações;
+* Situação do lote;
+* Observações.
+
+Possíveis movimentações
+
+* Entrada;
+* Transferência;
+* Saída;
+* Mortalidade;
+* Ajuste autorizado;
+* Encerramento do lote.
+
+A quantidade de aves vivas deve ser calculada com base em movimentações registradas e conferidas, evitando depender somente de um número digitado manualmente no dashboard.
+
+O sistema deve permitir consultar o histórico do lote e a origem dos cálculos.
+
+⸻
+
+8. MORTALIDADE E OCORRÊNCIAS
+
+Criar um registro próprio para mortalidade e ocorrências operacionais.
+
+Mortalidade
+
+* Data;
+* Galpão;
+* Lote;
+* Quantidade;
+* Categoria, quando aplicável;
+* Motivo ou classificação, se houver registro confiável;
+* Responsável;
+* Observações.
+
+O sistema deve diferenciar dado registrado de causa confirmada. Se a causa não foi determinada, não deve ser apresentada como fato.
+
+Ocorrências
+
+Exemplos:
+
+* Problema em equipamento;
+* Falta ou interrupção de água;
+* Falha de energia;
+* Alteração de rotina;
+* Problema de ambiente;
+* Aumento de perdas;
+* Anormalidade na produção;
+* Ocorrência sanitária registrada pela equipe;
+* Outras situações relevantes.
+
+Cada ocorrência deve conter:
+
+* Data e hora;
+* Local;
+* Descrição;
+* Responsável pelo registro;
+* Prioridade;
+* Status;
+* Ação tomada;
+* Responsável pela solução;
+* Data de encerramento;
+* Anexos, quando necessários.
+
+Quando a ocorrência envolver equipamento, manutenção ou insumo, o sistema deve permitir relacioná-la ao módulo correspondente.
+
+⸻
+
+9. CONSUMO DE INSUMOS
+
+O consumo registrado na operação deve alimentar o módulo de estoque, respeitando as regras de integração.
+
+Informações
+
+* Data;
+* Galpão ou setor;
+* Lote, quando aplicável;
+* Produto ou insumo;
+* Quantidade;
+* Unidade de medida;
+* Responsável;
+* Tipo de movimentação;
+* Observações.
+
+Integração
+
+Quando o consumo for confirmado:
+
+Registro de consumo → movimentação de estoque → atualização do saldo → análise de consumo → possível necessidade de reposição
+
+O sistema deve diferenciar:
+
+* Consumo registrado;
+* Saída de estoque;
+* Perda;
+* Ajuste;
+* Transferência;
+* Devolução.
+
+A regra de integração deve evitar que o mesmo evento seja descontado duas vezes do estoque.
+
+Indicadores possíveis
+
+* Consumo por galpão;
+* Consumo por lote;
+* Consumo por período;
+* Consumo médio;
+* Comparação com padrão;
+* Variação do consumo;
+* Custo do consumo, quando houver preço e método de cálculo definidos.
+
+⸻
+
+10. PERDAS E QUEBRAS
+
+Criar uma área de controle das perdas operacionais e dos ovos.
+
+O sistema deve permitir registrar:
+
+* Tipo de perda;
+* Data;
+* Local;
+* Galpão;
+* Lote;
+* Produto ou item envolvido;
+* Quantidade;
+* Motivo informado;
+* Responsável;
+* Observações;
+* Ação tomada, quando aplicável.
+
+Objetivo
+
+Permitir analisar:
+
+* Evolução das perdas;
+* Perdas por galpão;
+* Perdas por período;
+* Perdas por tipo;
+* Impacto estimado na produção;
+* Impacto financeiro estimado, quando os critérios estiverem definidos.
+
+Não quero que o sistema apenas mostre que houve perda. Quero que seja possível identificar onde ela está ocorrendo e investigar possíveis padrões.
+
+⸻
+
+11. GALPÕES
+
+Criar o cadastro e o acompanhamento dos galpões.
+
+Informações
+
+* Identificação;
+* Nome ou código;
+* Capacidade definida pela gestão;
+* Situação;
+* Lote associado;
+* Equipamentos vinculados;
+* Responsáveis;
+* Histórico de ocorrências;
+* Observações.
+
+A capacidade e os parâmetros de cada galpão devem ser configuráveis, pois podem variar conforme a estrutura da empresa.
+
+O sistema deve permitir visualizar indicadores por galpão sem misturar automaticamente dados de lotes ou períodos diferentes.
+
+⸻
+
+12. INDICADORES E INTELIGÊNCIA
+
+A primeira versão pode começar com indicadores e regras objetivas. Posteriormente, podemos ampliar a análise com recursos de previsão e IA.
+
+Indicadores iniciais
+
+* Produção por dia;
+* Produção por galpão;
+* Postura real x padrão;
+* Mortalidade diária e acumulada;
+* Perdas;
+* Consumo de ração;
+* Conversão alimentar, se os dados forem suficientes;
+* Evolução de produção;
+* Evolução de consumo;
+* Registros pendentes.
+
+Possíveis alertas
+
+O sistema pode gerar alertas quando uma regra configurada for atendida.
+
+Exemplos:
+
+“A produção do Galpão 2 está abaixo do padrão definido para o período.”
+
+“O consumo de ração apresenta variação acima do limite configurado.”
+
+“Existem registros operacionais pendentes de conferência.”
+
+“Foi registrada uma ocorrência com status aberto.”
+
+“A quantidade de perdas está acima do limite de referência definido.”
+
+Os alertas devem informar:
+
+* O que aconteceu;
+* Período analisado;
+* Local ou lote afetado;
+* Critério que gerou o alerta;
+* Nível de prioridade;
+* Responsável pela análise;
+* Status do alerta.
+
+Não devemos apresentar uma variação como problema sem estabelecer o padrão, o período de comparação e o limite utilizado.
+
+⸻
+
+13. INTEGRAÇÕES COM OUTROS MÓDULOS
+
+Operação → Estoque
+
+A produção e o consumo devem gerar movimentações de estoque conforme regras validadas.
+
+Operação → Compras
+
+Quando o consumo e o saldo de estoque indicarem necessidade de reposição, o sistema pode gerar uma sugestão ou solicitação, conforme o nível de autorização definido.
+
+Operação → Manutenção
+
+Ocorrências relacionadas a equipamentos devem permitir abrir ou relacionar uma solicitação de manutenção.
+
+Operação → Financeiro
+
+A operação deve fornecer dados para análise de custos. O custo não deve ser calculado sem definir a origem dos preços, período, método de rateio e demais critérios necessários.
+
+Operação → Comercial
+
+A produção disponível e o estoque de ovos podem alimentar a visão de disponibilidade para vendas, sem confundir estoque físico com quantidade já comprometida em pedidos.
+
+Operação → Relatórios
+
+Os registros devem alimentar os indicadores e relatórios gerenciais.
+
+⸻
+
+14. PERMISSÕES E RESPONSABILIDADES
+
+Definir quais perfis podem:
+
+* Registrar dados;
+* Editar registros;
+* Conferir informações;
+* Aprovar ajustes;
+* Encerrar ocorrências;
+* Consultar indicadores;
+* Exportar relatórios;
+* Alterar parâmetros e padrões.
+
+Cada alteração relevante deve registrar usuário, data, horário e justificativa quando aplicável.
+
+O objetivo é distribuir as tarefas da operação sem perder rastreabilidade e controle gerencial.
+
+⸻
+
+15. ORDEM DE IMPLEMENTAÇÃO
+
+Sugestão para a primeira versão:
+
+Etapa 1 — Base
+
+* Cadastro de galpões;
+* Cadastro de lotes;
+* Cadastro de responsáveis;
+* Estrutura de registros;
+* Permissões;
+* Histórico de alterações.
+
+Etapa 2 — Registro operacional
+
+* Registro diário;
+* Produção;
+* Mortalidade;
+* Perdas;
+* Ocorrências;
+* Consumo de insumos.
+
+Etapa 3 — Conferência e integração
+
+* Validação dos registros;
+* Integração com estoque;
+* Relacionamento com manutenção;
+* Integração com indicadores;
+* Pendências de preenchimento.
+
+Etapa 4 — Dashboard
+
+* Cards de indicadores;
+* Filtros;
+* Gráficos;
+* Comparações;
+* Alertas;
+* Acesso aos detalhes.
+
+Etapa 5 — Inteligência
+
+* Tendências;
+* Regras de desvio;
+* Projeções;
+* Relação entre consumo e produção;
+* Impactos nos custos;
+* Apoio à decisão.
+
+⸻
+
+16. CRITÉRIOS DE ACEITAÇÃO
+
+Antes de considerar o módulo pronto, precisamos testar se:
+
+1. Um registro diário pode ser criado com os campos necessários.
+2. O registro fica vinculado ao galpão, lote e responsável corretos.
+3. O sistema evita duplicidades conforme as regras definidas.
+4. Os registros podem ser conferidos e ajustados com histórico.
+5. A produção registrada não é confundida com o saldo de estoque.
+6. O consumo de insumos se integra ao estoque sem duplicidade.
+7. Os indicadores são calculados a partir de dados identificáveis.
+8. Os filtros alteram os resultados corretamente.
+9. Os alertas mostram o critério que os gerou.
+10. As permissões impedem alterações não autorizadas.
+11. É possível consultar os detalhes por trás de cada indicador.
+12. Os dados da operação podem alimentar os módulos financeiro, compras, manutenção e relatórios.
+
+17. RESULTADO ESPERADO
+
+Quero que a aba Operação deixe de ser apenas uma tela de lançamento de informações e se torne uma ferramenta de acompanhamento da operação.
+
+O sistema deve permitir:
+
+* Registrar o que aconteceu;
+* Acompanhar a produção;
+* Identificar alterações;
+* Entender perdas e consumo;
+* Relacionar ocorrências;
+* Alimentar os demais módulos;
+* Mostrar situações que precisam de atenção;
+* Construir histórico para futuras análises.
+
+A operação deve fornecer dados confiáveis para que a gestão consiga trabalhar com mais controle, previsão e capacidade de decisão.

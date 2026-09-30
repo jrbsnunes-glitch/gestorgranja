@@ -27,6 +27,9 @@ export const DEFAULT_PERMISSIONS = [
   { code: 'cash.read', module: 'cash', action: 'read' },
   { code: 'cash.write', module: 'cash', action: 'write' },
   { code: 'cash.reconcile', module: 'cash', action: 'reconcile' },
+  { code: 'fiscal.read', module: 'fiscal', action: 'read' },
+  { code: 'fiscal.write', module: 'fiscal', action: 'write' },
+  { code: 'fiscal.emit', module: 'fiscal', action: 'emit' },
 ] as const;
 
 export const DEFAULT_ROLES = [
@@ -63,7 +66,17 @@ export const DEFAULT_ROLES = [
   },
   {
     name: 'financeiro',
-    permissions: ['finance.write', 'inventory.write', 'purchasing.write', 'reports.read', 'sales.write', 'cash.write'],
+    permissions: [
+      'finance.write',
+      'inventory.write',
+      'purchasing.write',
+      'reports.read',
+      'sales.write',
+      'cash.write',
+      'fiscal.read',
+      'fiscal.write',
+      'fiscal.emit',
+    ],
   },
   {
     name: 'rh',

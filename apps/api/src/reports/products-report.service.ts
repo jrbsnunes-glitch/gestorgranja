@@ -177,7 +177,10 @@ export class ProductsReportService {
 
   private async reportGeral(user: JwtPayload, query: ProductsReportQuery) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
-    const products = await prisma.product.findMany({ orderBy: { name: 'asc' } });
+    const products = await prisma.product.findMany({
+      include: { fiscalSituation: { select: { ncm: true } } },
+      orderBy: { name: 'asc' },
+    });
     const columns = [
       { key: 'sku', label: 'SKU' },
       { key: 'name', label: 'Nome' },
@@ -192,7 +195,7 @@ export class ProductsReportService {
       type: labelProductType(p.type),
       unit: p.unit,
       minStock: dec(p.minStockQty),
-      ncm: p.ncm ?? '—',
+      ncm: p.fiscalSituation?.ncm ?? '—',
     }));
     return {
       variant: query.variant,

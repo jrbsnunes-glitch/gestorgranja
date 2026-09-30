@@ -45,15 +45,10 @@ export class CreateProductDto {
   @IsOptional()
   minStockQty?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Situação fiscal (NCM, CST, IBS/CBS) em Cadastros → Situação fiscal' })
   @IsString()
   @IsOptional()
   fiscalSituationId?: string;
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  ncm?: string;
 
   @ApiPropertyOptional()
   @IsString()
@@ -63,5 +58,5 @@ export class CreateProductDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
-  fiscalCst?: string;
+  gtin?: string;
 }

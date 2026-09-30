@@ -24,7 +24,14 @@ import { apiFetch } from '@/lib/api';
 import { labelEnum, PRODUCT_TYPES } from '@/lib/labels';
 import { formatBrl, formatPct } from '@/lib/money';
 
-type Fiscal = { id: string; code: string; description: string; isActive?: boolean };
+type Fiscal = {
+  id: string;
+  code: string;
+  description: string;
+  ncm?: string | null;
+  fiscalCst?: string | null;
+  isActive?: boolean;
+};
 type PriceHistoryRow = {
   id: string;
   salePrice: number;
@@ -48,9 +55,8 @@ type Product = {
   averageCost: number;
   profit: number | null;
   profitMarginPct: number | null;
-  ncm: string | null;
+  gtin: string | null;
   fiscalOrigin: string | null;
-  fiscalCst: string | null;
   fiscalSituationId: string | null;
   fiscalSituation: Fiscal | null;
 };
@@ -117,7 +123,7 @@ export default function ProdutosPage() {
       p.name,
       p.description,
       p.type,
-      p.ncm,
+      p.fiscalSituation?.ncm,
       p.group?.name,
     ],
     extraFilter: (p) => matchesProductFilters(p, productFilterApplied),
@@ -127,7 +133,7 @@ export default function ProdutosPage() {
   const load = useCallback(() => {
     void apiFetch<Product[]>('/v1/inventory/products').then(setRows);
     void apiFetch<ProductGroup[]>('/v1/inventory/product-groups').then(setGroups);
-    void apiFetch<Fiscal[]>('/v1/cadastros/general/fiscal-situations').then(setFiscal);
+    void apiFetch<Fiscal[]>('/v1/cadastros/general/fiscal-situations?activeOnly=1').then(setFiscal);
   }, []);
 
   useEffect(() => {
@@ -194,9 +200,8 @@ export default function ProdutosPage() {
       unit: fd.get('unit') || 'UN',
       minStockQty: Number(fd.get('minStockQty') ?? 0),
       salePrice: salePrice != null && Number.isFinite(salePrice) ? salePrice : null,
-      ncm: String(fd.get('ncm') || '') || null,
+      gtin: String(fd.get('gtin') || '') || null,
       fiscalOrigin: String(fd.get('fiscalOrigin') || '') || null,
-      fiscalCst: String(fd.get('fiscalCst') || '') || null,
       fiscalSituationId: fiscalSituationId || null,
     };
 
@@ -215,9 +220,8 @@ export default function ProdutosPage() {
             ...payload,
             groupId: groupId || undefined,
             fiscalSituationId: fiscalSituationId || undefined,
-            ncm: payload.ncm || undefined,
+            gtin: payload.gtin || undefined,
             fiscalOrigin: payload.fiscalOrigin || undefined,
-            fiscalCst: payload.fiscalCst || undefined,
           }),
         });
       }
@@ -240,7 +244,7 @@ export default function ProdutosPage() {
           list={list}
           onInclude={openInclude}
           onReports={() => setReportsOpen(true)}
-          searchPlaceholder="SKU, nome, grupo, NCM…"
+          searchPlaceholder="SKU, nome, grupo…"
           filtersActive={list.filtersActive || productFiltersActive(productFilterApplied)}
           onFilterApply={() => setProductFilterApplied(productFilterDraft)}
           onFilterClear={() => {
@@ -385,19 +389,20 @@ export default function ProdutosPage() {
               {fiscalActive.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.code} — {f.description}
+                  {f.ncm ? ` · NCM ${f.ncm}` : ''}
                 </option>
               ))}
             </select>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              NCM, CST e IBS/CBS em Cadastros → Situação fiscal. CFOP na NF-e via Natureza da operação.
+            </p>
           </Field>
 
-          <Field label="NCM">
-            <input name="ncm" className={inputClass} defaultValue={selected?.ncm ?? ''} />
+          <Field label="GTIN / EAN (código de barras)">
+            <input name="gtin" className={inputClass} defaultValue={selected?.gtin ?? ''} placeholder="SEM GTIN" />
           </Field>
-          <Field label="Origem fiscal">
-            <input name="fiscalOrigin" className={inputClass} defaultValue={selected?.fiscalOrigin ?? ''} />
-          </Field>
-          <Field label="CST">
-            <input name="fiscalCst" className={inputClass} defaultValue={selected?.fiscalCst ?? ''} />
+          <Field label="Origem do produto (ICMS)">
+            <input name="fiscalOrigin" className={inputClass} defaultValue={selected?.fiscalOrigin ?? ''} placeholder="0" />
           </Field>
 
           <Field label="Preço de venda (R$)">
@@ -466,12 +471,13 @@ export default function ProdutosPage() {
                     {
                       label: 'Situação fiscal',
                       value: selected.fiscalSituation
-                        ? `${selected.fiscalSituation.code} — ${selected.fiscalSituation.description}`
+                        ? `${selected.fiscalSituation.code} — ${selected.fiscalSituation.description}${
+                            selected.fiscalSituation.ncm ? ` · NCM ${selected.fiscalSituation.ncm}` : ''
+                          }`
                         : '—',
                     },
-                    { label: 'NCM', value: selected.ncm ?? '—' },
-                    { label: 'Origem fiscal', value: selected.fiscalOrigin ?? '—' },
-                    { label: 'CST', value: selected.fiscalCst ?? '—' },
+                    { label: 'GTIN', value: selected.gtin ?? '—' },
+                    { label: 'Origem (ICMS)', value: selected.fiscalOrigin ?? '—' },
                   ],
                 },
                 {

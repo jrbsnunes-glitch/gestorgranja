@@ -12,7 +12,11 @@ export class CommercialService {
       p.salesOrder.findMany({
         orderBy: { orderDate: 'desc' },
         take: 200,
-        include: { partner: true, items: { include: { product: true } } },
+        include: {
+          partner: true,
+          items: { include: { product: true } },
+          fiscalDoc: true,
+        },
       }),
     );
   }

@@ -68,6 +68,7 @@ export const APP_MODULES: AppModule[] = [
     tabs: [
       { id: 'vendas', label: 'Vendas', href: '/vendas' },
       { id: 'caixa', label: 'Caixa', href: '/vendas/caixa' },
+      { id: 'fiscal', label: 'Documentos fiscais', href: '/vendas/documentos-fiscais' },
     ],
   },
   {
@@ -110,15 +111,28 @@ export const APP_MODULES: AppModule[] = [
     label: 'Dados da empresa',
     href: '/empresa',
     match: (p) => pathUnder(p, '/empresa'),
+    tabs: [
+      { id: 'cadastro', label: 'Cadastro', href: '/empresa' },
+      { id: 'fiscal', label: 'Emissor fiscal', href: '/empresa/fiscal' },
+    ],
   },
   {
     id: 'cadastros',
     label: 'Cadastros',
     href: '/cadastros-gerais',
     match: (p) =>
-      matchAny(p, ['/cadastros-gerais', '/cadastros/turnos', '/cadastros/plano-contas', '/cadastros/formas-pagamento']),
+      matchAny(p, [
+        '/cadastros-gerais',
+        '/cadastros/turnos',
+        '/cadastros/plano-contas',
+        '/cadastros/formas-pagamento',
+        '/cadastros/situacao-fiscal',
+        '/cadastros/natureza-operacao',
+      ]),
     tabs: [
       { id: 'gerais', label: 'Cadastros gerais', href: '/cadastros-gerais' },
+      { id: 'fiscal-sit', label: 'Situação fiscal', href: '/cadastros/situacao-fiscal' },
+      { id: 'nat-op', label: 'Natureza da operação', href: '/cadastros/natureza-operacao' },
       { id: 'turnos', label: 'Turnos', href: '/cadastros/turnos' },
       { id: 'plano', label: 'Plano de contas', href: '/cadastros/plano-contas' },
       { id: 'pagamento', label: 'Formas de pagamento', href: '/cadastros/formas-pagamento' },

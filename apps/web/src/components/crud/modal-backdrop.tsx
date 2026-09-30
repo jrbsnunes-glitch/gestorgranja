@@ -27,7 +27,7 @@ export function ModalBackdrop({
       : 'items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4';
   return (
     <div
-      className={`fixed inset-0 z-50 flex ${alignClass} ${className}`}
+      className={`fixed inset-0 z-[100] flex ${alignClass} ${className}`}
       role="presentation"
     >
       <div

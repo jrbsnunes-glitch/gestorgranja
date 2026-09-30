@@ -199,7 +199,18 @@ export function filterModuleTabs(
       const c = mod.tabs.find((t) => t.id === 'caixa');
       if (c) tabs.push(c);
     }
+    if (hasAnyPermission(session, ['fiscal.read', 'fiscal.emit', 'sales.write'])) {
+      const f = mod.tabs.find((t) => t.id === 'fiscal');
+      if (f) tabs.push(f);
+    }
     return tabs;
+  }
+
+  if (mod.id === 'empresa') {
+    if (!hasAnyPermission(session, ['cadastros.read', 'cadastros.write', 'fiscal.read', 'fiscal.write'])) {
+      return [];
+    }
+    return mod.tabs ?? [];
   }
 
   if (mod.id === 'financeiro') {

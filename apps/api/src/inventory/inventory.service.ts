@@ -36,13 +36,21 @@ function mapProductRow(
     unit: string;
     minStockQty: { toString(): string };
     salePrice: { toString(): string } | null;
-    ncm: string | null;
+    gtin: string | null;
     fiscalOrigin: string | null;
-    fiscalCst: string | null;
     fiscalSituationId: string | null;
     groupId: string | null;
     group: { id: string; code: string; name: string } | null;
-    fiscalSituation: { id: string; code: string; description: string } | null;
+    fiscalSituation: {
+      id: string;
+      code: string;
+      description: string;
+      ncm?: string | null;
+      cest?: string | null;
+      fiscalCst?: string | null;
+      ibsCst?: string | null;
+      ibsClassTrib?: string | null;
+    } | null;
   },
   costMap: Map<string, { qty: number; averageCost: number }>,
 ) {
@@ -70,9 +78,8 @@ function mapProductRow(
     stockQty: cost?.qty ?? 0,
     profit,
     profitMarginPct,
-    ncm: p.ncm,
+    gtin: p.gtin,
     fiscalOrigin: p.fiscalOrigin,
-    fiscalCst: p.fiscalCst,
     fiscalSituationId: p.fiscalSituationId,
     fiscalSituation: p.fiscalSituation,
   };
@@ -143,7 +150,18 @@ export class InventoryService {
       orderBy: { name: 'asc' },
       include: {
         group: { select: { id: true, code: true, name: true } },
-        fiscalSituation: { select: { id: true, code: true, description: true } },
+        fiscalSituation: {
+          select: {
+            id: true,
+            code: true,
+            description: true,
+            ncm: true,
+            cest: true,
+            fiscalCst: true,
+            ibsCst: true,
+            ibsClassTrib: true,
+          },
+        },
       },
     });
     const costMap = await this.costMapForProducts(
@@ -183,13 +201,23 @@ export class InventoryService {
           groupId: dto.groupId || undefined,
           salePrice: dto.salePrice ?? undefined,
           fiscalSituationId: dto.fiscalSituationId,
-          ncm: dto.ncm,
+          gtin: dto.gtin,
           fiscalOrigin: dto.fiscalOrigin,
-          fiscalCst: dto.fiscalCst,
         },
         include: {
           group: { select: { id: true, code: true, name: true } },
-          fiscalSituation: { select: { id: true, code: true, description: true } },
+          fiscalSituation: {
+            select: {
+              id: true,
+              code: true,
+              description: true,
+              ncm: true,
+              cest: true,
+              fiscalCst: true,
+              ibsCst: true,
+              ibsClassTrib: true,
+            },
+          },
         },
       });
       if (dto.salePrice != null) {
@@ -344,13 +372,23 @@ export class InventoryService {
           minStockQty: data.minStockQty,
           salePrice: data.salePrice === null ? null : data.salePrice,
           fiscalSituationId: data.fiscalSituationId === null ? null : data.fiscalSituationId,
-          ncm: data.ncm === null ? null : data.ncm,
+          gtin: data.gtin === null ? null : data.gtin,
           fiscalOrigin: data.fiscalOrigin === null ? null : data.fiscalOrigin,
-          fiscalCst: data.fiscalCst === null ? null : data.fiscalCst,
         },
         include: {
           group: { select: { id: true, code: true, name: true } },
-          fiscalSituation: { select: { id: true, code: true, description: true } },
+          fiscalSituation: {
+            select: {
+              id: true,
+              code: true,
+              description: true,
+              ncm: true,
+              cest: true,
+              fiscalCst: true,
+              ibsCst: true,
+              ibsClassTrib: true,
+            },
+          },
         },
       });
 
@@ -386,7 +424,18 @@ export class InventoryService {
     const products = await prisma.product.findMany({
       include: {
         group: { select: { id: true, code: true, name: true } },
-        fiscalSituation: { select: { id: true, code: true, description: true } },
+        fiscalSituation: {
+          select: {
+            id: true,
+            code: true,
+            description: true,
+            ncm: true,
+            cest: true,
+            fiscalCst: true,
+            ibsCst: true,
+            ibsClassTrib: true,
+          },
+        },
       },
     });
     const productIds = products.map((p) => p.id);

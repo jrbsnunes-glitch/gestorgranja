@@ -11,7 +11,12 @@ import {
   useCrudList,
 } from '@/components/crud';
 import { ListToolbar, PaginatedTable, RowActions, TabBar, usePagination, type ModalMode } from '@/components/list-crud';
-import { PartnerForm, partnerToForm, type PartnerFormValues } from '@/components/partner-form';
+import {
+  PartnerForm,
+  partnerIeModeFromRegistration,
+  partnerToForm,
+  type PartnerFormValues,
+} from '@/components/partner-form';
 import { ErrorBox } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCep } from '@/lib/viacep';
@@ -212,7 +217,7 @@ export default function ParceirosPage() {
           hideSubmit
           initial={formInitial()}
           submitLabel="Salvar"
-          showStateRegistration={tab === 'fornecedores'}
+          showStateRegistration
           onSubmit={save}
         />
       </FormCadastroModal>
@@ -233,6 +238,15 @@ export default function ParceirosPage() {
                     { label: 'Nome fantasia', value: selected.tradeName ?? '—' },
                     { label: 'CPF', value: selected.cpf ?? '—' },
                     { label: 'CNPJ', value: selected.cnpj ?? '—' },
+                    {
+                      label: 'Situação ICMS',
+                      value:
+                        partnerIeModeFromRegistration(selected.stateRegistration) === 'nao_contribuinte'
+                          ? 'Não contribuinte'
+                          : partnerIeModeFromRegistration(selected.stateRegistration) === 'isento'
+                            ? 'Isento de IE'
+                            : 'Contribuinte',
+                    },
                     { label: 'IE', value: selected.stateRegistration ?? '—' },
                   ],
                 },

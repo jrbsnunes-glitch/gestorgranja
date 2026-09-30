@@ -64,6 +64,7 @@ export function MiniPdvModal({
   const [busy, setBusy] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [expenseBusy, setExpenseBusy] = useState(false);
+  const [emitNfce, setEmitNfce] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reset = useCallback(() => {
@@ -153,6 +154,19 @@ export function MiniPdvModal({
         }),
       });
       await apiFetch(`/v1/commercial/orders/${created.id}/confirm`, { method: 'POST', body: '{}' });
+      if (emitNfce) {
+        try {
+          await apiFetch(`/v1/fiscal/emit/${created.id}?type=NFCE`, { method: 'POST', body: '{}' });
+        } catch (nfceErr) {
+          setError(
+            nfceErr instanceof Error
+              ? `Venda confirmada, mas NFC-e falhou: ${nfceErr.message}`
+              : 'Venda confirmada, mas NFC-e falhou',
+          );
+          onCompleted?.();
+          return;
+        }
+      }
       onClose();
       onCompleted?.();
       navigateToReportPrint(
@@ -326,6 +340,14 @@ export function MiniPdvModal({
           ) : (
             <div className="w-full">
               <p className="mb-2 text-sm text-slate-600">Total da venda: {formatBrl(subtotal)}</p>
+              <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={emitNfce}
+                  onChange={(e) => setEmitNfce(e.target.checked)}
+                />
+                Emitir NFC-e após confirmar (requer emissor configurado)
+              </label>
               <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-slate-800">
                 <input
                   type="checkbox"
