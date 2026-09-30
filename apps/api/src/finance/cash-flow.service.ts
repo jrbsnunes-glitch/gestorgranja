@@ -48,7 +48,7 @@ export class CashFlowService {
       if (settled && paidAt && paidAt >= from && paidAt <= to) {
         rows.push({
           date: paidAt.toISOString().slice(0, 10),
-          kind: 'CP paga',
+          kind: 'Contas a pagar pagas',
           description: p.description,
           inflow: 0,
           outflow: dec(p.amountPaid),
@@ -57,7 +57,7 @@ export class CashFlowService {
       } else if (includePayables && !settled && p.dueDate >= from && p.dueDate <= to) {
         rows.push({
           date: p.dueDate.toISOString().slice(0, 10),
-          kind: 'CP prevista',
+          kind: 'Contas a pagar previstas',
           description: p.description,
           inflow: 0,
           outflow: titleBalance(p.amount, p.amountPaid),
@@ -73,7 +73,7 @@ export class CashFlowService {
       if (settled && receivedAt && receivedAt >= from && receivedAt <= to) {
         rows.push({
           date: receivedAt.toISOString().slice(0, 10),
-          kind: 'CR recebida',
+          kind: 'Contas a receber recebidas',
           description: r.description,
           inflow: dec(r.amountPaid),
           outflow: 0,
@@ -82,7 +82,7 @@ export class CashFlowService {
       } else if (includeReceivables && !settled && r.dueDate >= from && r.dueDate <= to) {
         rows.push({
           date: r.dueDate.toISOString().slice(0, 10),
-          kind: 'CR prevista',
+          kind: 'Contas a receber previstas',
           description: r.description,
           inflow: titleBalance(r.amount, r.amountPaid),
           outflow: 0,

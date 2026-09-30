@@ -84,8 +84,8 @@ export const APP_MODULES: AppModule[] = [
     match: (p) => pathUnder(p, '/financeiro'),
     tabs: [
       { id: 'visao', label: 'Visão geral', href: '/financeiro/visao' },
-      { id: 'pagar', label: 'Pagar', href: '/financeiro/pagar' },
-      { id: 'receber', label: 'Receber', href: '/financeiro/receber' },
+      { id: 'pagar', label: 'Contas a pagar', href: '/financeiro/pagar' },
+      { id: 'receber', label: 'Contas a receber', href: '/financeiro/receber' },
       { id: 'fluxo', label: 'Fluxo', href: '/financeiro/fluxo' },
       { id: 'bancos', label: 'Bancos', href: '/financeiro/bancos' },
     ],

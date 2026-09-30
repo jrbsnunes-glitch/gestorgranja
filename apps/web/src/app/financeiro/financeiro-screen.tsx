@@ -454,7 +454,7 @@ export function FinanceiroScreen({
               Cancelar
             </Button>
             <Button type="submit" form="payable-form">
-              {fixedRecurring ? 'Salvar conta fixa' : 'Incluir CP'}
+              {fixedRecurring ? 'Salvar conta fixa' : 'Incluir conta a pagar'}
             </Button>
           </>
         }
@@ -484,7 +484,7 @@ export function FinanceiroScreen({
               Cancelar
             </Button>
             <Button type="submit" form="receivable-form">
-              {fixedRecurring ? 'Salvar conta fixa' : 'Incluir CR'}
+              {fixedRecurring ? 'Salvar conta fixa' : 'Incluir conta a receber'}
             </Button>
           </>
         }
@@ -504,7 +504,7 @@ export function FinanceiroScreen({
       <RecordViewModal
         open={viewPayOpen}
         onClose={() => setViewPayOpen(false)}
-        title="Visualizar CP"
+        title="Visualizar conta a pagar"
         sections={
           viewPay
             ? [
@@ -564,7 +564,7 @@ export function FinanceiroScreen({
       <RecordViewModal
         open={viewRecOpen}
         onClose={() => setViewRecOpen(false)}
-        title="Visualizar CR"
+        title="Visualizar conta a receber"
         sections={
           viewRec
             ? [
@@ -612,7 +612,7 @@ export function FinanceiroScreen({
       <FormCadastroModal
         open={settlementOpen === 'pay' && viewPay != null}
         onClose={() => setSettlementOpen(null)}
-        title="Registrar pagamento (CP)"
+        title="Registrar pagamento (conta a pagar)"
         wide
         footer={
           <>
@@ -641,7 +641,7 @@ export function FinanceiroScreen({
       <FormCadastroModal
         open={settlementOpen === 'rec' && viewRec != null}
         onClose={() => setSettlementOpen(null)}
-        title="Registrar recebimento (CR)"
+        title="Registrar recebimento (conta a receber)"
         wide
         footer={
           <>

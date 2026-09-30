@@ -645,7 +645,7 @@ export default function ComprasPage() {
             <Field label="Conta contábil">
               <ChartAccountSelect name="chartAccountId" flow="payable" required />
             </Field>
-            <SubmitButton label="Gerar CP do pedido" />
+            <SubmitButton label="Gerar contas a pagar do pedido" />
           </form>
         ) : selected?.order?.payablesGenerated ? (
           <p className="mt-4 text-sm text-emerald-800">Contas a pagar já geradas para este pedido.</p>

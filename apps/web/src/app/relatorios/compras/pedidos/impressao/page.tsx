@@ -172,7 +172,7 @@ function PrintBody() {
                 data.orderRows.map((r) => {
                   const flags = [
                     r.financeApproved ? 'Fin. aprovado' : null,
-                    r.payablesGenerated ? 'CP gerada' : null,
+                    r.payablesGenerated ? 'Contas a pagar geradas' : null,
                     r.receivedAt ? 'Recebido' : null,
                   ]
                     .filter(Boolean)

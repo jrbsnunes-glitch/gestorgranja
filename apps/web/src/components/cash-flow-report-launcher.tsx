@@ -60,7 +60,7 @@ export function CashFlowReportLauncher() {
               checked={filters.includePayables}
               onChange={(e) => patch({ includePayables: e.target.checked })}
             />
-            CP previstas
+            Contas a pagar previstas
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -68,7 +68,7 @@ export function CashFlowReportLauncher() {
               checked={filters.includeReceivables}
               onChange={(e) => patch({ includeReceivables: e.target.checked })}
             />
-            CR previstas
+            Contas a receber previstas
           </label>
           <label className="flex items-center gap-2">
             <input

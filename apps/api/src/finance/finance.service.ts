@@ -281,7 +281,7 @@ export class FinanceService {
       include: { purchaseRequest: true },
     });
     if (!order) throw new NotFoundException('Pedido não encontrado');
-    if (order.payablesGenerated) throw new BadRequestException('CP já geradas para este pedido');
+    if (order.payablesGenerated) throw new BadRequestException('Contas a pagar já geradas para este pedido');
 
     const terms = parsePaymentTerms(order.paymentTermsJson);
     if (!terms.length) throw new BadRequestException('Defina parcelas de pagamento no pedido');

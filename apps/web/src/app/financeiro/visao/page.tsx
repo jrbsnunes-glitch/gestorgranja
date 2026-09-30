@@ -122,13 +122,13 @@ export default function FinanceiroVisaoPage() {
       {data ? (
         <>
           <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <ClickableKpi href="/financeiro/pagar?dueDays=3" label="CP vence em 3 dias" value={formatBrl(data.payables.dueNext3)} tone="warn" />
-            <ClickableKpi href="/financeiro/pagar?overdue=1" label="CP vencidas" value={formatBrl(data.payables.overdue)} tone={data.payables.overdue > 0 ? 'bad' : 'default'} />
-            <ClickableKpi href="/financeiro/receber?dueDays=3" label="CR vence em 3 dias" value={formatBrl(data.receivables.dueNext3)} />
-            <ClickableKpi href="/financeiro/receber?overdue=1" label="CR vencidas" value={formatBrl(data.receivables.overdue)} tone={data.receivables.overdue > 0 ? 'bad' : 'default'} />
-            <ClickableKpi href="/financeiro/pagar" label="CP em aberto" value={formatBrl(data.payables.open)} />
-            <ClickableKpi href="/financeiro/receber" label="CR em aberto" value={formatBrl(data.receivables.open)} />
-            <ClickableKpi href="/financeiro/fluxo" label="Fluxo (7 dias CP)" value={formatBrl(data.payables.dueNext7)} sub={`CR: ${formatBrl(data.receivables.dueNext7)}`} />
+            <ClickableKpi href="/financeiro/pagar?dueDays=3" label="Contas a pagar vencem em 3 dias" value={formatBrl(data.payables.dueNext3)} tone="warn" />
+            <ClickableKpi href="/financeiro/pagar?overdue=1" label="Contas a pagar vencidas" value={formatBrl(data.payables.overdue)} tone={data.payables.overdue > 0 ? 'bad' : 'default'} />
+            <ClickableKpi href="/financeiro/receber?dueDays=3" label="Contas a receber vencem em 3 dias" value={formatBrl(data.receivables.dueNext3)} />
+            <ClickableKpi href="/financeiro/receber?overdue=1" label="Contas a receber vencidas" value={formatBrl(data.receivables.overdue)} tone={data.receivables.overdue > 0 ? 'bad' : 'default'} />
+            <ClickableKpi href="/financeiro/pagar" label="Contas a pagar em aberto" value={formatBrl(data.payables.open)} />
+            <ClickableKpi href="/financeiro/receber" label="Contas a receber em aberto" value={formatBrl(data.receivables.open)} />
+            <ClickableKpi href="/financeiro/fluxo" label="Fluxo (7 dias — a pagar)" value={formatBrl(data.payables.dueNext7)} sub={`Contas a receber: ${formatBrl(data.receivables.dueNext7)}`} />
             <ClickableKpi href="/alertas" label="Alertas abertos" value={String(data.openAlertsCount ?? data.alerts.length)} tone={(data.openAlertsCount ?? data.alerts.length) > 0 ? 'warn' : 'default'} />
           </div>
           {data.budgetProgress && data.budgetProgress.length > 0 ? (
@@ -168,7 +168,7 @@ export default function FinanceiroVisaoPage() {
           <PageCard title="Entradas, saídas e vencimentos">
             <p className="mb-3 text-xs text-slate-500">
               Últimos 7 dias: recebimentos e pagamentos registrados. Próximos 30 dias: títulos em aberto com vencimento
-              na data (CR e CP).
+              na data (contas a receber e a pagar).
             </p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -187,7 +187,7 @@ export default function FinanceiroVisaoPage() {
                   <Line
                     type="monotone"
                     dataKey="crAVencer"
-                    name="CR a vencer"
+                    name="Contas a receber a vencer"
                     stroke="#047857"
                     strokeWidth={2}
                     dot={false}
@@ -196,7 +196,7 @@ export default function FinanceiroVisaoPage() {
                   <Line
                     type="monotone"
                     dataKey="cpAVencer"
-                    name="CP a vencer"
+                    name="Contas a pagar a vencer"
                     stroke="#be123c"
                     strokeWidth={2}
                     dot={false}
@@ -210,7 +210,7 @@ export default function FinanceiroVisaoPage() {
             <p className="mb-3 text-sm text-slate-600">
               O saldo exibido em <strong className="font-medium text-slate-800">Bancos</strong> é informado manualmente e{' '}
               <strong className="font-medium text-slate-800">não</strong> acompanha cada pagamento ou recebimento
-              automaticamente. Para ver entradas, saídas e saldo acumulado no período (com CP, CR, caixa e compras
+              automaticamente. Para ver entradas, saídas e saldo acumulado no período (com contas a pagar, contas a receber, caixa e compras
               previstas), use o fluxo de caixa.
             </p>
             <div className="flex flex-wrap gap-2">
@@ -224,7 +224,7 @@ export default function FinanceiroVisaoPage() {
               </Link>
             </div>
           </PageCard>
-          <PageCard title="Concentração — clientes (CR)">
+          <PageCard title="Concentração — clientes (contas a receber)">
             <ul className="space-y-2 text-sm">
               {data.topClients.length === 0 ? (
                 <li className="text-slate-500">Nenhum título em aberto.</li>
@@ -287,11 +287,11 @@ export default function FinanceiroVisaoPage() {
             </Field>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="enablePaymentDue" defaultChecked={settings.enablePaymentDue} />
-              CP a vencer
+              Contas a pagar a vencer
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="enableReceivableOverdue" defaultChecked={settings.enableReceivableOverdue} />
-              CR atrasadas
+              Contas a receber atrasadas
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="enableBudgetPace" defaultChecked={settings.enableBudgetPace} />

@@ -104,7 +104,7 @@ export default function FinanceiroBancosPage() {
     <AdminShell title="Financeiro — Bancos">
       <PageIntro
         title="Bancos e orçamento"
-        description="Contas bancárias alimentam o saldo inicial do fluxo. Orçamento mensal compara CP pagas (e manutenção com a mesma conta contábil) com a meta planejada."
+        description="Contas bancárias alimentam o saldo inicial do fluxo. Orçamento mensal compara contas a pagar pagas (e manutenção com a mesma conta contábil) com a meta planejada."
       />
       <ErrorBox message={error} />
       <PageCard title="Contas bancárias">
@@ -200,12 +200,12 @@ export default function FinanceiroBancosPage() {
           </ResponsiveTableWrap>
         )}
         <p className="mt-3 text-xs text-slate-500">
-          Realizado: CP pagas no mês com a mesma conta contábil. Manutenção de patrimônio entra só se informada com essa
+          Realizado: contas a pagar pagas no mês com a mesma conta contábil. Manutenção de patrimônio entra só se informada com essa
           conta no cadastro da manutenção.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" variant="secondary" onClick={() => navigateToReportPrint('/relatorios/financeiro/aging/impressao')}>
-            Relatório aging CR
+            Relatório aging — contas a receber
           </Button>
           <Link href="/financeiro/visao">
             <Button type="button" variant="secondary">

@@ -105,7 +105,7 @@ export default function FinanceiroFluxoPage() {
 
   return (
     <AdminShell title="Financeiro — Fluxo">
-      <PageIntro title="Fluxo de caixa" description="Realizado e previsto (CP, CR, compras e caixa)." />
+      <PageIntro title="Fluxo de caixa" description="Realizado e previsto (contas a pagar, contas a receber, compras e caixa)." />
       <ErrorBox message={error} />
       <CrudToolbar
         leadingPrimary={
@@ -148,7 +148,7 @@ export default function FinanceiroFluxoPage() {
                 checked={draft.includePayables}
                 onChange={(e) => setDraft((f) => ({ ...f, includePayables: e.target.checked }))}
               />
-              CP previstas
+              Contas a pagar previstas
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -156,7 +156,7 @@ export default function FinanceiroFluxoPage() {
                 checked={draft.includeReceivables}
                 onChange={(e) => setDraft((f) => ({ ...f, includeReceivables: e.target.checked }))}
               />
-              CR previstas
+              Contas a receber previstas
             </label>
             <label className="flex items-center gap-2">
               <input

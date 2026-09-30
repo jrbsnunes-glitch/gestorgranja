@@ -2,10 +2,10 @@ import { navigateToReportPrint } from '@/lib/report-print-nav';
 
 export const CASH_FLOW_KINDS = [
   { value: '', label: 'Todos os tipos' },
-  { value: 'CP paga', label: 'CP paga' },
-  { value: 'CP prevista', label: 'CP prevista' },
-  { value: 'CR recebida', label: 'CR recebida' },
-  { value: 'CR prevista', label: 'CR prevista' },
+  { value: 'Contas a pagar pagas', label: 'Contas a pagar pagas' },
+  { value: 'Contas a pagar previstas', label: 'Contas a pagar previstas' },
+  { value: 'Contas a receber recebidas', label: 'Contas a receber recebidas' },
+  { value: 'Contas a receber previstas', label: 'Contas a receber previstas' },
   { value: 'Compra prevista', label: 'Compra prevista' },
   { value: 'Caixa', label: 'Caixa' },
 ] as const;

@@ -11,7 +11,7 @@ export function monthRange(yearMonth: string): { from: Date; to: Date } {
 
 type PrismaClient = Awaited<ReturnType<TenantPrismaService['getClient']>>;
 
-/** Realizado no mês: CP pagas + manutenção com a mesma conta contábil. */
+/** Realizado no mês: contas a pagar pagas + manutenção com a mesma conta contábil. */
 export async function computeBudgetActual(
   prisma: PrismaClient,
   chartAccountId: string,

@@ -59,7 +59,7 @@ export default function AlertasPage() {
     setScanMsg(null);
     try {
       await apiFetch('/v1/alerts/scan/all', { method: 'POST', body: '{}' });
-      setScanMsg('Varredura concluída (CP, estoque, carência, operação).');
+      setScanMsg('Varredura concluída (contas a pagar, estoque, carência, operação).');
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao varrer');
