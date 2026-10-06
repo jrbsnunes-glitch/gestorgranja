@@ -144,6 +144,13 @@ const ENUM_LABELS: Record<string, string> = {
   KIOSK: 'Terminal',
   MOBILE: 'Celular (QR)',
 
+  // RH — contrato / remuneração
+  GENERAL_101: 'CLT geral (101)',
+  TEMPORARY_106: 'Temporário (106)',
+  MONTHLY: 'Mensalista',
+  HOURLY: 'Horista',
+  DAILY: 'Diarista',
+
   // Parceiro
   PF: 'Pessoa física',
   PJ: 'Pessoa jurídica',

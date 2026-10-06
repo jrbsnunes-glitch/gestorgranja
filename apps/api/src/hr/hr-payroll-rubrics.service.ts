@@ -184,6 +184,36 @@ export const SYSTEM_PAYROLL_RUBRICS: {
     integratesFgts: false,
     integratesIrrf: false,
   },
+  {
+    code: 'ADIANT_DESC',
+    description: 'Desconto de adiantamento salarial',
+    kind: 'DEDUCTION',
+    natureCode: '9200',
+    incidenceCp: '00',
+    incidenceFgts: '00',
+    incidenceIrrf: '00',
+    integratesInss: false,
+    integratesFgts: false,
+    integratesIrrf: false,
+  },
+  {
+    code: 'HORISTA',
+    description: 'Salário horista',
+    kind: 'EARNING',
+    natureCode: '1000',
+    incidenceCp: '11',
+    incidenceFgts: '11',
+    incidenceIrrf: '11',
+  },
+  {
+    code: 'DIARISTA',
+    description: 'Salário diarista',
+    kind: 'EARNING',
+    natureCode: '1000',
+    incidenceCp: '11',
+    incidenceFgts: '11',
+    incidenceIrrf: '11',
+  },
 ];
 
 @Injectable()

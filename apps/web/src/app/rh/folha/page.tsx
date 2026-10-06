@@ -12,6 +12,7 @@ import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
 import { currentYearMonthLocal } from '@/lib/calendar-date';
 import { formatBrl } from '@/lib/money';
+import { isAdminSession, readSession } from '@/lib/session';
 
 type PayrollLineItem = {
   kind: string;
@@ -28,6 +29,7 @@ type PayrollLine = {
   otHours100: string;
   commissionAmount: string;
   ajudaCustoAmount: string;
+  workedDays: string;
   additions: string;
   deductions: string;
   netPay: string;
@@ -51,6 +53,8 @@ function FolhaPageContent() {
   const [modal, setModal] = useState<ModalMode>(null);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [editLine, setEditLine] = useState<PayrollLine | null>(null);
+
+  const isAdmin = isAdminSession(readSession());
 
   const list = useCrudList({
     items: runs,
@@ -119,6 +123,27 @@ function FolhaPageContent() {
     }
   }
 
+  async function reopenRun(run: PayrollRun) {
+    if (
+      !confirm(
+        `Reabrir a folha ${run.yearMonth}? Retiradas e adiantamentos já aplicados permanecem vinculados; use recálculo de linha se precisar ajustar valores.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      const updated = await apiFetch<PayrollRun>(`/v1/hr/payroll/${run.id}/reopen`, {
+        method: 'PATCH',
+        body: '{}',
+      });
+      load();
+      if (selected?.id === run.id) setSelected(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao reabrir folha');
+    }
+  }
+
   async function applyWithdrawals(id: string) {
     setError(null);
     try {
@@ -130,6 +155,20 @@ function FolhaPageContent() {
       if (selected?.id === id) setSelected(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao aplicar retiradas');
+    }
+  }
+
+  async function applyAdvances(id: string) {
+    setError(null);
+    try {
+      const updated = await apiFetch<PayrollRun>(`/v1/hr/payroll/${id}/apply-advances`, {
+        method: 'POST',
+        body: '{}',
+      });
+      load();
+      if (selected?.id === id) setSelected(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao aplicar adiantamentos');
     }
   }
 
@@ -160,6 +199,7 @@ function FolhaPageContent() {
           otHours100: Number(fd.get('otHours100') ?? 0),
           commissionAmount: Number(fd.get('commissionAmount') ?? 0),
           ajudaCustoAmount: Number(fd.get('ajudaCustoAmount') ?? 0),
+          workedDays: Number(fd.get('workedDays') ?? 0),
           recalculate: true,
         }),
       });
@@ -190,7 +230,7 @@ function FolhaPageContent() {
     <AdminShell title="Folha de pagamento">
       <PageIntro
         title="Folha de pagamento"
-        description="Geração por competência com férias, INSS, IRRF, atestados, retiradas e ponto. Líquido = base + adicionais − descontos. Retiradas pendentes entram ao fechar a folha da mesma competência. Na impressão, INSS/IRRF são recalculados pela tabela da competência (pode diferir do líquido armazenado se a folha foi editada manualmente)."
+        description="Geração por competência com férias, INSS, IRRF, atestados, retiradas, adiantamentos e ponto. Líquido = base + adicionais − descontos. Retiradas e adiantamentos pendentes podem ser sincronizados na competência aberta. Na impressão, INSS/IRRF são recalculados pela tabela da competência (pode diferir do líquido armazenado se a folha foi editada manualmente)."
       />
       <ErrorBox message={error} />
       <ListToolbar
@@ -227,9 +267,26 @@ function FolhaPageContent() {
             >
               Aplicar retiradas
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="px-2 py-1 text-xs"
+              onClick={() => void applyAdvances(r.id)}
+            >
+              Aplicar adiantamentos
+            </Button>
             {r.status !== 'CLOSED' ? (
               <Button type="button" className="px-2 py-1 text-xs" onClick={() => void closeRun(r.id)}>
                 Fechar
+              </Button>
+            ) : isAdmin ? (
+              <Button
+                type="button"
+                variant="secondary"
+                className="px-2 py-1 text-xs"
+                onClick={() => void reopenRun(r)}
+              >
+                Reabrir folha
               </Button>
             ) : null}
           </span>,
@@ -345,6 +402,16 @@ function FolhaPageContent() {
                   step="0.01"
                   className={inputClass}
                   defaultValue={Number(editLine.ajudaCustoAmount ?? 0)}
+                />
+              </Field>
+              <Field label="Dias trabalhados (diarista — ajuste manual)">
+                <input
+                  name="workedDays"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  className={inputClass}
+                  defaultValue={Number(editLine.workedDays ?? 0)}
                 />
               </Field>
             </div>

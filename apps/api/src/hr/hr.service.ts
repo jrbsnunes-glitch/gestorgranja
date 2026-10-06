@@ -9,6 +9,10 @@ import {
   EmployeeWithdrawalStatus,
   PayrollLineItemKind,
   PayrollRunStatus,
+  RemunerationType,
+  SalaryAdvanceStatus,
+  TimeClockPunchSource,
+  TimeClockPunchType,
   VacationStatus,
 } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -24,6 +28,12 @@ import {
   buildVariableEarnings,
   hazardEarningAmount,
 } from './hr-payroll-variable';
+import {
+  dailyEarningAmount,
+  hourlyEarningAmount,
+  workedDaysFromPunches,
+  workedHoursFromPunches,
+} from './hr-payroll-punch.util';
 import { monthBounds, overlapDays, shiftExpectedMinutes, yearMonthKey } from './hr-payroll.util';
 
 const PAYROLL_LINE_VAR_DEFAULTS = {
@@ -31,7 +41,52 @@ const PAYROLL_LINE_VAR_DEFAULTS = {
   otHours100: 0,
   commissionAmount: 0,
   ajudaCustoAmount: 0,
+  workedDays: 0,
 };
+
+function formatDatePt(d: Date): string {
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+function formatBrlLike(n: number): string {
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+type HazardPayTypeInput = 'NONE' | 'INSALUBRIO' | 'PERICULOSIDADE';
+
+function parseHazardPayType(raw: unknown): HazardPayTypeInput | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const v = String(raw);
+  if (v === 'INSALUBRIO' || v === 'PERICULOSIDADE' || v === 'NONE') return v;
+  return 'NONE';
+}
+
+/** Grau 10/20/40 só vale com insalubridade; caso contrário persiste 0. */
+function normalizeInsalubrityPct(
+  hazardPayType: HazardPayTypeInput | undefined,
+  insalubrityPct: unknown,
+): number | undefined {
+  if (hazardPayType === undefined && insalubrityPct === undefined) return undefined;
+  const h = hazardPayType ?? 'NONE';
+  if (h !== 'INSALUBRIO') return 0;
+  const pct = Math.floor(Number(insalubrityPct ?? 20));
+  return [10, 20, 40].includes(pct) ? pct : 20;
+}
+
+function parseEmploymentCategory(raw: unknown): 'GENERAL_101' | 'TEMPORARY_106' | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const v = String(raw);
+  if (v === '106' || v === 'TEMPORARY_106') return 'TEMPORARY_106';
+  return 'GENERAL_101';
+}
+
+function parseRemunerationType(raw: unknown): RemunerationType | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const v = String(raw).toUpperCase();
+  if (v === 'HOURLY') return RemunerationType.HOURLY;
+  if (v === 'DAILY') return RemunerationType.DAILY;
+  return RemunerationType.MONTHLY;
+}
 
 function parseOptionalString(data: Record<string, unknown>, key: string): string | null | undefined {
   if (data[key] === undefined) return undefined;
@@ -130,15 +185,38 @@ export class HrService {
         bankAgency: parseOptionalString(data, 'bankAgency') ?? undefined,
         bankAccount: parseOptionalString(data, 'bankAccount') ?? undefined,
         bankAccountDigit: parseOptionalString(data, 'bankAccountDigit') ?? undefined,
-        hazardPayType:
-          data.hazardPayType !== undefined && data.hazardPayType !== null
-            ? (String(data.hazardPayType) as 'NONE' | 'INSALUBRIO' | 'PERICULOSIDADE')
-            : undefined,
-        insalubrityPct:
-          data.insalubrityPct !== undefined ? Math.max(0, Math.floor(Number(data.insalubrityPct))) : undefined,
+        ...(() => {
+          const hazardPayType = parseHazardPayType(data.hazardPayType);
+          const insalubrityPct = normalizeInsalubrityPct(hazardPayType, data.insalubrityPct);
+          return {
+            ...(hazardPayType !== undefined ? { hazardPayType } : {}),
+            ...(insalubrityPct !== undefined ? { insalubrityPct } : {}),
+          };
+        })(),
         monthlyWorkHours:
           data.monthlyWorkHours !== undefined ? Math.max(1, Math.floor(Number(data.monthlyWorkHours))) : undefined,
         vtOptIn: data.vtOptIn !== undefined ? Boolean(data.vtOptIn) : undefined,
+        ...(() => {
+          const cat = parseEmploymentCategory(data.employmentCategory);
+          return cat !== undefined ? { employmentCategory: cat } : {};
+        })(),
+        ...(() => {
+          const rt = parseRemunerationType(data.remunerationType);
+          return rt !== undefined ? { remunerationType: rt } : {};
+        })(),
+        ...(data.hourlyRate !== undefined
+          ? { hourlyRate: data.hourlyRate === null || data.hourlyRate === '' ? null : Number(data.hourlyRate) }
+          : {}),
+        ...(data.dailyRate !== undefined
+          ? { dailyRate: data.dailyRate === null || data.dailyRate === '' ? null : Number(data.dailyRate) }
+          : {}),
+        ...(data.tempContractEndsAt !== undefined
+          ? {
+              tempContractEndsAt: data.tempContractEndsAt
+                ? new Date(`${String(data.tempContractEndsAt).slice(0, 10)}T12:00:00`)
+                : null,
+            }
+          : {}),
         ...(() => {
           const auth = parsePayrollWithdrawalAuthFields(data);
           return auth ?? {};
@@ -190,16 +268,45 @@ export class HrService {
         ...(parseOptionalString(data, 'bankAccountDigit') !== undefined
           ? { bankAccountDigit: parseOptionalString(data, 'bankAccountDigit') }
           : {}),
-        ...(data.hazardPayType !== undefined
-          ? { hazardPayType: String(data.hazardPayType) as 'NONE' | 'INSALUBRIO' | 'PERICULOSIDADE' }
-          : {}),
-        ...(data.insalubrityPct !== undefined
-          ? { insalubrityPct: Math.max(0, Math.floor(Number(data.insalubrityPct))) }
-          : {}),
+        ...(() => {
+          const hazardPayType =
+            data.hazardPayType !== undefined ? parseHazardPayType(data.hazardPayType) : undefined;
+          const effectiveHazard =
+            hazardPayType ?? (row.hazardPayType as HazardPayTypeInput | undefined);
+          const insalubrityPct =
+            data.insalubrityPct !== undefined || data.hazardPayType !== undefined
+              ? normalizeInsalubrityPct(effectiveHazard, data.insalubrityPct ?? row.insalubrityPct)
+              : undefined;
+          return {
+            ...(hazardPayType !== undefined ? { hazardPayType } : {}),
+            ...(insalubrityPct !== undefined ? { insalubrityPct } : {}),
+          };
+        })(),
         ...(data.monthlyWorkHours !== undefined
           ? { monthlyWorkHours: Math.max(1, Math.floor(Number(data.monthlyWorkHours))) }
           : {}),
         ...(data.vtOptIn !== undefined ? { vtOptIn: Boolean(data.vtOptIn) } : {}),
+        ...(() => {
+          const cat = parseEmploymentCategory(data.employmentCategory);
+          return cat !== undefined ? { employmentCategory: cat } : {};
+        })(),
+        ...(() => {
+          const rt = parseRemunerationType(data.remunerationType);
+          return rt !== undefined ? { remunerationType: rt } : {};
+        })(),
+        ...(data.hourlyRate !== undefined
+          ? { hourlyRate: data.hourlyRate === null || data.hourlyRate === '' ? null : Number(data.hourlyRate) }
+          : {}),
+        ...(data.dailyRate !== undefined
+          ? { dailyRate: data.dailyRate === null || data.dailyRate === '' ? null : Number(data.dailyRate) }
+          : {}),
+        ...(data.tempContractEndsAt !== undefined
+          ? {
+              tempContractEndsAt: data.tempContractEndsAt
+                ? new Date(`${String(data.tempContractEndsAt).slice(0, 10)}T12:00:00`)
+                : null,
+            }
+          : {}),
         ...(() => {
           const workShiftId = this.parseWorkShiftId(data);
           if (workShiftId === undefined) return {};
@@ -488,6 +595,134 @@ export class HrService {
     });
   }
 
+  listSalaryAdvances(user: JwtPayload) {
+    return this.db(user).then((p) =>
+      p.employeeSalaryAdvance.findMany({
+        orderBy: { paidAt: 'desc' },
+        include: { employee: { select: { id: true, name: true, baseSalary: true } } },
+      }),
+    );
+  }
+
+  async getSalaryAdvanceWarnings(user: JwtPayload) {
+    const prisma = await this.db(user);
+    let settings = await prisma.hrSettings.findUnique({ where: { id: 'default' } });
+    if (!settings) settings = await prisma.hrSettings.create({ data: { id: 'default' } });
+    const maxPct = Number(settings.salaryAdvanceMaxPct);
+    const pending = await prisma.employeeSalaryAdvance.findMany({
+      where: { status: SalaryAdvanceStatus.PENDING },
+      include: { employee: true },
+    });
+    const alerts = pending.map((a) => {
+      const base = Number(a.employee.baseSalary);
+      const amt = Number(a.amount);
+      const usedPct = base > 0 ? Math.round((amt / base) * 1000) / 10 : null;
+      return {
+        advanceId: a.id,
+        employeeId: a.employeeId,
+        employeeName: a.employee.name,
+        discountYearMonth: a.discountYearMonth,
+        amount: amt,
+        baseSalary: base,
+        usedPct,
+        overThreshold: usedPct != null && usedPct > maxPct,
+      };
+    });
+    return { salaryAdvanceMaxPct: maxPct, requireSalaryAdvanceNotes: settings.requireSalaryAdvanceNotes, alerts };
+  }
+
+  async createSalaryAdvance(user: JwtPayload, data: Record<string, unknown>) {
+    const prisma = await this.db(user);
+    const employeeId = String(data.employeeId ?? '');
+    const amount = Number(data.amount);
+    if (!employeeId || !Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Informe funcionário e valor válido');
+    }
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!employee?.isActive) throw new NotFoundException('Funcionário não encontrado');
+
+    let settings = await prisma.hrSettings.findUnique({ where: { id: 'default' } });
+    if (!settings) settings = await prisma.hrSettings.create({ data: { id: 'default' } });
+    const notes = data.notes ? String(data.notes).trim() : '';
+    if (settings.requireSalaryAdvanceNotes && !notes) {
+      throw new BadRequestException('Informe o motivo/observação do adiantamento');
+    }
+
+    const paidRaw = data.paidAt ? String(data.paidAt).slice(0, 10) : '';
+    const paidAt = paidRaw ? new Date(`${paidRaw}T12:00:00`) : new Date();
+    const discountYearMonth =
+      data.discountYearMonth != null && String(data.discountYearMonth).trim()
+        ? String(data.discountYearMonth).trim()
+        : yearMonthKey(paidAt);
+
+    const maxPct = Number(settings.salaryAdvanceMaxPct);
+    const base = Number(employee.baseSalary);
+    if (base > 0 && amount > base * (maxPct / 100) + 0.005) {
+      throw new BadRequestException(
+        `Valor acima do teto configurado (${maxPct}% do salário base = ${roundMoney(base * (maxPct / 100))}).`,
+      );
+    }
+
+    const row = await prisma.employeeSalaryAdvance.create({
+      data: {
+        employeeId,
+        amount,
+        paidAt,
+        discountYearMonth,
+        notes: notes || undefined,
+        status: SalaryAdvanceStatus.PENDING,
+        approvedByUserId: user.sub,
+      },
+      include: { employee: true },
+    });
+    return { advance: row };
+  }
+
+  updateSalaryAdvance(user: JwtPayload, id: string, data: Record<string, unknown>) {
+    return this.db(user).then(async (p) => {
+      const row = await p.employeeSalaryAdvance.findUnique({ where: { id } });
+      if (!row) throw new NotFoundException();
+      if (row.status === SalaryAdvanceStatus.APPLIED) {
+        throw new BadRequestException('Adiantamento já aplicado na folha');
+      }
+      if (row.status === SalaryAdvanceStatus.CANCELLED) {
+        throw new BadRequestException('Adiantamento cancelado');
+      }
+      const amount = data.amount !== undefined ? Number(data.amount) : Number(row.amount);
+      const paidAt =
+        data.paidAt !== undefined
+          ? new Date(`${String(data.paidAt).slice(0, 10)}T12:00:00`)
+          : row.paidAt;
+      const discountYearMonth =
+        data.discountYearMonth !== undefined
+          ? String(data.discountYearMonth).trim()
+          : row.discountYearMonth;
+      return p.employeeSalaryAdvance.update({
+        where: { id },
+        data: {
+          ...(data.amount !== undefined ? { amount } : {}),
+          ...(data.paidAt !== undefined ? { paidAt } : {}),
+          ...(data.discountYearMonth !== undefined ? { discountYearMonth } : {}),
+          ...(data.notes !== undefined ? { notes: data.notes ? String(data.notes) : null } : {}),
+          ...(data.status === 'CANCELLED' ? { status: SalaryAdvanceStatus.CANCELLED } : {}),
+        },
+        include: { employee: true },
+      });
+    });
+  }
+
+  deleteSalaryAdvance(user: JwtPayload, id: string) {
+    return this.db(user).then(async (p) => {
+      const row = await p.employeeSalaryAdvance.findUnique({ where: { id } });
+      if (!row) throw new NotFoundException();
+      if (row.status === SalaryAdvanceStatus.APPLIED) {
+        throw new BadRequestException('Adiantamento já aplicado na folha');
+      }
+      await p.employeeSalaryAdvance.delete({ where: { id } });
+      return { ok: true };
+    });
+  }
+
   listPayrollRuns(user: JwtPayload) {
     return this.db(user).then((p) =>
       p.payrollRun.findMany({
@@ -538,6 +773,7 @@ export class HrService {
       otHours100: number;
       commissionAmount: number;
       ajudaCustoAmount: number;
+      workedDays: number;
     } = PAYROLL_LINE_VAR_DEFAULTS,
   ): Promise<{
     items: {
@@ -580,6 +816,41 @@ export class HrService {
         amount: hazard.amount,
       });
       payrollBaseDisplay = roundMoney(baseSalary + hazard.amount);
+    }
+
+    const monthEndTs = new Date(monthEnd.getTime() + 86400000 - 1);
+    const punches = await prisma.timeClockPunch.findMany({
+      where: { employeeId, punchedAt: { gte: monthStart, lte: monthEndTs } },
+      orderBy: { punchedAt: 'asc' },
+    });
+
+    if (employee?.remunerationType === RemunerationType.HOURLY) {
+      const rate = Number(employee.hourlyRate ?? 0);
+      const hours = workedHoursFromPunches(punches);
+      const amount = hourlyEarningAmount(hours, rate);
+      if (amount > 0) {
+        items.push({
+          kind: PayrollLineItemKind.EARNING,
+          code: 'HORISTA',
+          description: `Salário horista — ${hours} h × ${formatBrlLike(rate)}/h`,
+          amount,
+        });
+        payrollBaseDisplay = roundMoney((payrollBaseDisplay ?? 0) + amount);
+      }
+    } else if (employee?.remunerationType === RemunerationType.DAILY) {
+      const rate = Number(employee.dailyRate ?? 0);
+      const fromPunch = workedDaysFromPunches(punches);
+      const days = Math.max(fromPunch, lineVars.workedDays);
+      const amount = dailyEarningAmount(days, rate);
+      if (amount > 0) {
+        items.push({
+          kind: PayrollLineItemKind.EARNING,
+          code: 'DIARISTA',
+          description: `Salário diarista — ${days} dia(s) × ${formatBrlLike(rate)}/dia`,
+          amount,
+        });
+        payrollBaseDisplay = roundMoney((payrollBaseDisplay ?? 0) + amount);
+      }
     }
 
     const variableEarnings = buildVariableEarnings({
@@ -660,14 +931,24 @@ export class HrService {
       });
     }
 
-    if (employee?.workShift) {
-      const punches = await prisma.timeClockPunch.findMany({
-        where: {
-          employeeId,
-          punchedAt: { gte: monthStart, lte: new Date(monthEnd.getTime() + 86400000 - 1) },
-        },
-        orderBy: { punchedAt: 'asc' },
+    const salaryAdvances = await prisma.employeeSalaryAdvance.findMany({
+      where: {
+        employeeId,
+        status: SalaryAdvanceStatus.PENDING,
+        discountYearMonth: yearMonth,
+      },
+    });
+    for (const adv of salaryAdvances) {
+      items.push({
+        kind: PayrollLineItemKind.DEDUCTION,
+        code: 'ADIANT_DESC',
+        description: `Adiantamento salarial — pago em ${formatDatePt(adv.paidAt)}`,
+        amount: Number(adv.amount),
+        sourceRef: adv.id,
       });
+    }
+
+    if (employee?.workShift && employee.remunerationType === RemunerationType.MONTHLY) {
       const expectedMin = shiftExpectedMinutes(
         employee.workShift.startTime,
         employee.workShift.endTime,
@@ -794,6 +1075,67 @@ export class HrService {
     }
   }
 
+  private async applyPendingAdvancesToRun(
+    prisma: Awaited<ReturnType<TenantPrismaService['getClient']>>,
+    run: {
+      yearMonth: string;
+      lines: {
+        id: string;
+        employeeId: string;
+        baseSalary: { toString(): string } | number;
+        additions: { toString(): string } | number;
+        deductions: { toString(): string } | number;
+        items: { code: string; sourceRef: string | null }[];
+      }[];
+    },
+  ) {
+    for (const line of run.lines) {
+      const existingRefs = new Set(
+        line.items
+          .filter((i) => i.code === 'ADIANT_DESC' && i.sourceRef)
+          .map((i) => i.sourceRef as string),
+      );
+
+      const pending = await prisma.employeeSalaryAdvance.findMany({
+        where: {
+          employeeId: line.employeeId,
+          status: SalaryAdvanceStatus.PENDING,
+          discountYearMonth: run.yearMonth,
+        },
+      });
+
+      let extraDeduction = 0;
+      for (const adv of pending) {
+        if (!existingRefs.has(adv.id)) {
+          await prisma.payrollLineItem.create({
+            data: {
+              payrollLineId: line.id,
+              kind: PayrollLineItemKind.DEDUCTION,
+              code: 'ADIANT_DESC',
+              description: `Adiantamento salarial — pago em ${formatDatePt(adv.paidAt)}`,
+              amount: adv.amount,
+              sourceRef: adv.id,
+            },
+          });
+          extraDeduction += Number(adv.amount);
+        }
+        await prisma.employeeSalaryAdvance.update({
+          where: { id: adv.id },
+          data: { status: SalaryAdvanceStatus.APPLIED, payrollLineId: line.id },
+        });
+      }
+
+      if (extraDeduction > 0) {
+        const deductions = Number(line.deductions) + extraDeduction;
+        const netPay = Number(line.baseSalary) + Number(line.additions) - deductions;
+        await prisma.payrollLine.update({
+          where: { id: line.id },
+          data: { deductions, netPay },
+        });
+      }
+    }
+  }
+
   async createPayrollRun(user: JwtPayload, yearMonth: string) {
     const prisma = await this.db(user);
     await this.payrollRubrics.ensureSystemRubrics(user);
@@ -805,7 +1147,10 @@ export class HrService {
     const run = await prisma.payrollRun.create({ data: { yearMonth } });
 
     for (const e of employees) {
-      const base = Number(e.baseSalary);
+      const base =
+        e.remunerationType === RemunerationType.HOURLY || e.remunerationType === RemunerationType.DAILY
+          ? 0
+          : Number(e.baseSalary);
       const { items: itemDrafts, payrollBaseDisplay } = await this.buildPayrollItemsForEmployee(
         prisma,
         e.id,
@@ -855,6 +1200,12 @@ export class HrService {
             data: { status: EmployeeWithdrawalStatus.APPLIED, payrollLineId: line.id },
           });
         }
+        if (item.code === 'ADIANT_DESC' && item.sourceRef) {
+          await prisma.employeeSalaryAdvance.updateMany({
+            where: { id: item.sourceRef, status: SalaryAdvanceStatus.PENDING },
+            data: { status: SalaryAdvanceStatus.APPLIED, payrollLineId: line.id },
+          });
+        }
       }
     }
 
@@ -886,6 +1237,20 @@ export class HrService {
     return prisma.payrollRun.update({
       where: { id },
       data: { status: PayrollRunStatus.CLOSED, paymentDate },
+      include: { lines: { include: { employee: true, items: true } } },
+    });
+  }
+
+  async reopenPayrollRun(user: JwtPayload, id: string) {
+    const prisma = await this.db(user);
+    const run = await prisma.payrollRun.findUnique({ where: { id } });
+    if (!run) throw new NotFoundException('Folha não encontrada');
+    if (run.status !== PayrollRunStatus.CLOSED) {
+      throw new BadRequestException('Somente folhas fechadas podem ser reabertas');
+    }
+    return prisma.payrollRun.update({
+      where: { id },
+      data: { status: PayrollRunStatus.OPEN },
       include: { lines: { include: { employee: true, items: true } } },
     });
   }
@@ -994,6 +1359,26 @@ export class HrService {
     });
   }
 
+  async syncPayrollAdvances(user: JwtPayload, id: string) {
+    const prisma = await this.db(user);
+    const run = await prisma.payrollRun.findUnique({
+      where: { id },
+      include: { lines: { include: { items: true } } },
+    });
+    if (!run) throw new NotFoundException('Folha não encontrada');
+    if (run.status === PayrollRunStatus.CLOSED) throw new BadRequestException('Folha fechada');
+    await this.applyPendingAdvancesToRun(prisma, run);
+    const refreshed = await prisma.payrollRun.findUnique({
+      where: { id },
+      include: { lines: { include: { items: true } } },
+    });
+    if (refreshed) await this.syncPayrollStatutoryTaxes(prisma, refreshed);
+    return prisma.payrollRun.findUnique({
+      where: { id },
+      include: { lines: { include: { employee: true, items: true } } },
+    });
+  }
+
   async syncPayrollTaxes(user: JwtPayload, id: string) {
     const prisma = await this.db(user);
     const run = await prisma.payrollRun.findUnique({
@@ -1016,6 +1401,7 @@ export class HrService {
       otHours100?: number;
       commissionAmount?: number;
       ajudaCustoAmount?: number;
+      workedDays?: number;
     },
   ) {
     const prisma = await this.db(user);
@@ -1029,11 +1415,21 @@ export class HrService {
       throw new BadRequestException('Folha fechada');
     }
 
+    await prisma.employeeSalaryAdvance.updateMany({
+      where: { payrollLineId: line.id, status: SalaryAdvanceStatus.APPLIED },
+      data: { status: SalaryAdvanceStatus.PENDING, payrollLineId: null },
+    });
+    await prisma.employeeProductWithdrawal.updateMany({
+      where: { payrollLineId: line.id, status: EmployeeWithdrawalStatus.APPLIED },
+      data: { status: EmployeeWithdrawalStatus.PENDING, payrollLineId: null },
+    });
+
     const lineVars = {
       otHours50: data.otHours50 ?? Number(line.otHours50),
       otHours100: data.otHours100 ?? Number(line.otHours100),
       commissionAmount: data.commissionAmount ?? Number(line.commissionAmount),
       ajudaCustoAmount: data.ajudaCustoAmount ?? Number(line.ajudaCustoAmount),
+      workedDays: data.workedDays ?? Number(line.workedDays),
     };
 
     const { start: monthStart, end: monthEnd } = monthBounds(line.payrollRun.yearMonth);
@@ -1080,6 +1476,7 @@ export class HrService {
       data: {
         otHours50: lineVars.otHours50,
         otHours100: lineVars.otHours100,
+        workedDays: lineVars.workedDays,
         commissionAmount: lineVars.commissionAmount,
         ajudaCustoAmount: lineVars.ajudaCustoAmount,
         payrollBaseDisplay,
@@ -1099,13 +1496,20 @@ export class HrService {
       deductions?: number;
       otHours50?: number;
       otHours100?: number;
+      workedDays?: number;
       commissionAmount?: number;
       ajudaCustoAmount?: number;
       recalculate?: boolean;
     },
   ) {
-    if (data.recalculate || data.otHours50 !== undefined || data.otHours100 !== undefined ||
-        data.commissionAmount !== undefined || data.ajudaCustoAmount !== undefined) {
+    if (
+      data.recalculate ||
+      data.otHours50 !== undefined ||
+      data.otHours100 !== undefined ||
+      data.workedDays !== undefined ||
+      data.commissionAmount !== undefined ||
+      data.ajudaCustoAmount !== undefined
+    ) {
       return this.rebuildPayrollLine(user, lineId, data);
     }
     return this.db(user).then(async (p) => {
@@ -1229,5 +1633,33 @@ export class HrService {
         include: { employee: true },
       }),
     );
+  }
+
+  async createManualPunch(
+    user: JwtPayload,
+    data: {
+      employeeId: string;
+      type: 'IN' | 'OUT';
+      punchedAt: string;
+      reason?: string;
+    },
+  ) {
+    const prisma = await this.db(user);
+    const employee = await prisma.employee.findUnique({ where: { id: data.employeeId } });
+    if (!employee?.isActive) throw new NotFoundException('Funcionário não encontrado');
+    const punchedAt = new Date(data.punchedAt);
+    if (Number.isNaN(punchedAt.getTime())) throw new BadRequestException('Data/hora inválida');
+    if (data.type !== 'IN' && data.type !== 'OUT') throw new BadRequestException('Tipo inválido');
+    return prisma.timeClockPunch.create({
+      data: {
+        employeeId: data.employeeId,
+        type: data.type as TimeClockPunchType,
+        source: TimeClockPunchSource.MANUAL,
+        punchedAt,
+        manualReason: data.reason?.trim() || null,
+        createdByUserId: user.sub,
+      },
+      include: { employee: { select: { name: true } } },
+    });
   }
 }

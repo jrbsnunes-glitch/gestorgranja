@@ -142,6 +142,8 @@ export class HrController {
       requireWithdrawalPayrollAuth?: boolean;
       detailWithdrawalsOnPayslip?: boolean;
       payslipFields?: Partial<PayslipFieldsConfig>;
+      salaryAdvanceMaxPct?: number;
+      requireSalaryAdvanceNotes?: boolean;
     },
   ) {
     return this.hrSettings.update(user, body);
@@ -225,10 +227,56 @@ export class HrController {
     return this.hr.closePayrollRun(user, id);
   }
 
+  @Patch('payroll/:id/reopen')
+  @RequirePermissions('*')
+  reopenPayroll(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.hr.reopenPayrollRun(user, id);
+  }
+
   @Post('payroll/:id/apply-withdrawals')
   @RequirePermissions('hr.write', '*')
   applyWithdrawals(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.hr.syncPayrollWithdrawals(user, id);
+  }
+
+  @Get('salary-advances/warnings')
+  @RequirePermissions('hr.read', '*')
+  salaryAdvanceWarnings(@CurrentUser() user: JwtPayload) {
+    return this.hr.getSalaryAdvanceWarnings(user);
+  }
+
+  @Get('salary-advances')
+  @RequirePermissions('hr.read', '*')
+  salaryAdvances(@CurrentUser() user: JwtPayload) {
+    return this.hr.listSalaryAdvances(user);
+  }
+
+  @Post('salary-advances')
+  @RequirePermissions('hr.write', '*')
+  createSalaryAdvance(@CurrentUser() user: JwtPayload, @Body() body: Record<string, unknown>) {
+    return this.hr.createSalaryAdvance(user, body);
+  }
+
+  @Patch('salary-advances/:id')
+  @RequirePermissions('hr.write', '*')
+  updateSalaryAdvance(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.hr.updateSalaryAdvance(user, id, body);
+  }
+
+  @Delete('salary-advances/:id')
+  @RequirePermissions('hr.write', '*')
+  deleteSalaryAdvance(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.hr.deleteSalaryAdvance(user, id);
+  }
+
+  @Post('payroll/:id/apply-advances')
+  @RequirePermissions('hr.write', '*')
+  applyAdvances(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.hr.syncPayrollAdvances(user, id);
   }
 
   @Post('payroll/:id/sync-taxes')
@@ -248,6 +296,7 @@ export class HrController {
       deductions?: number;
       otHours50?: number;
       otHours100?: number;
+      workedDays?: number;
       commissionAmount?: number;
       ajudaCustoAmount?: number;
       recalculate?: boolean;
@@ -331,5 +380,20 @@ export class HrController {
   @RequirePermissions('hr.read', '*')
   punches(@CurrentUser() user: JwtPayload) {
     return this.hr.listPunches(user);
+  }
+
+  @Post('time/punches/manual')
+  @RequirePermissions('hr.write', '*')
+  manualPunch(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      employeeId: string;
+      type: 'IN' | 'OUT';
+      punchedAt: string;
+      reason?: string;
+    },
+  ) {
+    return this.hr.createManualPunch(user, body);
   }
 }

@@ -100,6 +100,7 @@ export const APP_MODULES: AppModule[] = [
       { id: 'atestados', label: 'Atestados / afastamentos', href: '/rh/atestados' },
       { id: 'ferias', label: 'Férias', href: '/rh/ferias' },
       { id: 'retiradas', label: 'Retiradas (folha)', href: '/rh/retiradas' },
+      { id: 'adiantamentos', label: 'Adiantamentos', href: '/rh/adiantamentos' },
       { id: 'folha', label: 'Folha de pagamento', href: '/rh/folha' },
       { id: 'folha-rubricas', label: 'Rubricas (eSocial)', href: '/rh/folha/rubricas' },
       { id: 'ponto', label: 'Ponto (QR)', href: '/rh/ponto' },

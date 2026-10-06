@@ -231,6 +231,9 @@ model HrSettings {
   detailWithdrawalsOnPayslip     Boolean @default(true)
   /// Campos opcionais do holerite (merge com defaults no HrSettingsService).
   payslipFields                  Json    @default("{}")
+  /// Teto de aviso para adiantamento salarial (% do salário base).
+  salaryAdvanceMaxPct            Decimal @default(40) @db.Decimal(5, 2)
+  requireSalaryAdvanceNotes      Boolean @default(false)
 }
 
 model FinanceAlertSettings {
@@ -1301,6 +1304,23 @@ enum HazardPayType {
   PERICULOSIDADE
 }
 
+enum EmploymentCategory {
+  GENERAL_101
+  TEMPORARY_106
+}
+
+enum RemunerationType {
+  MONTHLY
+  HOURLY
+  DAILY
+}
+
+enum SalaryAdvanceStatus {
+  PENDING
+  APPLIED
+  CANCELLED
+}
+
 model Employee {
   id            String    @id @default(uuid())
   controlNumber Int       @unique @default(autoincrement())
@@ -1329,12 +1349,18 @@ model Employee {
   /// Autorização escrita para desconto em folha por retirada de produtos (CLT art. 462 / Súmula 342 TST).
   payrollWithdrawalAuthorizedAt    DateTime? @db.Date
   payrollWithdrawalAuthReference   String?
+  employmentCategory EmploymentCategory @default(GENERAL_101)
+  remunerationType   RemunerationType   @default(MONTHLY)
+  hourlyRate         Decimal?           @db.Decimal(14, 2)
+  dailyRate          Decimal?           @db.Decimal(14, 2)
+  tempContractEndsAt DateTime?          @db.Date
   leaves       LeaveAbsence[]
   vacations    VacationPlan[]
   payrollLines PayrollLine[]
   punches      TimeClockPunch[]
   schedules    WorkSchedule[]
   productWithdrawals EmployeeProductWithdrawal[]
+  salaryAdvances     EmployeeSalaryAdvance[]
 }
 
 enum LeaveType {
@@ -1423,6 +1449,8 @@ model PayrollLine {
   payrollBaseDisplay Decimal? @db.Decimal(14, 2)
   otHours50    Decimal    @default(0) @db.Decimal(8, 2)
   otHours100   Decimal    @default(0) @db.Decimal(8, 2)
+  /// Dias trabalhados (temporário diarista) quando não inferidos só pelo ponto.
+  workedDays   Decimal    @default(0) @db.Decimal(8, 2)
   commissionAmount Decimal @default(0) @db.Decimal(14, 2)
   ajudaCustoAmount Decimal @default(0) @db.Decimal(14, 2)
   additions    Decimal    @default(0) @db.Decimal(14, 2)
@@ -1430,6 +1458,7 @@ model PayrollLine {
   netPay       Decimal    @db.Decimal(14, 2)
   items        PayrollLineItem[]
   productWithdrawals EmployeeProductWithdrawal[]
+  salaryAdvances     EmployeeSalaryAdvance[]
 
   @@unique([payrollRunId, employeeId])
 }
@@ -1473,6 +1502,22 @@ model EmployeeProductWithdrawal {
   status        EmployeeWithdrawalStatus @default(PENDING)
   payrollLineId String?
   payrollLine   PayrollLine?             @relation(fields: [payrollLineId], references: [id], onDelete: SetNull)
+}
+
+model EmployeeSalaryAdvance {
+  id                String              @id @default(uuid())
+  controlNumber     Int                 @unique @default(autoincrement())
+  employeeId        String
+  employee          Employee            @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  amount            Decimal             @db.Decimal(14, 2)
+  requestedAt       DateTime            @default(now())
+  paidAt            DateTime            @db.Date
+  discountYearMonth String
+  status            SalaryAdvanceStatus @default(PENDING)
+  notes             String?
+  payrollLineId     String?
+  payrollLine       PayrollLine?        @relation(fields: [payrollLineId], references: [id], onDelete: SetNull)
+  approvedByUserId  String?
 }
 
 model WorkShift {
@@ -1546,16 +1591,19 @@ enum TimeClockPunchType {
 enum TimeClockPunchSource {
   KIOSK
   MOBILE
+  MANUAL
 }
 
 model TimeClockPunch {
-  id         String               @id @default(uuid())
-  employeeId String
-  employee   Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  type       TimeClockPunchType
-  source     TimeClockPunchSource
-  punchedAt  DateTime             @default(now())
-  terminalId String?
+  id              String               @id @default(uuid())
+  employeeId      String
+  employee        Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type            TimeClockPunchType
+  source          TimeClockPunchSource
+  punchedAt       DateTime             @default(now())
+  terminalId      String?
+  manualReason    String?
+  createdByUserId String?
 }
 
 // --- Caixa ---

@@ -9,14 +9,17 @@ import { ListToolbar, PaginatedTable, usePagination } from '@/components/list-cr
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
+import { readSession, sessionHasPermission } from '@/lib/session';
 import { parsePunchQrPayload } from '@/lib/punch-qr';
 
 type Terminal = { id: string; name: string; isActive: boolean };
+type EmployeeOption = { id: string; name: string; isActive: boolean };
 type Punch = {
   id: string;
   type: string;
   punchedAt: string;
   source: string;
+  manualReason: string | null;
   employee: { name: string };
 };
 
@@ -31,6 +34,10 @@ export default function PontoPage() {
   const [error, setError] = useState<string | null>(null);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+
+  const canManualPunch = sessionHasPermission(readSession(), 'hr.write');
 
   const list = useCrudList({
     items: punches,
@@ -70,6 +77,11 @@ export default function PontoPage() {
 
   useEffect(() => {
     load();
+    if (sessionHasPermission(readSession(), 'hr.write')) {
+      void apiFetch<EmployeeOption[]>('/v1/hr/employees')
+        .then((list) => setEmployees(list.filter((e) => e.isActive)))
+        .catch(() => setEmployees([]));
+    }
   }, [load]);
 
   async function submitPunch(terminal: string, tok: string) {
@@ -113,6 +125,39 @@ export default function PontoPage() {
   }
 
   const showManualForm = activeTerminals.length > 0;
+
+  async function submitManualPunch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setManualSubmitting(true);
+    setError(null);
+    setMsg(null);
+    const fd = new FormData(e.currentTarget);
+    const punchedAt = String(fd.get('punchedAt') ?? '');
+    try {
+      const res = await apiFetch<{ type: string; punchedAt: string }>('/v1/hr/time/punches/manual', {
+        method: 'POST',
+        body: JSON.stringify({
+          employeeId: fd.get('employeeId'),
+          type: fd.get('type'),
+          punchedAt: punchedAt.includes('T') ? punchedAt : `${punchedAt}:00`,
+          reason: fd.get('reason') || undefined,
+        }),
+      });
+      setMsg(`Batida manual: ${labelEnum(res.type)} em ${new Date(res.punchedAt).toLocaleString('pt-BR')}`);
+      e.currentTarget.reset();
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    } finally {
+      setManualSubmitting(false);
+    }
+  }
+
+  const defaultPunchLocal = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  };
 
   return (
     <AdminShell title="Ponto eletrônico">
@@ -170,6 +215,51 @@ export default function PontoPage() {
         </PageCard>
       </div>
 
+      {canManualPunch ? (
+        <div className="mb-6">
+          <PageCard title="Incluir batida manual (RH)">
+            <p className="mb-3 text-sm text-slate-600">
+              Correção ou registro retroativo com motivo. Exige permissão de escrita em RH. Origem exibida como Manual na
+              listagem.
+            </p>
+            <form onSubmit={submitManualPunch} className="max-w-md space-y-3">
+              <Field label="Funcionário">
+                <select name="employeeId" className={inputClass} required defaultValue="">
+                  <option value="">Selecione…</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Tipo">
+                <select name="type" className={inputClass} required defaultValue="IN">
+                  <option value="IN">Entrada</option>
+                  <option value="OUT">Saída</option>
+                </select>
+              </Field>
+              <Field label="Data e hora">
+                <input
+                  name="punchedAt"
+                  type="datetime-local"
+                  className={inputClass}
+                  required
+                  defaultValue={defaultPunchLocal()}
+                />
+              </Field>
+              <Field label="Motivo (opcional)">
+                <input name="reason" className={inputClass} placeholder="Ex.: esqueceu o QR, ajuste conferido com gestor" />
+              </Field>
+              <SubmitButton
+                label={manualSubmitting ? 'Salvando…' : 'Registrar batida manual'}
+                disabled={manualSubmitting}
+              />
+            </form>
+          </PageCard>
+        </div>
+      ) : null}
+
       <ListToolbar
         list={list}
         onReports={() => setReportsOpen(true)}
@@ -177,13 +267,14 @@ export default function PontoPage() {
         showDateFilter
       />
       <PaginatedTable
-        headers={['Data/hora', 'Funcionário', 'Tipo', 'Origem']}
+        headers={['Data/hora', 'Funcionário', 'Tipo', 'Origem', 'Motivo']}
         recordItems={slice}
         rows={slice.map((p) => [
           new Date(p.punchedAt).toLocaleString('pt-BR'),
           p.employee.name,
           labelEnum(p.type),
           labelEnum(p.source),
+          p.manualReason ?? (p.source === 'MANUAL' ? '—' : ''),
         ])}
         page={page}
         totalPages={totalPages}

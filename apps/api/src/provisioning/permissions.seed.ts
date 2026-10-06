@@ -46,6 +46,7 @@ export const DEFAULT_ROLES = [
       'nutrition.write',
       'health.write',
       'reports.read',
+      'hr.read',
     ],
   },
   {
@@ -76,6 +77,7 @@ export const DEFAULT_ROLES = [
       'fiscal.read',
       'fiscal.write',
       'fiscal.emit',
+      'hr.read',
     ],
   },
   {

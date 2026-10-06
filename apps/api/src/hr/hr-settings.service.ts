@@ -26,6 +26,8 @@ export class HrSettingsService {
       requireWithdrawalPayrollAuth?: boolean;
       detailWithdrawalsOnPayslip?: boolean;
       payslipFields?: Partial<PayslipFieldsConfig>;
+      salaryAdvanceMaxPct?: number;
+      requireSalaryAdvanceNotes?: boolean;
     },
   ) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);

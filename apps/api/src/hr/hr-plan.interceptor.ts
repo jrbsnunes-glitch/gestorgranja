@@ -36,6 +36,7 @@ export class HrPlanInterceptor implements NestInterceptor {
     return (
       /\/payroll(\/|$|\?)/.test(path) ||
       /\/withdrawals(\/|$|\?)/.test(path) ||
+      /\/salary-advances(\/|$|\?)/.test(path) ||
       /payroll-rubrics/.test(path) ||
       /reports\/payroll/.test(path) ||
       /reports\/punches/.test(path)

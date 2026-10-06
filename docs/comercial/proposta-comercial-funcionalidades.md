@@ -222,6 +222,8 @@ Fluxo unificado no painel:
 **Funcionários**
 
 - Cadastro completo (admissão, cargo, salário base, documentos operacionais).
+- **CLT geral (101)** e **temporário CLT (106)** na mesma folha simplificada; remuneração mensal, horista ou diarista (ponto ou ajuste na linha da folha).
+- **Autônomo (RPA) e PJ** não entram neste cadastro/folha — pagamento via financeiro (contas a pagar, NFS-e/RPA), trilho previsto em evolução futura do produto.
 
 **Atestados / afastamentos**
 
@@ -233,20 +235,37 @@ Fluxo unificado no painel:
 
 **Retiradas (folha)**
 
-- Lançamentos de adiantamentos/descontos vinculados à folha.
+- Desconto de produtos retirados na granja, com autorização documentada e aplicação na competência.
+
+**Adiantamentos salariais (vale)**
+
+- Para **colaboradores CLT** (incluindo **temporário 106**): registro do pagamento antecipado, comprovante interno/recibo conforme política da empresa, **desconto na folha** da competência informada (eSocial orientativo: natureza **9200**).
+- Alertas de teto (% do salário) e botão para sincronizar descontos na folha aberta.
+- **Não** substitui **comprovante de serviços prestados (RPA)** nem pagamento a **PJ** — quem presta serviço sem vínculo CLT não usa vale salarial neste módulo.
 
 **Folha de pagamento**
 
 - Competência mensal, cálculo **simplificado** com proventos/descontos, **INSS e IRRF** básicos.
+- **Temporários CLT (categoria 106)**, horistas e diaristas com provento a partir do ponto (ou ajuste na linha).
 - Visualização detalhada por colaborador.
 
 **Ponto eletrônico (QR)**
 
 - **Terminal de portaria** (web): leitura/registro de batidas.
 - **PWA de campo / celular**: registro de ponto pelo funcionário.
+- **Batida manual (RH)**: inclusão retroativa com motivo, para correções operacionais.
 - Relatórios de ponto (emissão via módulo de relatórios).
 
 *Observação:* não substitui contador para **eSocial** completo; indicado para operação interna e exportação/orientação contábil.
+
+**CLT × prestador de serviço (referência rápida)**
+
+| Situação | Onde registrar adiantamento / pagamento |
+|----------|----------------------------------------|
+| Temporário **contratado pela granja (CLT 106)** | RH → **Adiantamentos** + desconto na **folha** |
+| **Mensalista / horista / diarista CLT** | Idem (vale salarial na folha) |
+| **Autônomo PF (RPA)** | RPA e retenções; **financeiro** (fora da folha CLT) |
+| **PJ (CNPJ)** | Contas a pagar + NFS-e (fora da folha CLT) |
 
 ---
 

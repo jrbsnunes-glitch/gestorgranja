@@ -174,7 +174,7 @@ export default function UsuariosPage() {
     <AdminShell title="Usuários e perfis">
       <PageIntro
         title="Usuários e perfis"
-        description="Contas de acesso, perfis RBAC e escopo por galpão quando aplicável."
+        description="Contas de acesso, perfis RBAC e escopo por galpão quando aplicável. Todos os perfis podem bater ponto (plano Completo): vincule o usuário ao funcionário em RH → Funcionários."
       />
       <ErrorBox message={error} />
       <TabBar
@@ -320,6 +320,10 @@ export default function UsuariosPage() {
                   <input name="password" type="password" className={inputClass} required minLength={6} />
                 </Field>
                 <Field label="Perfil inicial">{roleSelect}</Field>
+                <p className="-mt-2 mb-3 text-xs text-slate-500">
+                  Batida de ponto (QR) está disponível em todos os perfis, desde que o login esteja vinculado a um
+                  funcionário ativo. O atalho &quot;Batida de ponto&quot; aparece no menu lateral.
+                </p>
               </>
             ) : null}
             {modal === 'edit' && selected ? (

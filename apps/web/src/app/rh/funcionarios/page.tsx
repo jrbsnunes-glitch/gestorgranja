@@ -17,6 +17,7 @@ import { ErrorBox, Field, SubmitButton, inputClass } from '@/components/ui-parts
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { formatBrl } from '@/lib/money';
+import { labelEnum } from '@/lib/labels';
 
 type LinkUser = { id: string; username: string; name: string; employees: { id: string; name: string }[] };
 type Employee = {
@@ -43,6 +44,11 @@ type Employee = {
   workShiftId: string | null;
   workShift: { id: string; code: string; name: string; startTime: string; endTime: string } | null;
   user: { username: string } | null;
+  employmentCategory: string;
+  remunerationType: string;
+  hourlyRate: string | null;
+  dailyRate: string | null;
+  tempContractEndsAt: string | null;
 };
 
 type WorkShiftOption = { id: string; code: string; name: string; isActive: boolean };
@@ -55,6 +61,7 @@ export default function FuncionariosPage() {
   const [modal, setModal] = useState<ModalMode>(null);
   const [selected, setSelected] = useState<Employee | null>(null);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [hazardPayType, setHazardPayType] = useState<'NONE' | 'INSALUBRIO' | 'PERICULOSIDADE'>('NONE');
 
   const list = useCrudList({
     items: rows,
@@ -78,12 +85,15 @@ export default function FuncionariosPage() {
     setSelected(row ?? null);
     setModal(mode);
     setError(null);
+    if (mode === 'include') setHazardPayType('NONE');
+    else if (row) setHazardPayType((row.hazardPayType as typeof hazardPayType) ?? 'NONE');
   }
 
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.currentTarget);
+    const hazard = (fd.get('hazardPayType') || 'NONE') as typeof hazardPayType;
     const body = {
       name: fd.get('name'),
       cpf: fd.get('cpf') || undefined,
@@ -100,10 +110,15 @@ export default function FuncionariosPage() {
       workShiftId: fd.get('workShiftId') ? String(fd.get('workShiftId')) : null,
       payrollWithdrawalAuthorizedAt: fd.get('payrollWithdrawalAuthorizedAt') || null,
       payrollWithdrawalAuthReference: fd.get('payrollWithdrawalAuthReference') || null,
-      hazardPayType: fd.get('hazardPayType') || 'NONE',
-      insalubrityPct: Number(fd.get('insalubrityPct') ?? 20),
+      hazardPayType: hazard,
+      insalubrityPct: hazard === 'INSALUBRIO' ? Number(fd.get('insalubrityPct') ?? 20) : 0,
       monthlyWorkHours: Number(fd.get('monthlyWorkHours') ?? 220),
       vtOptIn: fd.get('vtOptIn') === 'on',
+      employmentCategory: fd.get('employmentCategory') || 'GENERAL_101',
+      remunerationType: fd.get('remunerationType') || 'MONTHLY',
+      hourlyRate: fd.get('hourlyRate') ? Number(fd.get('hourlyRate')) : null,
+      dailyRate: fd.get('dailyRate') ? Number(fd.get('dailyRate')) : null,
+      tempContractEndsAt: fd.get('tempContractEndsAt') || null,
     };
     try {
       if (modal === 'edit' && selected) {
@@ -200,13 +215,76 @@ export default function FuncionariosPage() {
         </div>
       </fieldset>
       <fieldset className="rounded-md border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
+        <legend className="px-1 text-sm font-medium text-slate-800">Contrato / remuneração</legend>
+        <p className="mb-3 text-xs text-slate-600">
+          <strong>Temporário 106</strong> contratado pela granja é CLT: entra na folha como os demais. Adiantamento (vale)
+          em RH → Adiantamentos, com desconto na folha — não é comprovante de serviços prestados. Horista e diarista usam
+          batidas de ponto (ou dias na linha da folha) para o provento do mês. Prestador autônomo (RPA) ou PJ não deve ser
+          cadastrado neste formulário.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Categoria eSocial">
+            <select
+              name="employmentCategory"
+              className={inputClass}
+              defaultValue={selected?.employmentCategory ?? 'GENERAL_101'}
+            >
+              <option value="GENERAL_101">101 — CLT geral</option>
+              <option value="TEMPORARY_106">106 — Temporário</option>
+            </select>
+          </Field>
+          <Field label="Tipo de remuneração">
+            <select
+              name="remunerationType"
+              className={inputClass}
+              defaultValue={selected?.remunerationType ?? 'MONTHLY'}
+            >
+              <option value="MONTHLY">Mensalista (salário base)</option>
+              <option value="HOURLY">Horista (valor/hora)</option>
+              <option value="DAILY">Diarista (valor/dia)</option>
+            </select>
+          </Field>
+          <Field label="Valor hora (R$)">
+            <input
+              name="hourlyRate"
+              type="number"
+              min={0}
+              step="0.01"
+              className={inputClass}
+              defaultValue={selected?.hourlyRate != null ? Number(selected.hourlyRate) : ''}
+            />
+          </Field>
+          <Field label="Valor dia (R$)">
+            <input
+              name="dailyRate"
+              type="number"
+              min={0}
+              step="0.01"
+              className={inputClass}
+              defaultValue={selected?.dailyRate != null ? Number(selected.dailyRate) : ''}
+            />
+          </Field>
+          <Field label="Fim do contrato temporário">
+            <input
+              name="tempContractEndsAt"
+              type="date"
+              className={inputClass}
+              defaultValue={
+                selected?.tempContractEndsAt ? selected.tempContractEndsAt.slice(0, 10) : ''
+              }
+            />
+          </Field>
+        </div>
+      </fieldset>
+      <fieldset className="rounded-md border border-slate-200 bg-slate-50 p-3 sm:col-span-2">
         <legend className="px-1 text-sm font-medium text-slate-800">Adicionais e VT (folha)</legend>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Insalubridade / periculosidade">
             <select
               name="hazardPayType"
               className={inputClass}
-              defaultValue={selected?.hazardPayType ?? 'NONE'}
+              value={hazardPayType}
+              onChange={(e) => setHazardPayType(e.target.value as typeof hazardPayType)}
             >
               <option value="NONE">Nenhum</option>
               <option value="INSALUBRIO">Insalubridade (% s/ SM)</option>
@@ -217,12 +295,19 @@ export default function FuncionariosPage() {
             <input
               name="insalubrityPct"
               type="number"
-              min={10}
+              min={hazardPayType === 'INSALUBRIO' ? 10 : 0}
               max={40}
               step={10}
               className={inputClass}
-              defaultValue={selected?.insalubrityPct ?? 20}
+              disabled={hazardPayType !== 'INSALUBRIO'}
+              defaultValue={
+                hazardPayType === 'INSALUBRIO' ? (selected?.insalubrityPct ?? 20) : 0
+              }
+              key={`insal-${hazardPayType}-${selected?.id ?? 'new'}`}
             />
+            {hazardPayType !== 'INSALUBRIO' ? (
+              <p className="mt-1 text-xs text-slate-500">Não se aplica quando não há insalubridade.</p>
+            ) : null}
           </Field>
           <Field label="Horas mensais (cálculo HE)">
             <input
@@ -319,7 +404,7 @@ export default function FuncionariosPage() {
     <AdminShell title="Funcionários">
       <PageIntro
         title="Funcionários"
-        description="Colaboradores, turno, salário base e usuário para batida de ponto (QR na portaria)."
+        description="Colaboradores CLT na folha: turno, remuneração (mensal, hora ou dia), temporário 106 e usuário para ponto (QR na portaria). Autônomo/RPA e PJ não se cadastram aqui — use parceiros e financeiro."
       />
       <ErrorBox message={error} />
       <ListToolbar
@@ -370,6 +455,21 @@ export default function FuncionariosPage() {
               ['CPF', selected.cpf ?? '—'],
               ['Cargo', selected.jobTitle ?? '—'],
               ['Salário base', formatBrl(Number(selected.baseSalary))],
+              ['Categoria', labelEnum(selected.employmentCategory ?? 'GENERAL_101')],
+              ['Remuneração', labelEnum(selected.remunerationType ?? 'MONTHLY')],
+              [
+                'Tarifa hora / dia',
+                [
+                  selected.hourlyRate != null ? `${formatBrl(Number(selected.hourlyRate))}/h` : null,
+                  selected.dailyRate != null ? `${formatBrl(Number(selected.dailyRate))}/dia` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || '—',
+              ],
+              [
+                'Fim contrato temporário',
+                selected.tempContractEndsAt ? formatCalendarDatePtBR(selected.tempContractEndsAt) : '—',
+              ],
               ['Dependentes (IRRF)', String(selected.irrfDependents ?? 0)],
               ['Admissão', selected.hiredAt ? formatCalendarDatePtBR(selected.hiredAt) : '—'],
               [
