@@ -197,6 +197,24 @@ export class FinanceController {
     return this.finance.markPayablePaid(user, id, body);
   }
 
+  @Patch('payables/:id')
+  @RequirePermissions('finance.write', '*')
+  @Audited('AccountPayable')
+  updatePayable(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      partnerId: string;
+      chartAccountId: string;
+      description: string;
+      amount: number;
+      dueDate: string;
+    },
+  ) {
+    return this.finance.updatePayable(user, id, body);
+  }
+
   @Post('payables/:id/void-payment')
   @RequirePermissions('finance.write', '*')
   @Audited('AccountPayable')
@@ -227,6 +245,24 @@ export class FinanceController {
     body: { amount?: number; settlementDate?: string; notes?: string; chartAccountId?: string },
   ) {
     return this.finance.receiveReceivable(user, id, body);
+  }
+
+  @Patch('receivables/:id')
+  @RequirePermissions('finance.write', '*')
+  @Audited('AccountReceivable')
+  updateReceivable(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      partnerId: string;
+      chartAccountId: string;
+      description: string;
+      amount: number;
+      dueDate: string;
+    },
+  ) {
+    return this.finance.updateReceivable(user, id, body);
   }
 
   @Post('receivables/:id/void-payment')

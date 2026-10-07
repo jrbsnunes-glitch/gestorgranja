@@ -147,6 +147,8 @@ export function FinanceiroScreen({
   const [concentration, setConcentration] = useState<Concentration[]>([]);
   const [settlementOpen, setSettlementOpen] = useState<'pay' | 'rec' | null>(null);
   const [fixedRecurring, setFixedRecurring] = useState(false);
+  const [editPay, setEditPay] = useState<Payable | null>(null);
+  const [editRec, setEditRec] = useState<Receivable | null>(null);
 
   const payFiltered = payables.filter((p) => matchDueFilter(p.dueDate, listFilter));
 
@@ -365,6 +367,92 @@ export function FinanceiroScreen({
     );
   }
 
+  function payableCanEdit(p: Payable) {
+    return !isTitleCancelledStatus(p.approvalStatus) && !payableHasPayment(p);
+  }
+
+  function receivableCanEdit(r: Receivable) {
+    return !isTitleCancelledStatus(r.approvalStatus) && !receivableHasPayment(r);
+  }
+
+  function titleDueDateInput(iso: string) {
+    return iso.slice(0, 10);
+  }
+
+  async function submitEditPayable(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editPay) return;
+    setError(null);
+    const fd = new FormData(e.currentTarget);
+    const partnerId = String(fd.get('partnerId') ?? '').trim();
+    const chartAccountId = String(fd.get('chartAccountId') ?? '').trim();
+    if (!partnerId) {
+      setError('Selecione o fornecedor.');
+      return;
+    }
+    if (!chartAccountId) {
+      setError('Selecione a conta contábil.');
+      return;
+    }
+    try {
+      await apiFetch(`/v1/finance/payables/${editPay.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          partnerId,
+          chartAccountId,
+          description: fd.get('description'),
+          amount: Number(fd.get('amount')),
+          dueDate: fd.get('dueDate'),
+        }),
+      });
+      setEditPay(null);
+      if (viewPay?.id === editPay.id) {
+        setViewPayOpen(false);
+        setViewPay(null);
+      }
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
+  }
+
+  async function submitEditReceivable(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editRec) return;
+    setError(null);
+    const fd = new FormData(e.currentTarget);
+    const partnerId = String(fd.get('partnerId') ?? '').trim();
+    const chartAccountId = String(fd.get('chartAccountId') ?? '').trim();
+    if (!partnerId) {
+      setError('Selecione o cliente.');
+      return;
+    }
+    if (!chartAccountId) {
+      setError('Selecione a conta contábil.');
+      return;
+    }
+    try {
+      await apiFetch(`/v1/finance/receivables/${editRec.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          partnerId,
+          chartAccountId,
+          description: fd.get('description'),
+          amount: Number(fd.get('amount')),
+          dueDate: fd.get('dueDate'),
+        }),
+      });
+      setEditRec(null);
+      if (viewRec?.id === editRec.id) {
+        setViewRecOpen(false);
+        setViewRec(null);
+      }
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
+  }
+
   async function voidPayablePayment() {
     if (!viewPay) return;
     if (!window.confirm('Estornar o pagamento informado neste título?')) return;
@@ -475,6 +563,14 @@ export function FinanceiroScreen({
                   setViewPay(p);
                   setViewPayOpen(true);
                 }}
+                onEdit={
+                  payableCanEdit(p)
+                    ? () => {
+                        setEditPay(p);
+                        setError(null);
+                      }
+                    : undefined
+                }
               />,
             ])}
             page={payPag.page}
@@ -526,6 +622,14 @@ export function FinanceiroScreen({
                     setViewRec(r);
                     setViewRecOpen(true);
                   }}
+                  onEdit={
+                    receivableCanEdit(r)
+                      ? () => {
+                          setEditRec(r);
+                          setError(null);
+                        }
+                      : undefined
+                  }
                 />,
               ])}
               page={recPag.page}
@@ -669,9 +773,21 @@ export function FinanceiroScreen({
               </Button>
             ) : null}
             {!isTitleCancelledStatus(viewPay.approvalStatus) && !payableHasPayment(viewPay) ? (
-              <Button type="button" variant="secondary" onClick={() => void cancelPayableTitle()}>
-                Cancelar título
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setEditPay(viewPay);
+                    setError(null);
+                  }}
+                >
+                  Alterar
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => void cancelPayableTitle()}>
+                  Cancelar título
+                </Button>
+              </>
             ) : null}
           </div>
         ) : null}
@@ -729,13 +845,145 @@ export function FinanceiroScreen({
               </Button>
             ) : null}
             {!isTitleCancelledStatus(viewRec.approvalStatus) && !receivableHasPayment(viewRec) ? (
-              <Button type="button" variant="secondary" onClick={() => void cancelReceivableTitle()}>
-                Cancelar título
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setEditRec(viewRec);
+                    setError(null);
+                  }}
+                >
+                  Alterar
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => void cancelReceivableTitle()}>
+                  Cancelar título
+                </Button>
+              </>
             ) : null}
           </div>
         ) : null}
       </RecordViewModal>
+
+      <FormCadastroModal
+        open={editPay != null}
+        onClose={() => {
+          setEditPay(null);
+          setError(null);
+        }}
+        title="Alterar conta a pagar"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setEditPay(null)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="edit-payable-form">
+              Salvar alterações
+            </Button>
+          </>
+        }
+      >
+        {editPay ? (
+          <form id="edit-payable-form" key={editPay.id} onSubmit={submitEditPayable}>
+            {error && editPay ? (
+              <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+            ) : null}
+            <PartnerLookupField
+              role="supplier"
+              name="partnerId"
+              required
+              label="Fornecedor / parceiro"
+              defaultValue={editPay.partner.id}
+            />
+            <Field label="Conta contábil (despesa/custo)">
+              <ChartAccountSelect flow="payable" required defaultValue={editPay.chartAccount.id} />
+            </Field>
+            <Field label="Descrição">
+              <input name="description" className={inputClass} required defaultValue={editPay.description} />
+            </Field>
+            <Field label="Valor (R$)">
+              <input
+                name="amount"
+                type="number"
+                step="0.01"
+                min={0}
+                className={inputClass}
+                required
+                defaultValue={Number(editPay.amount)}
+              />
+            </Field>
+            <Field label="Vencimento">
+              <input
+                name="dueDate"
+                type="date"
+                className={inputClass}
+                required
+                defaultValue={titleDueDateInput(editPay.dueDate)}
+              />
+            </Field>
+          </form>
+        ) : null}
+      </FormCadastroModal>
+
+      <FormCadastroModal
+        open={editRec != null}
+        onClose={() => {
+          setEditRec(null);
+          setError(null);
+        }}
+        title="Alterar conta a receber"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setEditRec(null)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="edit-receivable-form">
+              Salvar alterações
+            </Button>
+          </>
+        }
+      >
+        {editRec ? (
+          <form id="edit-receivable-form" key={editRec.id} onSubmit={submitEditReceivable}>
+            {error && editRec ? (
+              <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+            ) : null}
+            <PartnerLookupField
+              role="customer"
+              name="partnerId"
+              required
+              label="Cliente / parceiro"
+              defaultValue={editRec.partner.id}
+            />
+            <Field label="Conta contábil (receita)">
+              <ChartAccountSelect flow="receivable" required defaultValue={editRec.chartAccount.id} />
+            </Field>
+            <Field label="Descrição">
+              <input name="description" className={inputClass} required defaultValue={editRec.description} />
+            </Field>
+            <Field label="Valor (R$)">
+              <input
+                name="amount"
+                type="number"
+                step="0.01"
+                min={0}
+                className={inputClass}
+                required
+                defaultValue={Number(editRec.amount)}
+              />
+            </Field>
+            <Field label="Vencimento">
+              <input
+                name="dueDate"
+                type="date"
+                className={inputClass}
+                required
+                defaultValue={titleDueDateInput(editRec.dueDate)}
+              />
+            </Field>
+          </form>
+        ) : null}
+      </FormCadastroModal>
 
       <FormCadastroModal
         open={settlementOpen === 'pay' && viewPay != null}

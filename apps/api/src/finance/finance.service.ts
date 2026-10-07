@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
-import { PaymentApprovalStatus } from '../generated/tenant-client';
+import { PaymentApprovalStatus, Prisma } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import {
   buildInstallmentsFromTotal,
@@ -318,6 +318,112 @@ export class FinanceService {
       data: { payablesGenerated: true, financeApprovedAt: new Date(), financeApprovedByUserId: user.sub },
     });
     return created;
+  }
+
+  private assertPayableEditable(row: {
+    amount: Prisma.Decimal;
+    approvalStatus: PaymentApprovalStatus;
+    amountPaid: Prisma.Decimal;
+    paidAt?: Date | null;
+  }) {
+    if (isTitleCancelled(row.approvalStatus)) {
+      throw new BadRequestException('Título cancelado');
+    }
+    if (hasTitlePayment(row.amountPaid) || row.paidAt || isPayableSettled(row)) {
+      throw new BadRequestException(
+        'Estorne o pagamento antes de alterar o registro da conta a pagar',
+      );
+    }
+  }
+
+  private assertReceivableEditable(row: {
+    amount: Prisma.Decimal;
+    approvalStatus: PaymentApprovalStatus;
+    amountPaid: Prisma.Decimal;
+    receivedAt?: Date | null;
+  }) {
+    if (isTitleCancelled(row.approvalStatus)) {
+      throw new BadRequestException('Título cancelado');
+    }
+    if (hasTitlePayment(row.amountPaid) || row.receivedAt || isReceivableSettled(row)) {
+      throw new BadRequestException(
+        'Estorne o recebimento antes de alterar o registro da conta a receber',
+      );
+    }
+  }
+
+  async updatePayable(
+    user: JwtPayload,
+    id: string,
+    data: {
+      partnerId: string;
+      chartAccountId: string;
+      description: string;
+      amount: number;
+      dueDate: string;
+    },
+  ) {
+    if (data.amount <= 0) throw new BadRequestException('Valor inválido');
+    const desc = data.description.trim();
+    if (!desc) throw new BadRequestException('Descrição obrigatória');
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const row = await prisma.accountPayable.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Conta não encontrada');
+    this.assertPayableEditable(row);
+
+    const partner = await prisma.partner.findUnique({ where: { id: data.partnerId } });
+    if (!partner) throw new BadRequestException('Parceiro inválido');
+    const chartAccount = await prisma.chartAccount.findUnique({ where: { id: data.chartAccountId } });
+    if (!chartAccount) throw new BadRequestException('Conta contábil inválida');
+
+    return prisma.accountPayable.update({
+      where: { id },
+      data: {
+        partnerId: data.partnerId,
+        chartAccountId: data.chartAccountId,
+        description: desc.slice(0, 200),
+        amount: data.amount,
+        dueDate: new Date(data.dueDate + 'T12:00:00'),
+      },
+      include: { partner: true, chartAccount: true },
+    });
+  }
+
+  async updateReceivable(
+    user: JwtPayload,
+    id: string,
+    data: {
+      partnerId: string;
+      chartAccountId: string;
+      description: string;
+      amount: number;
+      dueDate: string;
+    },
+  ) {
+    if (data.amount <= 0) throw new BadRequestException('Valor inválido');
+    const desc = data.description.trim();
+    if (!desc) throw new BadRequestException('Descrição obrigatória');
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const row = await prisma.accountReceivable.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Conta não encontrada');
+    this.assertReceivableEditable(row);
+
+    const partner = await prisma.partner.findUnique({ where: { id: data.partnerId } });
+    if (!partner) throw new BadRequestException('Parceiro inválido');
+    const chartAccount = await prisma.chartAccount.findUnique({ where: { id: data.chartAccountId } });
+    if (!chartAccount) throw new BadRequestException('Conta contábil inválida');
+
+    return prisma.accountReceivable.update({
+      where: { id },
+      data: {
+        partnerId: data.partnerId,
+        chartAccountId: data.chartAccountId,
+        description: desc.slice(0, 200),
+        amount: data.amount,
+        dueDate: new Date(data.dueDate + 'T12:00:00'),
+      },
+      include: { partner: true, chartAccount: true },
+    });
   }
 
   async voidPayablePayment(user: JwtPayload, id: string) {
