@@ -193,9 +193,19 @@ export function FinanceiroScreen({
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.currentTarget);
+    const partnerId = String(fd.get('partnerId') ?? '').trim();
+    const chartAccountId = String(fd.get('chartAccountId') ?? '').trim();
+    if (!partnerId) {
+      setError('Selecione ou cadastre o fornecedor (Pesquisar → Cadastrar novo → Salvar e usar).');
+      return;
+    }
+    if (!chartAccountId) {
+      setError('Selecione a conta contábil.');
+      return;
+    }
     const base = {
-      partnerId: fd.get('partnerId'),
-      chartAccountId: fd.get('chartAccountId'),
+      partnerId,
+      chartAccountId,
       description: fd.get('description'),
       amount: Number(fd.get('amount')),
     };
@@ -233,9 +243,19 @@ export function FinanceiroScreen({
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.currentTarget);
+    const partnerId = String(fd.get('partnerId') ?? '').trim();
+    const chartAccountId = String(fd.get('chartAccountId') ?? '').trim();
+    if (!partnerId) {
+      setError('Selecione ou cadastre o cliente (Pesquisar → Cadastrar novo → Salvar e usar).');
+      return;
+    }
+    if (!chartAccountId) {
+      setError('Selecione a conta contábil.');
+      return;
+    }
     const base = {
-      partnerId: fd.get('partnerId'),
-      chartAccountId: fd.get('chartAccountId'),
+      partnerId,
+      chartAccountId,
       description: fd.get('description'),
       amount: Number(fd.get('amount')),
     };
@@ -446,6 +466,7 @@ export function FinanceiroScreen({
         onClose={() => {
           setFormOpen(false);
           setFixedRecurring(false);
+          setError(null);
         }}
         title="Incluir conta a pagar"
         footer={
@@ -460,6 +481,9 @@ export function FinanceiroScreen({
         }
       >
         <form id="payable-form" onSubmit={createPayable}>
+          {error && formOpen && tab === 'pagar' ? (
+            <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+          ) : null}
           <PartnerLookupField role="supplier" name="partnerId" required label="Fornecedor / parceiro" />
           <Field label="Conta contábil (despesa/custo)">
             <ChartAccountSelect flow="payable" required />
@@ -476,6 +500,7 @@ export function FinanceiroScreen({
         onClose={() => {
           setFormOpen(false);
           setFixedRecurring(false);
+          setError(null);
         }}
         title="Incluir conta a receber"
         footer={
@@ -490,6 +515,9 @@ export function FinanceiroScreen({
         }
       >
         <form id="receivable-form" onSubmit={createReceivable}>
+          {error && formOpen && tab === 'receber' ? (
+            <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+          ) : null}
           <PartnerLookupField role="customer" name="partnerId" required label="Cliente / parceiro" />
           <Field label="Conta contábil (receita)">
             <ChartAccountSelect flow="receivable" required />

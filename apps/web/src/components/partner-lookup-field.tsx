@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@gestor-granja/ui';
 import { FormCadastroModal } from '@/components/crud';
 import { PartnerForm, partnerToForm, type PartnerFormValues } from '@/components/partner-form';
@@ -61,6 +62,7 @@ export function PartnerLookupField({
   const roleLabel =
     role === 'customer' ? 'cliente' : role === 'supplier' ? 'fornecedor' : 'parceiro';
   const fieldLabel = label ?? (role === 'customer' ? 'Cliente' : role === 'supplier' ? 'Fornecedor' : 'Parceiro');
+  const createFormId = `partner-quick-create-${useId().replace(/:/g, '')}`;
 
   const [internalId, setInternalId] = useState(defaultValue);
   const selectedId = controlledValue !== undefined ? controlledValue : internalId;
@@ -78,6 +80,11 @@ export function PartnerLookupField({
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   const load = useCallback(() => {
     void apiFetch<PartnerRow[]>('/v1/cadastros/partners').then(setPartners);
@@ -130,6 +137,88 @@ export function PartnerLookupField({
 
   const display = selected ? partnerLabel(selected) : '';
 
+  const searchModal = (
+    <FormCadastroModal
+      open={searchOpen}
+      onClose={() => setSearchOpen(false)}
+      title={`Pesquisar ${roleLabel}`}
+      wide
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={() => setSearchOpen(false)}>
+            Fechar
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              setCreateError(null);
+              setCreateOpen(true);
+            }}
+          >
+            Cadastrar novo
+          </Button>
+        </>
+      }
+    >
+      <Field label="Buscar">
+        <input
+          className={inputClass}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Nome, nome fantasia…"
+          autoFocus
+        />
+      </Field>
+      <ul className="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
+        {matches.length === 0 ? (
+          <li className="px-3 py-6 text-center text-sm text-slate-500">Nenhum registro encontrado.</li>
+        ) : (
+          matches.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className="block w-full px-3 py-2.5 text-left text-sm hover:bg-emerald-50"
+                onClick={() => pick(p)}
+              >
+                {partnerLabel(p)}
+              </button>
+            </li>
+          ))
+        )}
+      </ul>
+    </FormCadastroModal>
+  );
+
+  const createModal = (
+    <FormCadastroModal
+      open={createOpen}
+      onClose={() => setCreateOpen(false)}
+      title={`Incluir ${roleLabel}`}
+      wide
+      backdropClassName="z-[110]"
+      hint={`Conclua com «Salvar e usar» para vincular o ${roleLabel} ao título antes de incluir a conta.`}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
+            Cancelar
+          </Button>
+          <Button type="submit" form={createFormId}>
+            Salvar e usar
+          </Button>
+        </>
+      }
+    >
+      {createError ? <p className="mb-3 text-sm text-red-700">{createError}</p> : null}
+      <PartnerForm
+        formId={createFormId}
+        hideSubmit
+        initial={partnerToForm({ personType: role === 'customer' ? 'PF' : 'PJ' })}
+        submitLabel="Salvar"
+        onSubmit={savePartner}
+      />
+    </FormCadastroModal>
+  );
+
   return (
     <>
       <Field label={fieldLabel}>
@@ -161,81 +250,8 @@ export function PartnerLookupField({
         ) : null}
       </Field>
 
-      <FormCadastroModal
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        title={`Pesquisar ${roleLabel}`}
-        wide
-        footer={
-          <>
-            <Button type="button" variant="secondary" onClick={() => setSearchOpen(false)}>
-              Fechar
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                setCreateError(null);
-                setCreateOpen(true);
-              }}
-            >
-              Cadastrar novo
-            </Button>
-          </>
-        }
-      >
-        <Field label="Buscar">
-          <input
-            className={inputClass}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Nome, nome fantasia…"
-            autoFocus
-          />
-        </Field>
-        <ul className="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
-          {matches.length === 0 ? (
-            <li className="px-3 py-6 text-center text-sm text-slate-500">Nenhum registro encontrado.</li>
-          ) : (
-            matches.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  className="block w-full px-3 py-2.5 text-left text-sm hover:bg-emerald-50"
-                  onClick={() => pick(p)}
-                >
-                  {partnerLabel(p)}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      </FormCadastroModal>
-
-      <FormCadastroModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title={`Incluir ${roleLabel}`}
-        wide
-        footer={
-          <>
-            <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" form="partner-quick-create">
-              Salvar e usar
-            </Button>
-          </>
-        }
-      >
-        {createError ? <p className="mb-3 text-sm text-red-700">{createError}</p> : null}
-        <PartnerForm
-          formId="partner-quick-create"
-          hideSubmit
-          initial={partnerToForm({ personType: role === 'customer' ? 'PF' : 'PJ' })}
-          submitLabel="Salvar"
-          onSubmit={savePartner}
-        />
-      </FormCadastroModal>
+      {portalReady && searchOpen ? createPortal(searchModal, document.body) : null}
+      {portalReady && createOpen ? createPortal(createModal, document.body) : null}
     </>
   );
 }

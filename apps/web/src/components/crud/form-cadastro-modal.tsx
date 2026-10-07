@@ -16,6 +16,7 @@ export function FormCadastroModal({
   wide = true,
   size = 'lg',
   dense = false,
+  backdropClassName = '',
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +29,8 @@ export function FormCadastroModal({
   size?: FormCadastroModalSize;
   /** Menos padding — formulários com muitos campos. */
   dense?: boolean;
+  /** Ex.: z-[110] quando empilhado sobre outro modal. */
+  backdropClassName?: string;
 }) {
   if (!open) return null;
   const backdropWide = size === 'xl' || wide;
@@ -36,7 +39,7 @@ export function FormCadastroModal({
   const footPad = dense ? 'px-4 py-2 sm:px-5' : 'px-4 py-3 sm:px-5';
 
   return (
-    <ModalBackdrop onClose={onClose} wide={backdropWide} fitViewport className="">
+    <ModalBackdrop onClose={onClose} wide={backdropWide} fitViewport className={backdropClassName}>
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
         <div className={`shrink-0 border-b border-slate-100 ${headPad}`}>
           <h2 className={`font-semibold text-slate-900 ${dense ? 'text-base' : 'text-lg'}`}>{title}</h2>
