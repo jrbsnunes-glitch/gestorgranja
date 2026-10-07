@@ -197,6 +197,20 @@ export class FinanceController {
     return this.finance.markPayablePaid(user, id, body);
   }
 
+  @Post('payables/:id/void-payment')
+  @RequirePermissions('finance.write', '*')
+  @Audited('AccountPayable')
+  voidPayablePayment(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.finance.voidPayablePayment(user, id);
+  }
+
+  @Patch('payables/:id/cancel')
+  @RequirePermissions('finance.write', '*')
+  @Audited('AccountPayable')
+  cancelPayable(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.finance.cancelPayable(user, id);
+  }
+
   @Post('receivables')
   @RequirePermissions('finance.write', '*')
   @Audited('AccountReceivable')
@@ -213,6 +227,20 @@ export class FinanceController {
     body: { amount?: number; settlementDate?: string; notes?: string; chartAccountId?: string },
   ) {
     return this.finance.receiveReceivable(user, id, body);
+  }
+
+  @Post('receivables/:id/void-payment')
+  @RequirePermissions('finance.write', '*')
+  @Audited('AccountReceivable')
+  voidReceivablePayment(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.finance.voidReceivablePayment(user, id);
+  }
+
+  @Patch('receivables/:id/cancel')
+  @RequirePermissions('finance.write', '*')
+  @Audited('AccountReceivable')
+  cancelReceivable(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.finance.cancelReceivable(user, id);
   }
 
   @Post('purchase-orders/:orderId/generate-payables')

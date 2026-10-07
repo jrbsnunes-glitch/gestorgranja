@@ -8,6 +8,14 @@ export function titleBalance(amount: Prisma.Decimal, amountPaid: Prisma.Decimal)
   return dec(amount) - dec(amountPaid);
 }
 
+export function hasTitlePayment(amountPaid: Prisma.Decimal | number | string): boolean {
+  return dec(amountPaid) > 0.005;
+}
+
+export function isTitleCancelled(status: PaymentApprovalStatus): boolean {
+  return status === PaymentApprovalStatus.CANCELLED;
+}
+
 export function isPayableSettled(row: {
   amount: Prisma.Decimal;
   amountPaid: Prisma.Decimal;

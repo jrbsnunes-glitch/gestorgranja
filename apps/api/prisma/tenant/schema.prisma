@@ -988,6 +988,7 @@ enum PaymentApprovalStatus {
   APPROVED
   REJECTED
   PAID
+  CANCELLED
 }
 
 enum RecurringFinanceKind {

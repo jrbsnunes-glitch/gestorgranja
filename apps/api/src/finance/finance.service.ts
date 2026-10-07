@@ -6,8 +6,10 @@ import {
   buildInstallmentsFromTotal,
   daysOverdue,
   dec,
+  hasTitlePayment,
   isPayableSettled,
   isReceivableSettled,
+  isTitleCancelled,
   parsePaymentTerms,
   titleBalance,
 } from './finance-title-utils';
@@ -92,6 +94,7 @@ export class FinanceService {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const row = await prisma.accountPayable.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Conta não encontrada');
+    if (isTitleCancelled(row.approvalStatus)) throw new BadRequestException('Título cancelado');
     if (row.approvalStatus !== PaymentApprovalStatus.APPROVED && !isPayableSettled(row)) {
       throw new BadRequestException('Pagamento requer aprovação prévia');
     }
@@ -175,11 +178,16 @@ export class FinanceService {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const [payables, receivables] = await Promise.all([
       prisma.accountPayable.findMany({
-        where: { approvalStatus: { not: PaymentApprovalStatus.PAID } },
+        where: {
+          approvalStatus: { in: [PaymentApprovalStatus.PENDING, PaymentApprovalStatus.APPROVED] },
+        },
         include: { partner: true, chartAccount: true },
       }),
       prisma.accountReceivable.findMany({
-        where: { receivedAt: null },
+        where: {
+          approvalStatus: { not: PaymentApprovalStatus.CANCELLED },
+          receivedAt: null,
+        },
         include: { partner: true, chartAccount: true },
       }),
     ]);
@@ -197,7 +205,9 @@ export class FinanceService {
     let totalOpen = 0;
     const byPartner = new Map<string, { name: string; open: number; count: number }>();
 
-    const items = rows.map((r) => {
+    const items = rows
+      .filter((r) => !isTitleCancelled(r.approvalStatus))
+      .map((r) => {
       const settled = isReceivableSettled(r);
       const balance = settled ? 0 : titleBalance(r.amount, r.amountPaid);
       const overdueDays = settled ? 0 : daysOverdue(r.dueDate, today);
@@ -234,6 +244,7 @@ export class FinanceService {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const row = await prisma.accountReceivable.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Conta não encontrada');
+    if (isTitleCancelled(row.approvalStatus)) throw new BadRequestException('Título cancelado');
     if (isReceivableSettled(row)) throw new BadRequestException('Título já liquidado');
 
     const total = dec(row.amount);
@@ -307,5 +318,101 @@ export class FinanceService {
       data: { payablesGenerated: true, financeApprovedAt: new Date(), financeApprovedByUserId: user.sub },
     });
     return created;
+  }
+
+  async voidPayablePayment(user: JwtPayload, id: string) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const row = await prisma.accountPayable.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Conta não encontrada');
+    if (isTitleCancelled(row.approvalStatus)) {
+      throw new BadRequestException('Título cancelado');
+    }
+    if (!hasTitlePayment(row.amountPaid) && !row.paidAt) {
+      throw new BadRequestException('Não há pagamento informado neste título');
+    }
+    const statusAfter =
+      row.approvalStatus === PaymentApprovalStatus.PAID
+        ? PaymentApprovalStatus.APPROVED
+        : row.approvalStatus;
+    return prisma.accountPayable.update({
+      where: { id },
+      data: {
+        amountPaid: 0,
+        paidAt: null,
+        approvalStatus: statusAfter,
+        settlementNotes: null,
+      },
+      include: { partner: true, chartAccount: true },
+    });
+  }
+
+  async cancelPayable(user: JwtPayload, id: string) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const row = await prisma.accountPayable.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Conta não encontrada');
+    if (isTitleCancelled(row.approvalStatus)) {
+      throw new BadRequestException('Título já cancelado');
+    }
+    if (hasTitlePayment(row.amountPaid) || row.paidAt) {
+      throw new BadRequestException(
+        'Estorne o pagamento antes de cancelar o registro da conta a pagar',
+      );
+    }
+    if (row.approvalStatus === PaymentApprovalStatus.PAID) {
+      throw new BadRequestException('Estorne o pagamento antes de cancelar o registro');
+    }
+    return prisma.accountPayable.update({
+      where: { id },
+      data: { approvalStatus: PaymentApprovalStatus.CANCELLED },
+      include: { partner: true, chartAccount: true },
+    });
+  }
+
+  async voidReceivablePayment(user: JwtPayload, id: string) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const row = await prisma.accountReceivable.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Conta não encontrada');
+    if (isTitleCancelled(row.approvalStatus)) {
+      throw new BadRequestException('Título cancelado');
+    }
+    if (!hasTitlePayment(row.amountPaid) && !row.receivedAt) {
+      throw new BadRequestException('Não há recebimento informado neste título');
+    }
+    const statusAfter =
+      row.approvalStatus === PaymentApprovalStatus.PAID
+        ? PaymentApprovalStatus.APPROVED
+        : row.approvalStatus;
+    return prisma.accountReceivable.update({
+      where: { id },
+      data: {
+        amountPaid: 0,
+        receivedAt: null,
+        approvalStatus: statusAfter,
+        settlementNotes: null,
+      },
+      include: { partner: true, chartAccount: true },
+    });
+  }
+
+  async cancelReceivable(user: JwtPayload, id: string) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const row = await prisma.accountReceivable.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Conta não encontrada');
+    if (isTitleCancelled(row.approvalStatus)) {
+      throw new BadRequestException('Título já cancelado');
+    }
+    if (hasTitlePayment(row.amountPaid) || row.receivedAt) {
+      throw new BadRequestException(
+        'Estorne o recebimento antes de cancelar o registro da conta a receber',
+      );
+    }
+    if (isReceivableSettled(row)) {
+      throw new BadRequestException('Estorne o recebimento antes de cancelar o registro');
+    }
+    return prisma.accountReceivable.update({
+      where: { id },
+      data: { approvalStatus: PaymentApprovalStatus.CANCELLED },
+      include: { partner: true, chartAccount: true },
+    });
   }
 }

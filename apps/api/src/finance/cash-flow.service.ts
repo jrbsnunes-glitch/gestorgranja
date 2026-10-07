@@ -3,7 +3,14 @@ import { JwtPayload } from '../auth/jwt.strategy';
 import { CashMovementType, CashSessionStatus } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { dateKeyInRange, localDateKey } from './finance-date.util';
-import { dec, isPayableSettled, isReceivableSettled, parsePaymentTerms, titleBalance } from './finance-title-utils';
+import {
+  dec,
+  isPayableSettled,
+  isReceivableSettled,
+  isTitleCancelled,
+  parsePaymentTerms,
+  titleBalance,
+} from './finance-title-utils';
 
 const CASH_FLOW_SESSION_STATUSES: CashSessionStatus[] = [
   CashSessionStatus.OPEN,
@@ -50,6 +57,7 @@ export class CashFlowService {
 
     const payables = await prisma.accountPayable.findMany();
     for (const p of payables) {
+      if (isTitleCancelled(p.approvalStatus)) continue;
       const settled = isPayableSettled(p);
       if (settled) {
         const when = p.paidAt ?? p.dueDate;
@@ -77,6 +85,7 @@ export class CashFlowService {
 
     const receivables = await prisma.accountReceivable.findMany();
     for (const r of receivables) {
+      if (isTitleCancelled(r.approvalStatus)) continue;
       const settled = isReceivableSettled(r);
       if (settled) {
         const when = r.receivedAt ?? r.dueDate;

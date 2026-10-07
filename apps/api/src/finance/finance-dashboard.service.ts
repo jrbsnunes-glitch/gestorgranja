@@ -14,7 +14,14 @@ import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { humanizeUserMessage } from '../common/humanize-user-message.util';
 import { BudgetService } from './budget.service';
 import { localDateKey } from './finance-date.util';
-import { daysOverdue, dec, isPayableSettled, isReceivableSettled, titleBalance } from './finance-title-utils';
+import {
+  daysOverdue,
+  dec,
+  isPayableSettled,
+  isReceivableSettled,
+  isTitleCancelled,
+  titleBalance,
+} from './finance-title-utils';
 
 const FINANCE_ALERT_TYPES: AlertType[] = [
   AlertType.PAYMENT_DUE,
@@ -91,6 +98,7 @@ export class FinanceDashboardService {
     let cpDue7 = 0;
     let cpDue30 = 0;
     for (const p of payables) {
+      if (isTitleCancelled(p.approvalStatus)) continue;
       if (isPayableSettled(p)) continue;
       const bal = titleBalance(p.amount, p.amountPaid);
       cpOpen += bal;
@@ -108,6 +116,7 @@ export class FinanceDashboardService {
     let crDue30 = 0;
     const byPartner = new Map<string, { name: string; open: number }>();
     for (const r of receivables) {
+      if (isTitleCancelled(r.approvalStatus)) continue;
       if (isReceivableSettled(r)) continue;
       const bal = titleBalance(r.amount, r.amountPaid);
       crOpen += bal;

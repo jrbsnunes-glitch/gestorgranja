@@ -349,6 +349,82 @@ export function FinanceiroScreen({
     return Number(amount) - titlePaidAmount(amount, amountPaid);
   }
 
+  function isTitleCancelledStatus(status: string) {
+    return status === 'CANCELLED';
+  }
+
+  function payableHasPayment(p: Payable) {
+    return titlePaidAmount(p.amount, p.amountPaid) > 0.004 || p.approvalStatus === 'PAID';
+  }
+
+  function receivableHasPayment(r: Receivable) {
+    return (
+      r.settled === true ||
+      titlePaidAmount(r.amount, r.amountPaid) > 0.004 ||
+      r.approvalStatus === 'PAID'
+    );
+  }
+
+  async function voidPayablePayment() {
+    if (!viewPay) return;
+    if (!window.confirm('Estornar o pagamento informado neste título?')) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<Payable>(`/v1/finance/payables/${viewPay.id}/void-payment`, {
+        method: 'POST',
+      });
+      setViewPay(updated);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
+  }
+
+  async function cancelPayableTitle() {
+    if (!viewPay) return;
+    if (!window.confirm('Cancelar este registro de conta a pagar?')) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<Payable>(`/v1/finance/payables/${viewPay.id}/cancel`, {
+        method: 'PATCH',
+      });
+      setViewPay(updated);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
+  }
+
+  async function voidReceivablePayment() {
+    if (!viewRec) return;
+    if (!window.confirm('Estornar o recebimento informado neste título?')) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<Receivable>(`/v1/finance/receivables/${viewRec.id}/void-payment`, {
+        method: 'POST',
+      });
+      setViewRec(updated);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
+  }
+
+  async function cancelReceivableTitle() {
+    if (!viewRec) return;
+    if (!window.confirm('Cancelar este registro de conta a receber?')) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<Receivable>(`/v1/finance/receivables/${viewRec.id}/cancel`, {
+        method: 'PATCH',
+      });
+      setViewRec(updated);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
+  }
+
   const reportsTitle = tab === 'pagar' ? 'Contas a pagar' : 'Contas a receber';
 
   return (
@@ -580,9 +656,21 @@ export function FinanceiroScreen({
                 </Button>
               </>
             ) : null}
-            {viewPay.approvalStatus === 'APPROVED' && titleRemaining(viewPay.amount, viewPay.amountPaid) > 0.004 ? (
+            {viewPay.approvalStatus === 'APPROVED' &&
+            !isTitleCancelledStatus(viewPay.approvalStatus) &&
+            titleRemaining(viewPay.amount, viewPay.amountPaid) > 0.004 ? (
               <Button type="button" onClick={() => setSettlementOpen('pay')}>
                 Registrar pagamento
+              </Button>
+            ) : null}
+            {!isTitleCancelledStatus(viewPay.approvalStatus) && payableHasPayment(viewPay) ? (
+              <Button type="button" variant="secondary" onClick={() => void voidPayablePayment()}>
+                Estornar pagamento
+              </Button>
+            ) : null}
+            {!isTitleCancelledStatus(viewPay.approvalStatus) && !payableHasPayment(viewPay) ? (
+              <Button type="button" variant="secondary" onClick={() => void cancelPayableTitle()}>
+                Cancelar título
               </Button>
             ) : null}
           </div>
@@ -628,11 +716,23 @@ export function FinanceiroScreen({
             : []
         }
       >
-        {viewRec && !viewRec.settled ? (
-          <div className="mt-4">
-            <Button type="button" onClick={() => setSettlementOpen('rec')}>
-              Registrar recebimento
-            </Button>
+        {viewRec ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {!viewRec.settled && !isTitleCancelledStatus(viewRec.approvalStatus) ? (
+              <Button type="button" onClick={() => setSettlementOpen('rec')}>
+                Registrar recebimento
+              </Button>
+            ) : null}
+            {!isTitleCancelledStatus(viewRec.approvalStatus) && receivableHasPayment(viewRec) ? (
+              <Button type="button" variant="secondary" onClick={() => void voidReceivablePayment()}>
+                Estornar recebimento
+              </Button>
+            ) : null}
+            {!isTitleCancelledStatus(viewRec.approvalStatus) && !receivableHasPayment(viewRec) ? (
+              <Button type="button" variant="secondary" onClick={() => void cancelReceivableTitle()}>
+                Cancelar título
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </RecordViewModal>
