@@ -27,11 +27,15 @@ export function AppNav({ onNavigate }: { onNavigate?: () => void } = {}) {
               if (pathname === item.href) dispatchDashboardRefresh();
               onNavigate?.();
             }}
-            className={`block min-h-11 rounded-md px-3 py-2.5 leading-snug ${
+            className={`flex min-h-11 items-center gap-2.5 rounded-md px-3 py-2.5 leading-snug ${
               active ? 'bg-emerald-100 font-medium text-emerald-900' : 'text-slate-700 hover:bg-slate-100'
             }`}
           >
-            {item.label}
+            {item.icon ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.icon} alt="" className="h-6 w-6 shrink-0 object-contain" />
+            ) : null}
+            <span>{item.label}</span>
           </Link>
         );
       })}

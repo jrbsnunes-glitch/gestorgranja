@@ -36,6 +36,12 @@ export function ageDaysAt(housingDate: Date, at: Date) {
   return Math.floor((at.getTime() - housingDate.getTime()) / 86400000);
 }
 
+/** Idade zootécnica (dias): semanas iniciais no alojamento + dias desde o alojamento. */
+export function flockAgeDays(housingDate: Date, at: Date, initialAgeWeeks = 0) {
+  const initialDays = Math.max(0, Math.floor(initialAgeWeeks)) * 7;
+  return Math.max(0, ageDaysAt(housingDate, at)) + initialDays;
+}
+
 /** Conversão alimentar (kg ração / kg massa de ovos) em uma janela de registros pareados por data. */
 export function feedConversion(
   pairs: Array<{ consumedKg: number; commercialEggs: number; avgEggWeightG: number | null }>,

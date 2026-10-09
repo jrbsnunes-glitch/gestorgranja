@@ -220,6 +220,7 @@ model Company {
   email        String?
   logoUrl      String?
   fiscalIssuerSettings FiscalIssuerSettings?
+  sicoobCobrancaSettings SicoobCobrancaSettings?
 }
 
 model HrSettings {
@@ -321,6 +322,8 @@ model FlockLot {
   breedLineageId   String
   breedLineage     BreedLineage           @relation(fields: [breedLineageId], references: [id])
   housingDate      DateTime               @db.Date
+  /// Idade das aves (semanas) no dia do alojamento — somada à idade no galpão.
+  initialAgeWeeks  Int                    @default(0)
   housedQty        Int
   eggType          EggShellType?
   strainNotes      String?
@@ -1049,12 +1052,15 @@ model AccountReceivable {
   approvalStatus PaymentApprovalStatus @default(PENDING)
   receivedAt     DateTime?
   salesOrderId   String?
+  salesOrder     SalesOrder?            @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
   settlementNotes String?
   recurringRuleId String?
   recurringRule   RecurringFinanceRule? @relation(fields: [recurringRuleId], references: [id], onDelete: SetNull)
+  boletos         BankBoleto[]
 
   @@unique([controlNumber])
   @@index([recurringRuleId, dueDate])
+  @@index([salesOrderId])
 }
 
 model Bank {
@@ -1076,13 +1082,84 @@ model BankAccount {
   balance  Decimal @default(0) @db.Decimal(14, 2)
 }
 
+enum SicoobEnvironment {
+  sandbox
+  production
+}
+
+enum BankBoletoStatus {
+  REGISTERED
+  PAID
+  CANCELLED
+  FAILED
+}
+
+model SicoobCobrancaSettings {
+  id                         String            @id @default("default")
+  companyId                  String            @unique
+  company                    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  environment                SicoobEnvironment @default(sandbox)
+  clientId                   String?
+  numeroCliente              Int?
+  numeroContaCorrente        String?
+  codigoModalidade           Int               @default(1)
+  codigoEspecieDocumento     String            @default("DM")
+  identificacaoEmissaoBoleto Int               @default(1)
+  identificacaoDistribuicaoBoleto Int          @default(1)
+  codigoCadastrarPIX         Int               @default(0)
+  tipoMulta                  Int               @default(0)
+  tipoJurosMora              Int               @default(3)
+  valorMulta                 Decimal?          @db.Decimal(14, 4)
+  valorJurosMora             Decimal?          @db.Decimal(14, 4)
+  diasInicioMultaAposVencimento Int            @default(1)
+  diasInicioJurosAposVencimento Int            @default(1)
+  diasLimitePagamentoAposVencimento Int?
+  encargosNasInstrucoes      Boolean           @default(true)
+  codigoProtesto             Int               @default(3)
+  codigoNegativacao          Int               @default(3)
+  dueDaysDefault             Int               @default(7)
+  useFiscalCertificate       Boolean           @default(true)
+  certificatePath            String?
+  certificatePasswordEnc     String?
+  sandboxAccessTokenEnc      String?
+  updatedAt                  DateTime          @updatedAt
+}
+
+model BankBoleto {
+  id              String           @id @default(uuid())
+  receivableId    String?
+  receivable      AccountReceivable? @relation(fields: [receivableId], references: [id], onDelete: SetNull)
+  salesOrderId    String?
+  salesOrder      SalesOrder?      @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  seuNumero       String
+  nossoNumero     String?
+  codigoBarras    String?
+  linhaDigitavel  String?
+  qrCode          String?
+  pdfStorageKey   String?
+  status          BankBoletoStatus @default(REGISTERED)
+  valor           Decimal          @db.Decimal(14, 2)
+  dataVencimento  DateTime         @db.Date
+  situacaoBoleto  String?
+  lastError       String?
+  registeredAt    DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([receivableId])
+  @@index([salesOrderId])
+  @@index([status])
+  @@index([nossoNumero])
+}
+
 // --- Comercial ---
 
 model PaymentForm {
   id            String       @id @default(uuid())
   controlNumber Int          @unique @default(autoincrement())
   name          String
-  /// CASH, PIX, CARD, TRANSFER, OTHER — usado no movimento de caixa
+  /// CASH, PIX, CARD, TRANSFER, BOLETO, OTHER — usado no movimento do caixa
   kind          String
   colorHex      String       @default("#0f766e")
   sortOrder     Int          @default(0)
@@ -1111,6 +1188,8 @@ model SalesOrder {
   totalAmount Decimal         @default(0) @db.Decimal(14, 2)
   items      SalesOrderItem[]
   fiscalDoc  FiscalDocument?
+  receivables AccountReceivable[]
+  boletos     BankBoleto[]
 }
 
 model SalesOrderItem {

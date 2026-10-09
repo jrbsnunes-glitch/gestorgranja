@@ -9,9 +9,11 @@ import { MiniPdvModal } from '@/components/vendas/mini-pdv-modal';
 import { ResponsiveTableWrap } from '@/components/responsive-table-wrap';
 import { Kpi } from '@/components/dashboard/kpi-card';
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, downloadAuthFile } from '@/lib/api';
+import type { BankBoletoDto } from '@/lib/boleto';
 import { formatBrl } from '@/lib/money';
 import { formatRecordControl } from '@/lib/record-control';
+import { labelEnum } from '@/lib/labels';
 
 type CashSessionRow = {
   id: string;
@@ -94,6 +96,19 @@ export default function VendasPage() {
     day: { count: number; totalAmount: number };
     month: { count: number; totalAmount: number };
   } | null>(null);
+  const [recentOrders, setRecentOrders] = useState<
+    {
+      id: string;
+      controlNumber: number;
+      status: string;
+      totalAmount: string;
+      paymentMethod?: string | null;
+      partner: { name: string };
+      paymentForm?: { kind: string } | null;
+      secondaryPaymentForm?: { kind: string } | null;
+      boletos?: BankBoletoDto[];
+    }[]
+  >([]);
 
   const dayCashSessions = useMemo(
     () => buildDayCashSessions(cashSessions, myOpenCash),
@@ -116,6 +131,9 @@ export default function VendasPage() {
     )
       .then(setSalesStats)
       .catch(() => setSalesStats(null));
+    void apiFetch<typeof recentOrders>('/v1/commercial/orders')
+      .then((rows) => setRecentOrders(rows.slice(0, 20)))
+      .catch(() => setRecentOrders([]));
   }, []);
 
   useEffect(() => {
@@ -140,6 +158,36 @@ export default function VendasPage() {
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao abrir caixa');
+    }
+  }
+
+  async function voidOrder(orderId: string, controlNumber: number) {
+    if (!window.confirm(`Estornar a venda ${formatRecordControl(controlNumber)}? O estoque e o caixa serão revertidos.`)) {
+      return;
+    }
+    setError(null);
+    try {
+      await apiFetch(`/v1/commercial/orders/${orderId}/void`, { method: 'POST' });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao estornar venda');
+    }
+  }
+
+  async function emitOrderBoleto(orderId: string) {
+    setError(null);
+    try {
+      const boleto = await apiFetch<BankBoletoDto>(`/v1/finance/sales-orders/${orderId}/boleto`, {
+        method: 'POST',
+      });
+      setRecentOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, boletos: [boleto, ...(o.boletos ?? [])] } : o)),
+      );
+      if (boleto.hasPdf) {
+        await downloadAuthFile(`/v1/finance/boletos/${boleto.id}/pdf`, `boleto-${boleto.id}.pdf`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao gerar boleto');
     }
   }
 
@@ -284,6 +332,83 @@ export default function VendasPage() {
                           }`}
                         >
                           {isOpen ? 'Aberto' : 'Fechado'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </ResponsiveTableWrap>
+      </PageCard>
+
+      <PageCard title="Pedidos recentes">
+        <p className="mb-3 text-sm text-slate-600">
+          Vendas a prazo em boleto geram título a receber e registro no Sicoob. O PDF fica disponível para o cliente baixar.
+        </p>
+        <ResponsiveTableWrap>
+          <table className="w-full min-w-[720px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+                <th className="px-3 py-2">Controle</th>
+                <th className="px-3 py-2">Cliente</th>
+                <th className="px-3 py-2">Valor</th>
+                <th className="px-3 py-2">Pagamento</th>
+                <th className="px-3 py-2">Boleto</th>
+                <th className="px-3 py-2">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
+                    Nenhuma venda listada.
+                  </td>
+                </tr>
+              ) : (
+                recentOrders.map((o) => {
+                  const boleto = o.boletos?.[0];
+                  const isBoleto =
+                    (o.paymentMethod ?? '').toUpperCase() === 'BOLETO' ||
+                    (o.paymentForm?.kind ?? '').toUpperCase() === 'BOLETO' ||
+                    (o.secondaryPaymentForm?.kind ?? '').toUpperCase() === 'BOLETO' ||
+                    Boolean(boleto);
+                  return (
+                    <tr key={o.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-3 py-2.5 tabular-nums">{formatRecordControl(o.controlNumber)}</td>
+                      <td className="px-3 py-2.5">{o.partner.name}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatBrl(Number(o.totalAmount))}</td>
+                      <td className="px-3 py-2.5">{labelEnum(o.paymentMethod ?? '—')}</td>
+                      <td className="px-3 py-2.5">
+                        {boleto ? `${labelEnum(boleto.status)}${boleto.nossoNumero ? ` · ${boleto.nossoNumero}` : ''}` : '—'}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="flex flex-wrap gap-1">
+                          {o.status === 'CONFIRMED' && isBoleto ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="px-2 py-1 text-xs"
+                              onClick={() => void emitOrderBoleto(o.id)}
+                            >
+                              {boleto ? 'PDF / atualizar' : 'Gerar boleto'}
+                            </Button>
+                          ) : null}
+                          {o.status === 'CONFIRMED' && !isBoleto ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="px-2 py-1 text-xs"
+                              onClick={() => void voidOrder(o.id, o.controlNumber)}
+                            >
+                              Estornar
+                            </Button>
+                          ) : null}
+                          {o.status === 'CANCELLED' ? (
+                            <span className="text-xs text-slate-500">Estornada</span>
+                          ) : null}
+                          {o.status !== 'CONFIRMED' && o.status !== 'CANCELLED' ? '—' : null}
                         </span>
                       </td>
                     </tr>

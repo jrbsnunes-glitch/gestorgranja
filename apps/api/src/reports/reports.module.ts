@@ -3,6 +3,7 @@ import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
 import { HrModule } from '../hr/hr.module';
 import { NutritionModule } from '../nutrition/nutrition.module';
+import { OperationModule } from '../operation/operation.module';
 import { ProductionModule } from '../production/production.module';
 import { ReportsController } from './reports.controller';
 import { ReportsStubService } from './reports-stub.service';
@@ -20,9 +21,10 @@ import { HrEmployeesReportService } from './hr-employees-report.service';
 import { HrLeavesReportService } from './hr-leaves-report.service';
 import { HrVacationsReportService } from './hr-vacations-report.service';
 import { ZootechnicalMetricsService } from './zootechnical-metrics.service';
+import { OperationProductionReportService } from './operation-production-report.service';
 
 @Module({
-  imports: [AuthModule, ProductionModule, NutritionModule, AuditModule, HrModule],
+  imports: [AuthModule, ProductionModule, NutritionModule, OperationModule, AuditModule, HrModule],
   controllers: [ReportsController],
   providers: [
     ZootechnicalMetricsService,
@@ -40,6 +42,7 @@ import { ZootechnicalMetricsService } from './zootechnical-metrics.service';
     HrEmployeesReportService,
     HrLeavesReportService,
     HrVacationsReportService,
+    OperationProductionReportService,
   ],
   exports: [ZootechnicalMetricsService, ProductionCostReportService, FinanceTitlesReportService],
 })

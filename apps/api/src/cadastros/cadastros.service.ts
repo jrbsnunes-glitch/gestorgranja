@@ -100,6 +100,22 @@ export class CadastrosService {
     );
   }
 
+  createBreedLineage(user: JwtPayload, data: { code?: string; name: string }) {
+    const name = data.name?.trim();
+    if (!name || name.length < 2) {
+      throw new BadRequestException('Informe o nome da linhagem (mín. 2 caracteres).');
+    }
+    const code = data.code?.trim();
+    if (!code) {
+      throw new BadRequestException('Informe o código da linhagem.');
+    }
+    return this.client(user).then((p) =>
+      p.breedLineage.create({
+        data: { code, name },
+      }),
+    );
+  }
+
   listPartners(user: JwtPayload) {
     return this.client(user).then((p) => p.partner.findMany({ orderBy: { name: 'asc' } }));
   }
@@ -147,8 +163,10 @@ export class CadastrosService {
       breedLineageId: string;
       housingDate: string;
       housedQty: number;
+      initialAgeWeeks?: number;
     },
   ) {
+    const initialAgeWeeks = Math.max(0, Math.floor(Number(data.initialAgeWeeks ?? 0)));
     return this.client(user).then((p) =>
       p.flockLot.create({
         data: {
@@ -157,6 +175,7 @@ export class CadastrosService {
           breedLineageId: data.breedLineageId,
           housingDate: new Date(data.housingDate),
           housedQty: data.housedQty,
+          initialAgeWeeks,
           status: FlockLotStatus.ACTIVE,
         },
         include: { barn: true, breedLineage: true },
@@ -165,19 +184,39 @@ export class CadastrosService {
   }
 
   updateFlockLot(user: JwtPayload, id: string, data: Record<string, unknown>) {
-    return this.client(user).then((p) =>
-      p.flockLot.update({
+    return this.client(user).then((p) => {
+      const patch: Parameters<typeof p.flockLot.update>[0]['data'] = {};
+
+      if (data.code !== undefined) patch.code = String(data.code).trim();
+      if (data.barnId !== undefined) patch.barnId = String(data.barnId);
+      if (data.breedLineageId !== undefined) patch.breedLineageId = String(data.breedLineageId);
+      if (data.housingDate !== undefined) patch.housingDate = new Date(String(data.housingDate));
+      if (data.housedQty !== undefined) patch.housedQty = Number(data.housedQty);
+      if (data.status !== undefined) patch.status = data.status as FlockLotStatus;
+      if (data.initialAgeWeeks !== undefined) {
+        patch.initialAgeWeeks = Math.max(0, Math.floor(Number(data.initialAgeWeeks)));
+      }
+      if ('eggType' in data) {
+        patch.eggType = data.eggType ? (String(data.eggType) as never) : null;
+      }
+      if ('strainNotes' in data) {
+        patch.strainNotes = data.strainNotes ? String(data.strainNotes) : null;
+      }
+      if ('supplierBatch' in data) {
+        patch.supplierBatch = data.supplierBatch ? String(data.supplierBatch) : null;
+      }
+      if ('plantNotes' in data) {
+        patch.plantNotes = data.plantNotes ? String(data.plantNotes) : null;
+      }
+      if ('expectedEndDate' in data) {
+        patch.expectedEndDate = data.expectedEndDate ? new Date(String(data.expectedEndDate)) : null;
+      }
+
+      return p.flockLot.update({
         where: { id },
-        data: {
-          eggType: data.eggType as never,
-          strainNotes: data.strainNotes ? String(data.strainNotes) : undefined,
-          supplierBatch: data.supplierBatch ? String(data.supplierBatch) : undefined,
-          expectedEndDate: data.expectedEndDate ? new Date(String(data.expectedEndDate)) : undefined,
-          plantNotes: data.plantNotes ? String(data.plantNotes) : undefined,
-          housedQty: data.housedQty !== undefined ? Number(data.housedQty) : undefined,
-        },
+        data: patch,
         include: { barn: true, breedLineage: true },
-      }),
-    );
+      });
+    });
   }
 }

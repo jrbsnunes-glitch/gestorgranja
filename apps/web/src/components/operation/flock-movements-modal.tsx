@@ -103,7 +103,13 @@ export function FlockMovementsModal({
   const typeOptions = FLOCK_MOVEMENT_TYPES.filter((t) => canAdjust || (t !== 'ADJUST' && t !== 'CLOSE'));
 
   return (
-    <RecordViewModal open={open} onClose={onClose} title={`Movimentações de aves — lote ${lot.code}`} wide>
+    <RecordViewModal
+      open={open}
+      onClose={onClose}
+      title={`Movimentações de aves — lote ${lot.code}`}
+      wide
+      scrollable
+    >
       {balance ? (
         <div className="mb-4 grid gap-2 text-sm sm:grid-cols-3 md:grid-cols-6">
           <BalanceCell label="Alojadas" value={balance.housedQty} />

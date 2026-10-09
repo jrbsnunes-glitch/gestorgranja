@@ -4,7 +4,7 @@ import { averageCostByProduct } from '../inventory/product-cost.util';
 import { FEED_CONSUMPTION_REF } from '../operation/consumption-stock-sync.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { computeFlockBalance } from '../production/flock-balance.util';
-import { ageDaysAt, feedConversion, standardAt } from '../production/lay-standard.util';
+import { flockAgeDays, feedConversion, standardAt } from '../production/lay-standard.util';
 import { ProductionService } from '../production/production.service';
 
 @Injectable()
@@ -26,7 +26,7 @@ export class ZootechnicalMetricsService {
     if (!lot) return null;
 
     const today = new Date();
-    const ageDays = ageDaysAt(lot.housingDate, today);
+    const ageDays = flockAgeDays(lot.housingDate, today, lot.initialAgeWeeks);
 
     const eggsRecent = await prisma.dailyEggProduction.findMany({
       where: { flockLotId },
@@ -52,7 +52,7 @@ export class ZootechnicalMetricsService {
     const series = eggs.map((e) => {
       const commercial = this.production.commercialEggs(e);
       const layRatePct = (commercial / liveBirds) * 100;
-      const std = standardAt(points, ageDaysAt(lot.housingDate, e.date));
+      const std = standardAt(points, flockAgeDays(lot.housingDate, e.date, lot.initialAgeWeeks));
       return {
         date: e.date,
         commercialEggs: commercial,
@@ -76,7 +76,8 @@ export class ZootechnicalMetricsService {
         avgEggWeightG:
           e.avgEggWeightG != null
             ? Number(e.avgEggWeightG)
-            : standardAt(points, ageDaysAt(lot.housingDate, e.date))?.avgEggWeightG ?? null,
+            : standardAt(points, flockAgeDays(lot.housingDate, e.date, lot.initialAgeWeeks))?.avgEggWeightG ??
+              null,
       }));
     const feedConversion7d = feedConversion(pairs);
 

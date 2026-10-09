@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { NutritionService } from '../nutrition/nutrition.service';
+import { eggPackagingFromCommercial } from '../production/egg-counting-units.util';
+import { EggProductionStockService } from '../production/egg-production-stock.service';
 import { ProductionService } from '../production/production.service';
 
 export type ProductionReportDomain = 'postura' | 'mortalidade' | 'racao' | 'ambiente' | 'transferencia';
@@ -26,6 +28,13 @@ function parseDay(raw: string | undefined, mode: 'start' | 'end'): Date | undefi
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+function formatDateBr(iso: string | null | undefined) {
+  if (!iso?.trim()) return '—';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 function inRange(date: Date, from?: Date, to?: Date) {
@@ -80,6 +89,7 @@ export class ProductionDailyReportService {
   constructor(
     private readonly production: ProductionService,
     private readonly nutrition: NutritionService,
+    private readonly eggStock: EggProductionStockService,
   ) {}
 
   async report(user: JwtPayload, query: ProductionReportQuery) {
@@ -133,8 +143,26 @@ export class ProductionDailyReportService {
     return lots.find((l) => l.id === flockLotId)?.code ?? null;
   }
 
+  private producedEggs(r: {
+    extra: number;
+    large: number;
+    medium: number;
+    small: number;
+    cracked: number;
+    dirty: number;
+    deformed: number;
+    discard: number;
+  }) {
+    return (
+      this.production.commercialEggs(r) + r.cracked + r.dirty + r.deformed + r.discard
+    );
+  }
+
   private async reportEggs(user: JwtPayload, query: ProductionReportQuery) {
     const { fromDate, toDate, from, to } = this.periodMeta(query);
+    const cfg = await this.eggStock.getConfig(user.tenantSlug);
+    const eggsPerCarton = cfg.eggsPerCarton;
+    const cartonsPerBox = cfg.cartonsPerBox;
     let rows = await this.production.listDailyEggs(
       user,
       query.variant === 'lote' ? query.flockLotId : undefined,
@@ -143,51 +171,108 @@ export class ProductionDailyReportService {
 
     if (query.variant === 'totais') {
       let commercial = 0;
-      const byLot = new Map<string, number>();
+      let produced = 0;
+      const byLot = new Map<string, { commercial: number; produced: number }>();
       for (const r of rows) {
         const c = this.production.commercialEggs(r);
+        const p = this.producedEggs(r);
         commercial += c;
-        byLot.set(r.flockLot.code, (byLot.get(r.flockLot.code) ?? 0) + c);
+        produced += p;
+        const prev = byLot.get(r.flockLot.code) ?? { commercial: 0, produced: 0 };
+        byLot.set(r.flockLot.code, {
+          commercial: prev.commercial + c,
+          produced: prev.produced + p,
+        });
       }
+      const periodFrom = formatDateBr(from);
+      const periodTo = formatDateBr(to);
+      const columns = [
+        { key: 'lot', label: 'Lote' },
+        { key: 'periodFrom', label: 'De' },
+        { key: 'periodTo', label: 'Até' },
+        { key: 'formas', label: 'Formas (coleta)' },
+        { key: 'packagingBoxes', label: 'Caixas' },
+        { key: 'packagingLooseCartons', label: 'Cart. avulsas' },
+        { key: 'equivalentCartons', label: 'Equiv. cartelas' },
+        { key: 'commercial', label: 'Comerciais (un)' },
+        { key: 'produced', label: 'Produzidos (un)' },
+      ];
+      const mapped = [...byLot.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([code, t]) => {
+          const pack = eggPackagingFromCommercial(t.commercial, eggsPerCarton, cartonsPerBox);
+          return {
+            lot: code,
+            periodFrom,
+            periodTo,
+            formas: pack.formas,
+            packagingBoxes: pack.packagingBoxes,
+            packagingLooseCartons: pack.packagingLooseCartons,
+            equivalentCartons: pack.equivalentCartons,
+            commercial: t.commercial,
+            produced: t.produced,
+          };
+        });
+      const packAll = eggPackagingFromCommercial(commercial, eggsPerCarton, cartonsPerBox);
       return {
         domain: query.domain,
         variant: query.variant,
         title: 'Totais de Postura',
         period: { from, to },
         flockLotCode: await this.lotCode(user, query.flockLotId),
-        columns: [
-          { key: 'label', label: 'Descrição' },
-          { key: 'value', label: 'Valor' },
+        columns,
+        rows: mapped,
+        footer: buildSumFooter(columns, mapped, [
+          'formas',
+          'packagingBoxes',
+          'packagingLooseCartons',
+          'equivalentCartons',
+          'commercial',
+          'produced',
+        ]),
+        totals: [
+          { label: 'Registros no filtro', value: rows.length },
+          { label: 'Formas (coleta)', value: packAll.formas },
+          { label: 'Caixas', value: packAll.packagingBoxes },
+          { label: 'Cartelas avulsas', value: packAll.packagingLooseCartons },
+          { label: 'Comerciais (un)', value: commercial },
+          { label: 'Produzidos (un)', value: produced },
         ],
-        rows: [
-          { label: 'Registros no filtro', value: String(rows.length) },
-          { label: 'Total comerciais (un)', value: String(commercial) },
-          ...[...byLot.entries()]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([code, total]) => ({ label: `Lote ${code}`, value: String(total) })),
-        ],
-        totals: [{ label: 'Total comerciais (un)', value: commercial }],
       };
     }
 
     const columns = [
       { key: 'date', label: 'Data' },
       { key: 'lot', label: 'Lote' },
+      { key: 'formas', label: 'Formas (coleta)' },
+      { key: 'packagingBoxes', label: 'Caixas' },
+      { key: 'packagingLooseCartons', label: 'Cart. avulsas' },
+      { key: 'equivalentCartons', label: 'Equiv. cartelas' },
       { key: 'commercial', label: 'Comerciais (un)' },
+      { key: 'produced', label: 'Produzidos (un)' },
       { key: 'extra', label: 'Extra' },
       { key: 'large', label: 'Grande' },
       { key: 'medium', label: 'Médio' },
       { key: 'small', label: 'Pequeno' },
     ];
-    const mapped = rows.map((r) => ({
-      date: isoDate(new Date(r.date)),
-      lot: r.flockLot.code,
-      commercial: this.production.commercialEggs(r),
-      extra: r.extra,
-      large: r.large,
-      medium: r.medium,
-      small: r.small,
-    }));
+    const mapped = rows.map((r) => {
+      const commercial = this.production.commercialEggs(r);
+      const pack = eggPackagingFromCommercial(commercial, eggsPerCarton, cartonsPerBox);
+      return {
+        date: formatDateBr(isoDate(new Date(r.date))),
+        lot: r.flockLot.code,
+        formas: pack.formas,
+        packagingBoxes: pack.packagingBoxes,
+        packagingLooseCartons: pack.packagingLooseCartons,
+        equivalentCartons: pack.equivalentCartons,
+        commercial,
+        produced: this.producedEggs(r),
+        extra: r.extra,
+        large: r.large,
+        medium: r.medium,
+        small: r.small,
+      };
+    });
     return {
       domain: query.domain,
       variant: query.variant,
@@ -197,7 +282,12 @@ export class ProductionDailyReportService {
       columns,
       rows: mapped,
       footer: buildSumFooter(columns, mapped, [
+        'formas',
+        'packagingBoxes',
+        'packagingLooseCartons',
+        'equivalentCartons',
         'commercial',
+        'produced',
         'extra',
         'large',
         'medium',
@@ -221,24 +311,35 @@ export class ProductionDailyReportService {
         total += r.quantity;
         byLot.set(r.flockLot.code, (byLot.get(r.flockLot.code) ?? 0) + r.quantity);
       }
+      const periodFrom = formatDateBr(from);
+      const periodTo = formatDateBr(to);
+      const columns = [
+        { key: 'lot', label: 'Lote' },
+        { key: 'periodFrom', label: 'De' },
+        { key: 'periodTo', label: 'Até' },
+        { key: 'quantity', label: 'Aves' },
+      ];
+      const mapped = [...byLot.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([code, qty]) => ({
+          lot: code,
+          periodFrom,
+          periodTo,
+          quantity: qty,
+        }));
       return {
         domain: query.domain,
         variant: query.variant,
         title: 'Totais de Mortalidade',
         period: { from, to },
         flockLotCode: await this.lotCode(user, query.flockLotId),
-        columns: [
-          { key: 'label', label: 'Descrição' },
-          { key: 'value', label: 'Valor' },
+        columns,
+        rows: mapped,
+        footer: buildSumFooter(columns, mapped, ['quantity']),
+        totals: [
+          { label: 'Registros no filtro', value: rows.length },
+          { label: 'Total aves', value: total },
         ],
-        rows: [
-          { label: 'Registros no filtro', value: String(rows.length) },
-          { label: 'Total aves', value: String(total) },
-          ...[...byLot.entries()]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([code, qty]) => ({ label: `Lote ${code}`, value: String(qty) })),
-        ],
-        totals: [{ label: 'Total aves', value: total }],
       };
     }
 
@@ -249,7 +350,7 @@ export class ProductionDailyReportService {
       { key: 'notes', label: 'Observação' },
     ];
     const mapped = rows.map((r) => ({
-      date: isoDate(new Date(r.date)),
+      date: formatDateBr(isoDate(new Date(r.date))),
       lot: r.flockLot.code,
       quantity: r.quantity,
       notes: r.causeNotes ?? '—',
@@ -323,7 +424,7 @@ export class ProductionDailyReportService {
       { key: 'leftover', label: 'Sobra (kg)' },
     ];
     const mapped = rows.map((r) => ({
-      date: isoDate(new Date(r.date)),
+      date: formatDateBr(isoDate(new Date(r.date))),
       lot: r.flockLot.code,
       consumed: Number(r.consumedKg).toFixed(3),
       leftover: Number(r.leftoverKg).toFixed(3),
@@ -401,7 +502,7 @@ export class ProductionDailyReportService {
       { key: 'quantity', label: 'Quantidade (kg)' },
     ];
     const mapped = rows.map((r) => ({
-      date: isoDate(new Date(r.date)),
+      date: formatDateBr(isoDate(new Date(r.date))),
       fromLot: r.fromLot.code,
       toLot: r.toLot.code,
       quantity: Number(r.quantityKg).toFixed(3),

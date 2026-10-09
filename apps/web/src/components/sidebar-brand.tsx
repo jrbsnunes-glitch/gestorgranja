@@ -1,57 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { CompanyLogoImg } from '@/components/company-logo-img';
-import { apiFetch } from '@/lib/api';
-
-type Company = {
-  tradeName: string | null;
-  legalName: string;
-  logoUrl: string | null;
-};
-
-const CACHE_KEY = 'gg_sidebar_company_v1';
-
-function readCachedCompany(): Company | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = sessionStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as Company;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedCompany(c: Company) {
-  try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(c));
-  } catch {
-    /* quota / private mode */
-  }
-}
+import { PrimaryBrandLogo } from '@/components/panel-brand-logo';
+import { useCompanyBranding } from '@/hooks/use-company-branding';
 
 export function SidebarBrand() {
-  const [company, setCompany] = useState<Company | null>(() => readCachedCompany());
-
-  useEffect(() => {
-    void apiFetch<Company>('/v1/cadastros/company')
-      .then((c) => {
-        setCompany(c);
-        writeCachedCompany(c);
-      })
-      .catch(() => undefined);
-  }, []);
-
+  const company = useCompanyBranding();
   const displayName = company?.tradeName ?? company?.legalName ?? 'GestorGranja';
 
   return (
     <div className="min-w-0 flex-1 text-center">
-      <CompanyLogoImg
-        logoRegistered={company?.logoUrl}
-        variant="shell"
-        className="mx-auto mb-3 !h-[4.75rem] !max-w-[min(100%,13rem)] object-contain"
-      />
+      <PrimaryBrandLogo />
       <p className="text-lg font-bold leading-tight text-emerald-800">{displayName}</p>
       <p className="mt-0.5 text-xs text-slate-500">Painel gerencial</p>
     </div>

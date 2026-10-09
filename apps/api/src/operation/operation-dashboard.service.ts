@@ -8,8 +8,9 @@ import {
   StockMovementType,
 } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+import { eggPackagingFromCommercial } from '../production/egg-counting-units.util';
 import { computeFlockBalance } from '../production/flock-balance.util';
-import { ageDaysAt, feedConversion, standardAt } from '../production/lay-standard.util';
+import { flockAgeDays, feedConversion, standardAt } from '../production/lay-standard.util';
 import { FEED_CONSUMPTION_REF } from './consumption-stock-sync.service';
 
 function isoDate(d: Date) {
@@ -67,6 +68,10 @@ export class OperationDashboardService {
     const lotIds = lots.map((l) => l.id);
     const barnIds = [...new Set(lots.map((l) => l.barnId))];
 
+    const eggCfg = await prisma.eggStockConfig.findUnique({ where: { id: 'default' } });
+    const eggsPerCarton = eggCfg?.eggsPerCarton ?? 30;
+    const cartonsPerBox = eggCfg?.cartonsPerBox ?? 12;
+
     const [eggs, morts, feeds, mortAll, losses, occurrences, feedMoves] = await Promise.all([
       prisma.dailyEggProduction.findMany({ where: { flockLotId: { in: lotIds }, date: { gte: fromDate, lte: toDate } } }),
       prisma.dailyMortality.findMany({ where: { flockLotId: { in: lotIds }, date: { gte: fromDate, lte: toDate } } }),
@@ -119,7 +124,7 @@ export class OperationDashboardService {
       const mortality = lMorts.reduce((s, m) => s + m.quantity, 0);
       const feedKg = lFeeds.reduce((s, x) => s + Number(x.consumedKg), 0);
       const days = lEggs.length || 1;
-      const ageDays = ageDaysAt(lot.housingDate, toDate);
+      const ageDays = flockAgeDays(lot.housingDate, toDate, lot.initialAgeWeeks);
       const std = standardAt(lot.breedLineage.standardPoints, ageDays);
       const layRatePct = balance.liveBirds > 0 && lEggs.length ? pct(commercial / lEggs.length, balance.liveBirds) : null;
 
@@ -140,6 +145,7 @@ export class OperationDashboardService {
       // custo por dúzia do lote: baixas de ração vinculadas aos registros do lote
       const feedCost = lFeeds.reduce((s, x) => s + (feedCostByFeedId.get(x.id) ?? 0), 0);
       const dozens = commercial / 12;
+      const pack = eggPackagingFromCommercial(commercial, eggsPerCarton, cartonsPerBox);
 
       return {
         lot: { id: lot.id, code: lot.code, status: lot.status },
@@ -151,6 +157,11 @@ export class OperationDashboardService {
         liveBirds: balance.liveBirds,
         produced,
         commercial,
+        formas: pack.formas,
+        equivalentCartons: pack.equivalentCartons,
+        packagingBoxes: pack.packagingBoxes,
+        packagingLooseCartons: pack.packagingLooseCartons,
+        packagingRemainderEggs: pack.remainderEggs,
         lossEggs,
         lossPct: pct(lossEggs, produced),
         layRatePct,
@@ -184,7 +195,10 @@ export class OperationDashboardService {
       for (const e of dEggs) {
         const lot = lots.find((l) => l.id === e.flockLotId);
         if (!lot) continue;
-        const std = standardAt(lot.breedLineage.standardPoints, ageDaysAt(lot.housingDate, new Date(day)));
+        const std = standardAt(
+          lot.breedLineage.standardPoints,
+          flockAgeDays(lot.housingDate, new Date(day), lot.initialAgeWeeks),
+        );
         const w = liveByLot.get(lot.id) ?? 0;
         if (std && w > 0) {
           stdWeighted += std.layRatePct * w;
@@ -203,6 +217,30 @@ export class OperationDashboardService {
         lotsRecorded: dEggs.length,
       };
     });
+
+    const lotToBarn = new Map(lots.map((l) => [l.id, l.barnId]));
+    const evolutionBarns = barnIds
+      .map((bid) => lots.find((l) => l.barnId === bid)?.barn)
+      .filter((b): b is (typeof lots)[0]['barn'] => !!b)
+      .sort((a, b) => a.code.localeCompare(b.code, 'pt-BR'));
+    const evolutionByBarn = {
+      barns: evolutionBarns.map((b) => ({ id: b.id, code: b.code, name: b.name })),
+      rows: dayList.map((day) => {
+        const commercialByBarn: Record<string, number> = {};
+        for (const bid of barnIds) commercialByBarn[bid] = 0;
+        for (const e of eggs.filter((x) => isoDate(x.date) === day)) {
+          const bid = lotToBarn.get(e.flockLotId);
+          if (bid) commercialByBarn[bid] = (commercialByBarn[bid] ?? 0) + commercialOf(e);
+        }
+        const daySeries = series.find((s) => s.date === day);
+        return {
+          date: day,
+          commercialByBarn,
+          commercialTotal: daySeries?.commercial ?? 0,
+          producedTotal: daySeries?.produced ?? 0,
+        };
+      }),
+    };
 
     // --- Por galpão ---
     const byBarn = barnIds.map((bid) => {
@@ -237,6 +275,7 @@ export class OperationDashboardService {
     const daysWithData = series.filter((s) => s.lotsRecorded > 0).length;
     const stdSeries = series.filter((s) => s.standardLayRatePct != null);
     const totalFeedCost = lotRows.reduce((s, r) => s + r.feedCost, 0);
+    const packTotals = eggPackagingFromCommercial(commercial, eggsPerCarton, cartonsPerBox);
 
     const lossByType = new Map<string, { quantity: number; cost: number; count: number }>();
     for (const l of losses) {
@@ -278,8 +317,21 @@ export class OperationDashboardService {
         criticalOccurrences: openOcc.filter((o) => o.priority === 'CRITICAL' || o.priority === 'HIGH').length,
         awaitingReview,
         daysWithData,
+        formas: packTotals.formas,
+        equivalentCartons: packTotals.equivalentCartons,
+        packagingBoxes: packTotals.packagingBoxes,
+        packagingLooseCartons: packTotals.packagingLooseCartons,
+        packagingRemainderEggs: packTotals.remainderEggs,
+      },
+      packaging: {
+        eggsPerForma: packTotals.eggsPerForma,
+        eggsPerCarton: packTotals.eggsPerCarton,
+        cartonsPerBox: packTotals.cartonsPerBox,
+        hint:
+          'Embalagem da produção no período (comerciais): mesma regra da postura → estoque. Não confundir com saldo físico no Painel.',
       },
       series,
+      evolutionByBarn,
       byBarn,
       byLot: lotRows,
       losses: [...lossByType.entries()].map(([type, v]) => ({ type, ...v, cost: round(v.cost) })),

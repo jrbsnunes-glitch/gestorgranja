@@ -14,6 +14,7 @@ import {
   titleBalance,
 } from './finance-title-utils';
 import { RecurringFinanceService } from './recurring-finance.service';
+import { normalizeNossoNumero } from './sicoob-json.util';
 
 export type TitleSettlementInput = {
   amount?: number;
@@ -198,7 +199,11 @@ export class FinanceService {
     await this.recurring.ensureGenerated(user);
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const rows = await prisma.accountReceivable.findMany({
-      include: { partner: true, chartAccount: true },
+      include: {
+        partner: true,
+        chartAccount: true,
+        boletos: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
       orderBy: { dueDate: 'asc' },
     });
     const today = new Date();
@@ -223,6 +228,16 @@ export class FinanceService {
         balance,
         overdueDays,
         settled,
+        boletos: r.boletos.map((b) => ({
+          id: b.id,
+          seuNumero: b.seuNumero,
+          nossoNumero: normalizeNossoNumero(b.nossoNumero),
+          linhaDigitavel: b.linhaDigitavel,
+          codigoBarras: b.codigoBarras,
+          status: b.status,
+          hasPdf: Boolean(b.pdfStorageKey),
+          lastError: b.lastError,
+        })),
       };
     });
 

@@ -1,6 +1,8 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { EggStockReconciliationPanel } from '@/components/inventory/egg-stock-reconciliation-panel';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import {
@@ -42,7 +44,9 @@ type EggStockConfig = {
 };
 
 export default function EstoquePage() {
-  const [tab, setTab] = useState('movimentos');
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'postura' ? 'postura' : 'movimentos';
+  const [tab, setTab] = useState(initialTab);
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [eggConfig, setEggConfig] = useState<EggStockConfig | null>(null);
@@ -229,6 +233,9 @@ export default function EstoquePage() {
         </PageCard>
       ) : (
         <PageCard title="Integração postura → estoque">
+          <div className="mb-6">
+            <EggStockReconciliationPanel onRefreshConfig={load} />
+          </div>
           <p className="mb-4 text-sm text-zinc-600">
             Ao salvar a postura diária, ovos comerciais (extra + grande + médio + pequeno) geram entradas de
             estoque em cartelas e caixas. Informe o <strong>custo por ovo comercial</strong> para alimentar o custo

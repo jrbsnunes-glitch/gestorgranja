@@ -1,14 +1,21 @@
 import { APP_MODULES, type AppModule } from '@/lib/module-nav';
+import { MODULE_NAV_ICONS } from '@/lib/module-nav-icons';
 import { isAdminSession, type SessionUser } from '@/lib/session';
 import { isRhTabAllowed, type TenantSubscription } from '@/lib/tenant-subscription';
 
-export type NavItem = { id: string; label: string; href: string };
+export type NavItem = { id: string; label: string; href: string; icon?: string };
 
-const PONTO_ITEM: NavItem = { id: 'ponto', label: 'Batida de ponto', href: '/rh/ponto' };
+const PONTO_ITEM: NavItem = {
+  id: 'ponto',
+  label: 'Batida de ponto',
+  href: '/rh/ponto',
+  icon: MODULE_NAV_ICONS.rh,
+};
 const PRODUCAO_ITEM: NavItem = {
   id: 'producao-campo',
   label: 'Lançamento de produção',
   href: '/producao',
+  icon: MODULE_NAV_ICONS.operacao,
 };
 
 function hasAnyPermission(session: SessionUser, codes: string[]): boolean {
@@ -100,7 +107,7 @@ export function navItemsForSession(
   if (!session) return [];
 
   if (isAdminSession(session)) {
-    return APP_MODULES.map((m) => ({ id: m.id, label: m.label, href: m.href }));
+    return APP_MODULES.map((m) => ({ id: m.id, label: m.label, href: m.href, icon: m.navIcon }));
   }
 
   if (isFieldOperatorLike(session)) {
@@ -112,6 +119,7 @@ export function navItemsForSession(
     id: m.id,
     label: m.label,
     href: m.href,
+    icon: m.navIcon,
   }));
 
   // RH só leitura (funcionário): não abre cadastro de funcionários; atalho direto ao ponto
@@ -137,7 +145,7 @@ export function filterModuleTabs(
   }
 
   if (isFieldOperatorLike(session) && mod.id === 'operacao') {
-    const allowed = new Set(['producao', 'registro-diario']);
+    const allowed = new Set(['producao', 'mortalidade', 'registro-diario']);
     if (hasAnyPermission(session, ['occurrences.write'])) allowed.add('ocorrencias');
     return mod.tabs.filter((t) => allowed.has(t.id));
   }
@@ -161,6 +169,8 @@ export function filterModuleTabs(
       dashboard: prod,
       'registro-diario': prod,
       producao: prod,
+      mortalidade: prod,
+      relatorios: prod,
       lotes: prod,
       galpoes: prod,
       ocorrencias: prod || hasAnyPermission(session, ['occurrences.write']),

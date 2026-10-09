@@ -38,6 +38,9 @@ const ENUM_LABELS: Record<string, string> = {
   PIX: 'PIX',
   CARD: 'Cartão',
   TRANSFER: 'Transferência',
+  BOLETO: 'Boleto',
+  REGISTERED: 'Registrado',
+  FAILED: 'Falhou',
 
   // Caixa
   PENDING_RECONCILIATION: 'Aguardando conciliação',

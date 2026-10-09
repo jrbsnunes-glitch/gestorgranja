@@ -5,7 +5,6 @@ import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { FormCadastroModal, PageIntro, RecordViewModal, useCrudList } from '@/components/crud';
 import { ListToolbar, PaginatedTable, RowActions, usePagination, type ModalMode } from '@/components/list-crud';
-import { RecordHistorySection } from '@/components/operation/record-history-section';
 import { RecordStatusBadge } from '@/components/operation/record-status-badge';
 import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
@@ -275,10 +274,10 @@ export default function InsumosPage() {
                     { label: 'Baixado no estoque', value: `${Number(selected.stockSyncedQty).toLocaleString('pt-BR')} ${selected.unit}` },
                   ],
                 },
-                { title: 'Histórico de alterações', content: <RecordHistorySection entity="SupplyConsumption" id={selected.id} /> },
               ]
             : []
         }
+        auditTrail={selected ? { entity: 'SupplyConsumption', entityId: selected.id } : null}
       />
     </AdminShell>
   );

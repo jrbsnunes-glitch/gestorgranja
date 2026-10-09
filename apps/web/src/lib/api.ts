@@ -88,6 +88,46 @@ export async function apiUpload<T>(path: string, formData: FormData, init?: Requ
   return res.json() as Promise<T>;
 }
 
+async function fetchAuthBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const base = getApiBase();
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path.startsWith('/') ? path : `/${path}`}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new Error(apiUnavailableMessage(base));
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(formatApiError(text || res.statusText || 'Falha ao obter arquivo'));
+  }
+  return res.blob();
+}
+
+export async function downloadAuthFile(path: string, filename: string) {
+  const blob = await fetchAuthBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.replace(/\.pdf$/i, blob.type.includes('html') ? '.html' : '.pdf');
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Abre PDF/imagem autenticado em nova aba (ex.: boleto Sicoob). */
+export async function openAuthFileInNewTab(path: string) {
+  const blob = await fetchAuthBlob(path);
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!w) {
+    URL.revokeObjectURL(url);
+    throw new Error('Permita pop-ups para visualizar o boleto ou use Baixar PDF.');
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+}
+
 export async function login(tenantSlug: string, username: string, password: string) {
   const base = getApiBase();
   let res: Response;

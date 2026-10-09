@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { AppNav } from '@/components/app-nav';
+import { OperacaoBottomNav } from '@/components/operacao-bottom-nav';
+import { moduleForPath } from '@/lib/module-nav';
+import { usePathname } from 'next/navigation';
 import { SidebarBrand } from '@/components/sidebar-brand';
 import { useShellTitle, useShellTitleContext } from '@/components/shell-title-context';
 import { getToken, logout, requireAuth } from '@/lib/auth';
@@ -12,6 +15,7 @@ import { MOBILE_MEDIA_QUERY } from '@/lib/use-mobile';
 /** Frame persistente (layout) — não desmonta entre navegações. */
 export function AdminShellFrame({ children }: { children: React.ReactNode }) {
   const { state } = useShellTitleContext();
+  const pathname = usePathname();
   const [authOk, setAuthOk] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
 
@@ -50,6 +54,7 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const showOpNav = moduleForPath(pathname)?.id === 'operacao';
   const title = state.title;
   const description = state.description;
   const displayName = sessionDisplayName(readSession());
@@ -124,12 +129,13 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
         {sidebar(false)}
       </aside>
 
-      <main className="flex-1 p-3 pb-6 md:p-6 md:pb-8 safe-bottom">
+      <main className={`flex-1 p-3 md:p-6 md:pb-8 safe-bottom ${showOpNav ? 'pb-24' : 'pb-6'}`}>
         <header className="mb-6 hidden md:block">
           <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
           {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
         </header>
         {children}
+        {showOpNav ? <OperacaoBottomNav /> : null}
       </main>
     </div>
   );

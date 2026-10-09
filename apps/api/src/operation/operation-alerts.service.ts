@@ -12,7 +12,7 @@ import {
 import { CentralPrismaService } from '../prisma/central-prisma.service';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { computeFlockBalance } from '../production/flock-balance.util';
-import { ageDaysAt, standardAt } from '../production/lay-standard.util';
+import { flockAgeDays, standardAt } from '../production/lay-standard.util';
 import { loadOperationSettings } from './operation-settings.service';
 
 type Client = Awaited<ReturnType<TenantPrismaService['getClient']>>;
@@ -132,7 +132,10 @@ export class OperationAlertsService {
       if (settings.enableProductionBelowStandard && lastEgg && live > 0) {
         const commercial = lastEgg.extra + lastEgg.large + lastEgg.medium + lastEgg.small;
         const lay = (commercial / live) * 100;
-        const std = standardAt(lot.breedLineage.standardPoints, ageDaysAt(lot.housingDate, lastEgg.date));
+        const std = standardAt(
+          lot.breedLineage.standardPoints,
+          flockAgeDays(lot.housingDate, lastEgg.date, lot.initialAgeWeeks),
+        );
         const limit = Number(settings.productionBelowStandardPct);
         if (std && std.layRatePct - lay > limit) {
           if (

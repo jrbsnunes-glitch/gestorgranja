@@ -5,8 +5,10 @@ import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { Card } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { PageIntro } from '@/components/crud';
-import { CompanyLogoImg } from '@/components/company-logo-img';
+import { PrimaryBrandLogo } from '@/components/panel-brand-logo';
+import { IllustratedClickableKpi } from '@/components/dashboard/illustrated-kpi';
 import { ClickableKpi } from '@/components/dashboard/kpi-card';
+import { OPERACAO_DASHBOARD_KPI_ICONS } from '@/lib/operacao-tab-icons';
 import { apiFetch } from '@/lib/api';
 import { DASHBOARD_REFRESH_EVENT } from '@/lib/dashboard-refresh';
 import { formatBrl, formatPct } from '@/lib/money';
@@ -38,14 +40,27 @@ type HomeDashboard = {
   products?: {
     criticalCount: number;
     topOut30d: { productId: string; quantity: number; product: { sku: string; name: string } }[];
-    eggInventory: { totalEggs: number; boxes: number; cartons: number } | null;
+    eggInventory: {
+      totalEggs: number;
+      boxes: number;
+      cartons: number;
+      eggsPerCarton?: number;
+      cartonsPerBox?: number;
+    } | null;
   };
 };
 
-function eggStockSub(inv: { boxes: number; cartons?: number }) {
+function eggStockSub(inv: {
+  boxes: number;
+  cartons?: number;
+  eggsPerCarton?: number;
+  cartonsPerBox?: number;
+}) {
   const boxes = inv.boxes.toLocaleString('pt-BR');
   const cartons = (inv.cartons ?? 0).toLocaleString('pt-BR');
-  return `${boxes} caixa(s) · ${cartons} cartela(s)`;
+  const perCarton = inv.eggsPerCarton ?? 30;
+  const perBox = inv.cartonsPerBox ?? 12;
+  return `${boxes} caixa(s) fechada(s) · ${cartons} cartela(s) avulsa(s) — saldo no depósito (${perCarton} ovos/cartela, ${perBox} cart./caixa)`;
 }
 
 function KpiGrid({ children }: { children: ReactNode }) {
@@ -55,7 +70,6 @@ function KpiGrid({ children }: { children: ReactNode }) {
 export default function DashboardPage() {
   const [data, setData] = useState<HomeDashboard | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
-  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => {
@@ -71,9 +85,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     refresh();
-    void apiFetch<{ logoUrl: string | null }>('/v1/cadastros/company')
-      .then((c) => setCompanyLogo(c.logoUrl))
-      .catch(() => undefined);
   }, [refresh]);
 
   useEffect(() => {
@@ -98,7 +109,7 @@ export default function DashboardPage() {
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-4">
-        <CompanyLogoImg logoRegistered={companyLogo} variant="shell" className="h-12 w-auto shrink-0" />
+        <PrimaryBrandLogo className="!mx-0 !mb-0 !h-12 shrink-0 !max-w-none" />
         <div className="min-w-0 text-sm">
           <p className="font-medium text-slate-900">
             {displayName ? `Olá, ${displayName}` : 'Bem-vindo(a)'}
@@ -116,22 +127,36 @@ export default function DashboardPage() {
 
       {data?.zootec ? (
         <Card title="Zootécnico" className="mb-4">
-          <KpiGrid>
-            <ClickableKpi href="/operacao" label="Lotes no escopo" value={String(data.zootec.lots)} />
-            <ClickableKpi
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <IllustratedClickableKpi
+              href="/cadastros/lotes"
+              img={OPERACAO_DASHBOARD_KPI_ICONS.lots}
+              label="Lotes no escopo"
+              value={String(data.zootec.lots)}
+            />
+            <IllustratedClickableKpi
               href="/operacao"
+              img={OPERACAO_DASHBOARD_KPI_ICONS.birds}
               label="Aves vivas"
               value={data.zootec.liveBirds.toLocaleString('pt-BR')}
             />
-            <ClickableKpi href="/operacao" label="Postura média (30d)" value={formatPct(data.zootec.layRatePct)} tone="good" />
-            <ClickableKpi
+            <IllustratedClickableKpi
+              href="/operacao"
+              img={OPERACAO_DASHBOARD_KPI_ICONS.layRate}
+              label="Postura média (30d)"
+              value={formatPct(data.zootec.layRatePct)}
+              tone="good"
+            />
+            <IllustratedClickableKpi
               href="/operacao/pendencias"
+              img={OPERACAO_DASHBOARD_KPI_ICONS.review}
               label="Registros a conferir"
               value={String(data.zootec.awaitingReview)}
               tone={data.zootec.awaitingReview > 0 ? 'warn' : 'good'}
             />
-            <ClickableKpi
+            <IllustratedClickableKpi
               href="/operacao/ocorrencias"
+              img={OPERACAO_DASHBOARD_KPI_ICONS.occurrences}
               label="Ocorrências abertas"
               value={String(data.zootec.openOccurrences)}
               sub={
@@ -141,7 +166,7 @@ export default function DashboardPage() {
               }
               tone={data.zootec.criticalOccurrences > 0 ? 'bad' : data.zootec.openOccurrences ? 'warn' : 'good'}
             />
-          </KpiGrid>
+          </div>
           <Link href="/operacao" className="mt-3 inline-block text-sm font-medium text-emerald-800 hover:underline">
             Ver painel zootécnico completo →
           </Link>
@@ -204,7 +229,11 @@ export default function DashboardPage() {
                   href="/vendas"
                   label="Vendas hoje"
                   value={formatBrl(data.cash.salesDay.totalAmount)}
-                  sub={`${data.cash.salesDay.count} pedido(s)`}
+                  sub={
+                    data.cash.salesDay.count > 0
+                      ? `${data.cash.salesDay.count} pedido(s) confirmado(s) — ver Vendas`
+                      : 'Nenhum pedido confirmado hoje'
+                  }
                   tone={data.cash.salesDay.count > 0 ? 'good' : 'default'}
                 />
                 <ClickableKpi
@@ -226,18 +255,21 @@ export default function DashboardPage() {
       {data?.products ? (
         <Card title="Produtos e estoque" className="mb-4">
           <KpiGrid>
-            <ClickableKpi
+            <IllustratedClickableKpi
               href="/estoque"
+              img={OPERACAO_DASHBOARD_KPI_ICONS.critical}
               label="Estoque crítico"
               value={String(data.products.criticalCount)}
               tone={data.products.criticalCount > 0 ? 'bad' : 'good'}
             />
             {data.products.eggInventory ? (
-              <ClickableKpi
+              <IllustratedClickableKpi
                 href="/estoque"
-                label="Ovos em estoque"
+                img={OPERACAO_DASHBOARD_KPI_ICONS.eggsStock}
+                label="Ovos embalados (estoque)"
                 value={data.products.eggInventory.totalEggs.toLocaleString('pt-BR')}
                 sub={eggStockSub(data.products.eggInventory)}
+                tone="default"
               />
             ) : null}
             {data.products.topOut30d.map((row) => (

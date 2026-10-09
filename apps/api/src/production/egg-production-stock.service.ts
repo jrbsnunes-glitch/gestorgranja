@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
-import { StockMovementType } from '../generated/tenant-client';
+import { OperationRecordStatus, StockMovementType } from '../generated/tenant-client';
 import { defaultEggStockChartAccountId } from '../finance/chart-account-defaults';
 import { productionStockTargets } from '../inventory/egg-packaging.util';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -184,6 +184,223 @@ export class EggProductionStockService {
         boxesQty: targetBoxes,
       },
     });
+  }
+
+  private movementBalance(
+    moves: { type: string; quantity: { toString(): string }; reference: string | null }[],
+  ) {
+    let posturaIn = 0;
+    let posturaOut = 0;
+    let otherNet = 0;
+    for (const m of moves) {
+      const q = Number(m.quantity);
+      const signed = m.type === 'OUT' ? -q : q;
+      const ref = m.reference ?? '';
+      if (ref.startsWith('postura:')) {
+        if (m.type === 'OUT') posturaOut += q;
+        else posturaIn += q;
+      } else {
+        otherNet += signed;
+      }
+    }
+    return { posturaIn, posturaOut, posturaNet: posturaIn - posturaOut, otherNet };
+  }
+
+  /** Postura × ledger × saldo × vendas/outros movimentos. */
+  async getReconciliation(tenantSlug: string) {
+    const prisma = await this.tenantPrisma.getClient(tenantSlug);
+    const cfg = await this.getConfig(tenantSlug);
+    const op = await prisma.operationSettings.findUnique({ where: { id: 'default' } });
+    const eggSyncOnlyReviewed = op?.eggSyncOnlyReviewed ?? false;
+
+    const cfgPack = {
+      eggsPerCarton: cfg.eggsPerCarton,
+      cartonsPerBox: cfg.cartonsPerBox,
+      syncCartons: cfg.syncCartons,
+      syncBoxes: cfg.syncBoxes,
+      cartonProductId: cfg.cartonProductId,
+      boxProductId: cfg.boxProductId,
+    };
+
+    const production = await prisma.dailyEggProduction.findMany({
+      include: { eggStockLedger: true, flockLot: { select: { code: true } } },
+    });
+
+    let totalCommercial = 0;
+    let eligibleCommercial = 0;
+    let expectedCartons = 0;
+    let expectedBoxes = 0;
+    let rowsMissingLedger = 0;
+
+    const shouldSync = (status: OperationRecordStatus) =>
+      !eggSyncOnlyReviewed ||
+      status === OperationRecordStatus.REVIEWED ||
+      status === OperationRecordStatus.ADJUSTED;
+
+    for (const row of production) {
+      const comm = this.commercialEggs(row);
+      totalCommercial += comm;
+      if (shouldSync(row.status)) {
+        eligibleCommercial += comm;
+        const t = productionStockTargets(comm, cfgPack);
+        expectedCartons += t.targetLooseCartons;
+        expectedBoxes += t.targetBoxes;
+        if (!row.eggStockLedger) rowsMissingLedger += 1;
+      }
+    }
+
+    const ledgerRows = await prisma.eggProductionStockLedger.findMany();
+    let ledgerCartons = 0;
+    let ledgerBoxes = 0;
+    for (const l of ledgerRows) {
+      ledgerCartons += Number(l.cartonsQty);
+      ledgerBoxes += Number(l.boxesQty);
+    }
+
+    const loadAllMoves = async (productId: string | null) => {
+      if (!productId) return [];
+      return prisma.stockMovement.findMany({
+        where: { productId },
+        select: { type: true, quantity: true, reference: true, movedAt: true },
+      });
+    };
+
+    const cartonMoves = await loadAllMoves(cfg.cartonProductId);
+    const boxMoves = await loadAllMoves(cfg.boxProductId);
+
+    const cartonBal = cartonMoves.reduce((b, m) => {
+      const q = Number(m.quantity);
+      return b + (m.type === 'OUT' ? -q : q);
+    }, 0);
+    const boxBal = boxMoves.reduce((b, m) => {
+      const q = Number(m.quantity);
+      return b + (m.type === 'OUT' ? -q : q);
+    }, 0);
+
+    const cartonSplit = this.movementBalance(cartonMoves);
+    const boxSplit = this.movementBalance(boxMoves);
+
+    const eggsPerCarton = Math.max(cfg.eggsPerCarton, 1);
+    const cartonsPerBox = Math.max(cfg.cartonsPerBox, 1);
+    const eggsPerBox = eggsPerCarton * cartonsPerBox;
+
+    const equiv = (cartons: number, boxes: number) =>
+      boxes * cartonsPerBox * eggsPerCarton + cartons * eggsPerCarton;
+
+    const eps = 0.001;
+    const stockMatchesLedger =
+      Math.abs(cartonBal - ledgerCartons) < eps && Math.abs(boxBal - ledgerBoxes) < eps;
+    const ledgerMatchesProduction =
+      Math.abs(ledgerCartons - expectedCartons) < eps &&
+      Math.abs(ledgerBoxes - expectedBoxes) < eps;
+    const posturaMatchesLedger =
+      Math.abs(cartonSplit.posturaNet - ledgerCartons) < eps &&
+      Math.abs(boxSplit.posturaNet - ledgerBoxes) < eps;
+
+    const formatOtherMove = (m: {
+      type: string;
+      quantity: { toString(): string };
+      reference: string | null;
+      movedAt: Date;
+    }) => {
+      const ref = m.reference ?? '';
+      let kind = 'Outro';
+      if (ref.startsWith('venda:')) kind = 'Venda';
+      else if (ref.startsWith('postura:')) kind = 'Postura';
+      return {
+        at: m.movedAt.toISOString(),
+        kind,
+        type: m.type,
+        qty: Number(m.quantity),
+        reference: ref || null,
+      };
+    };
+
+    const otherMovesSample = [...cartonMoves, ...boxMoves]
+      .filter((m) => !(m.reference ?? '').startsWith('postura:'))
+      .sort((a, b) => b.movedAt.getTime() - a.movedAt.getTime())
+      .slice(0, 12)
+      .map(formatOtherMove);
+
+    const [cartonProduct, boxProduct] = await Promise.all([
+      cfg.cartonProductId
+        ? prisma.product.findUnique({
+            where: { id: cfg.cartonProductId },
+            select: { sku: true, name: true },
+          })
+        : null,
+      cfg.boxProductId
+        ? prisma.product.findUnique({
+            where: { id: cfg.boxProductId },
+            select: { sku: true, name: true },
+          })
+        : null,
+    ]);
+
+    return {
+      config: {
+        enabled: cfg.enabled,
+        eggsPerCarton: cfg.eggsPerCarton,
+        cartonsPerBox: cfg.cartonsPerBox,
+        syncCartons: cfg.syncCartons,
+        syncBoxes: cfg.syncBoxes,
+        eggSyncOnlyReviewed,
+        cartonProduct,
+        boxProduct,
+        costPerCommercialEgg:
+          cfg.costPerCommercialEgg != null ? Number(cfg.costPerCommercialEgg) : null,
+      },
+      production: {
+        rows: production.length,
+        totalCommercialEggs: totalCommercial,
+        eligibleCommercialEggs: eligibleCommercial,
+        rowsMissingLedger,
+        unpackagedRemainderEggs: Math.max(
+          0,
+          eligibleCommercial - equiv(expectedCartons, expectedBoxes),
+        ),
+      },
+      fromProduction: {
+        looseCartons: expectedCartons,
+        boxes: expectedBoxes,
+        equivalentEggs: equiv(expectedCartons, expectedBoxes),
+      },
+      ledger: {
+        looseCartons: ledgerCartons,
+        boxes: ledgerBoxes,
+        equivalentEggs: equiv(ledgerCartons, ledgerBoxes),
+      },
+      currentStock: {
+        looseCartons: cartonBal,
+        boxes: boxBal,
+        equivalentEggs: equiv(cartonBal, boxBal),
+      },
+      posturaNet: {
+        cartons: cartonSplit.posturaNet,
+        boxes: boxSplit.posturaNet,
+      },
+      otherNet: {
+        cartons: cartonSplit.otherNet,
+        boxes: boxSplit.otherNet,
+        equivalentEggs: equiv(cartonSplit.otherNet, boxSplit.otherNet),
+      },
+      checks: {
+        ledgerMatchesProduction,
+        posturaNetMatchesLedger: posturaMatchesLedger,
+        stockMatchesLedger,
+        integrationHealthy:
+          cfg.enabled &&
+          ledgerMatchesProduction &&
+          posturaMatchesLedger &&
+          rowsMissingLedger === 0,
+        stockMatchesProductionTargets:
+          Math.abs(cartonBal - expectedCartons) < eps && Math.abs(boxBal - expectedBoxes) < eps,
+      },
+      otherMovesSample,
+      eggsPerCarton,
+      cartonsPerBox,
+      eggsPerBox,
+    };
   }
 
   async inventorySnapshot(tenantSlug: string) {

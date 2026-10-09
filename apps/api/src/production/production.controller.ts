@@ -118,6 +118,17 @@ export class ProductionController {
     return this.eggStock.getConfig(user.tenantSlug);
   }
 
+  @Get('egg-stock-reconciliation')
+  @RequirePermissions(
+    'production.read',
+    'inventory.read',
+    'reports.read',
+    '*',
+  )
+  eggStockReconciliation(@CurrentUser() user: JwtPayload) {
+    return this.eggStock.getReconciliation(user.tenantSlug);
+  }
+
   @Patch('egg-stock-config')
   @RequirePermissions('production.write', 'inventory.write', '*')
   updateEggStockConfig(@CurrentUser() user: JwtPayload, @Body() body: Record<string, unknown>) {

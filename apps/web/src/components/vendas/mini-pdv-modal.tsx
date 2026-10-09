@@ -8,7 +8,8 @@ import { ChartAccountSelect } from '@/components/chart-account-select';
 import { PartnerLookupField } from '@/components/partner-lookup-field';
 import { ProductLookupField } from '@/components/product-lookup-field';
 import { Field, inputClass } from '@/components/ui-parts';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, downloadAuthFile } from '@/lib/api';
+import type { BankBoletoDto } from '@/lib/boleto';
 import { navigateToReportPrint } from '@/lib/report-print-nav';
 import { formatBrl } from '@/lib/money';
 
@@ -48,7 +49,9 @@ export function MiniPdvModal({
   onCompleted?: () => void;
   onExpenseRecorded?: () => void;
 }) {
-  const [step, setStep] = useState<'cart' | 'pay'>('cart');
+  const [step, setStep] = useState<'cart' | 'pay' | 'boleto'>('cart');
+  const [boletoResult, setBoletoResult] = useState<BankBoletoDto | null>(null);
+  const [lastSaleId, setLastSaleId] = useState<string | null>(null);
   const [partnerId, setPartnerId] = useState('');
   const [draftProductId, setDraftProductId] = useState('');
   const [draftLabel, setDraftLabel] = useState('');
@@ -81,6 +84,8 @@ export function MiniPdvModal({
     setSplitSecondaryFormId(null);
     setSplitPrimaryAmount('');
     setExpenseOpen(false);
+    setBoletoResult(null);
+    setLastSaleId(null);
     setError(null);
   }, []);
 
@@ -153,7 +158,10 @@ export function MiniPdvModal({
           })),
         }),
       });
-      await apiFetch(`/v1/commercial/orders/${created.id}/confirm`, { method: 'POST', body: '{}' });
+      const confirmed = await apiFetch<{ boleto?: BankBoletoDto }>(
+        `/v1/commercial/orders/${created.id}/confirm`,
+        { method: 'POST', body: '{}' },
+      );
       if (emitNfce) {
         try {
           await apiFetch(`/v1/fiscal/emit/${created.id}?type=NFCE`, { method: 'POST', body: '{}' });
@@ -166,6 +174,18 @@ export function MiniPdvModal({
           onCompleted?.();
           return;
         }
+      }
+      if (confirmed.boleto && !confirmed.boleto.error && confirmed.boleto.id) {
+        setLastSaleId(created.id);
+        setBoletoResult(confirmed.boleto);
+        setStep('boleto');
+        onCompleted?.();
+        return;
+      }
+      if (confirmed.boleto?.error) {
+        setError(`Venda confirmada, mas o boleto falhou: ${confirmed.boleto.error}`);
+        onCompleted?.();
+        return;
       }
       onClose();
       onCompleted?.();
@@ -239,7 +259,42 @@ export function MiniPdvModal({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6 lg:flex-row">
-          {step === 'cart' ? (
+          {step === 'boleto' && boletoResult ? (
+            <div className="w-full space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="font-semibold text-amber-950">Boleto registrado</p>
+              {boletoResult.linhaDigitavel ? (
+                <p className="break-all font-mono text-sm text-slate-900">{boletoResult.linhaDigitavel}</p>
+              ) : null}
+              {boletoResult.nossoNumero ? (
+                <p className="text-sm text-slate-700">Nosso número: {boletoResult.nossoNumero}</p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  onClick={() =>
+                    void downloadAuthFile(`/v1/finance/boletos/${boletoResult.id}/pdf`, `boleto-${boletoResult.id}.pdf`)
+                  }
+                >
+                  Baixar PDF
+                </Button>
+                {lastSaleId ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      onClose();
+                      navigateToReportPrint(
+                        `/vendas/impressao?id=${encodeURIComponent(lastSaleId)}&autoprint=1`,
+                        '/vendas',
+                      );
+                    }}
+                  >
+                    Recibo da venda
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : step === 'cart' ? (
             <>
               <div className="lg:w-[min(100%,22rem)] lg:shrink-0">
                 <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-4 shadow-sm">
@@ -495,9 +550,13 @@ export function MiniPdvModal({
               >
                 Confirmar venda…
               </Button>
-            ) : (
+            ) : step === 'pay' ? (
               <Button type="button" variant="secondary" onClick={() => setStep('cart')}>
                 Voltar aos itens
+              </Button>
+            ) : (
+              <Button type="button" onClick={onClose}>
+                Fechar
               </Button>
             )}
           </div>

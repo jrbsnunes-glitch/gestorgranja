@@ -4,7 +4,11 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { waitForReportImages } from '@/lib/wait-for-report-images';
 
 /** Dispara window.print() uma vez quando o relatório terminou de carregar (incl. logo). */
-export function useReportAutoPrint(ready: boolean, rootRef?: RefObject<Element | null>) {
+export function useReportAutoPrint(
+  ready: boolean,
+  rootRef?: RefObject<Element | null>,
+  delayMs = 150,
+) {
   const fired = useRef(false);
   useEffect(() => {
     if (!ready || fired.current) return;
@@ -15,7 +19,7 @@ export function useReportAutoPrint(ready: boolean, rootRef?: RefObject<Element |
       const root = rootRef?.current ?? document.body;
       await waitForReportImages(root);
       if (cancelled) return;
-      await new Promise((r) => window.setTimeout(r, 150));
+      await new Promise((r) => window.setTimeout(r, delayMs));
       if (cancelled) return;
       window.print();
     })();
@@ -23,5 +27,5 @@ export function useReportAutoPrint(ready: boolean, rootRef?: RefObject<Element |
     return () => {
       cancelled = true;
     };
-  }, [ready, rootRef]);
+  }, [ready, rootRef, delayMs]);
 }

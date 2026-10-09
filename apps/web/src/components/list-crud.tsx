@@ -15,7 +15,7 @@ export function TabBar({
   active,
   onChange,
 }: {
-  tabs: { id: string; label: string; disabled?: boolean; title?: string }[];
+  tabs: { id: string; label: string; icon?: string; disabled?: boolean; title?: string }[];
   active: string;
   onChange: (id: string) => void;
 }) {
@@ -30,7 +30,7 @@ export function TabBar({
           onClick={() => {
             if (!t.disabled) onChange(t.id);
           }}
-          className={`shrink-0 rounded-t-md px-4 py-2.5 text-sm font-medium max-md:min-h-11 ${
+          className={`flex shrink-0 items-center gap-2 rounded-t-md px-4 py-2.5 text-sm font-medium max-md:min-h-11 ${
             t.disabled
               ? 'cursor-not-allowed text-slate-400'
               : active === t.id
@@ -38,6 +38,10 @@ export function TabBar({
                 : 'text-slate-600 hover:bg-slate-50'
           }`}
         >
+          {t.icon ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={t.icon} alt="" className="h-5 w-5 object-contain" />
+          ) : null}
           {t.label}
         </button>
       ))}

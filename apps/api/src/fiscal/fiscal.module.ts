@@ -26,6 +26,6 @@ import { SefazSoapClient } from './sefaz/sefaz-soap.client';
     NfeXmlSignService,
     SefazSoapClient,
   ],
-  exports: [FiscalService],
+  exports: [FiscalService, FiscalCryptoService],
 })
 export class FiscalModule {}

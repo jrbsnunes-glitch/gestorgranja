@@ -17,6 +17,7 @@ import {
 import { Card } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { PageIntro } from '@/components/crud';
+import { IllustratedKpi } from '@/components/dashboard/illustrated-kpi';
 import { Kpi } from '@/components/dashboard/kpi-card';
 import { RecordStatusBadge } from '@/components/operation/record-status-badge';
 import { ErrorBox, inputClass } from '@/components/ui-parts';
@@ -24,6 +25,7 @@ import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { labelEnum } from '@/lib/labels';
 import { formatBrl } from '@/lib/money';
+import { OPERACAO_DASHBOARD_KPI_ICONS } from '@/lib/operacao-tab-icons';
 import { lotLabel, todayIso, useBarnOptions, useLotOptions } from '@/lib/operation-options';
 
 type Dashboard = {
@@ -34,6 +36,11 @@ type Dashboard = {
     liveBirds: number;
     produced: number;
     commercial: number;
+    formas: number;
+    equivalentCartons: number;
+    packagingBoxes: number;
+    packagingLooseCartons: number;
+    packagingRemainderEggs: number;
     lossEggs: number;
     lossPct: number | null;
     layRatePct: number | null;
@@ -50,6 +57,7 @@ type Dashboard = {
     awaitingReview: number;
     daysWithData: number;
   };
+  packaging?: { eggsPerForma: number; eggsPerCarton: number; cartonsPerBox: number; hint?: string };
   series: {
     date: string;
     produced: number;
@@ -79,7 +87,13 @@ type Dashboard = {
     lineage: string;
     ageWeeks: number;
     liveBirds: number;
+    produced: number;
     commercial: number;
+    formas: number;
+    equivalentCartons: number;
+    packagingBoxes: number;
+    packagingLooseCartons: number;
+    packagingRemainderEggs: number;
     lossPct: number | null;
     layRatePct: number | null;
     standardLayRatePct: number | null;
@@ -164,10 +178,10 @@ export default function OperacaoDashboardPage() {
   const gap = t?.layRatePct != null && t.standardLayRatePct != null ? t.layRatePct - t.standardLayRatePct : null;
 
   return (
-    <AdminShell title="Operação">
+    <AdminShell title="Painel geral">
       <PageIntro
-        title="Operação — visão geral"
-        description="Indicadores de produção, perdas, ração, mortalidade e ocorrências com filtro por período, galpão e lote. Compare com o padrão da linhagem e acompanhe as pendências do dia."
+        title="Painel geral"
+        description="Visão da granja: aves vivas, ovos comerciais, postura e mortalidade. O detalhamento abaixo mantém ração, perdas e ocorrências."
       />
       <ErrorBox message={error} />
 
@@ -224,9 +238,130 @@ export default function OperacaoDashboardPage() {
 
       {t ? (
         <>
+          <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <IllustratedKpi
+              img={OPERACAO_DASHBOARD_KPI_ICONS.birds}
+              label="Aves vivas"
+              value={nf(t.liveBirds)}
+              sub={`${t.lots} lote(s) · ${t.barns} galpão(ões)`}
+            />
+            <IllustratedKpi
+              img="/producao/ovo.svg"
+              label="Ovos comerciais"
+              value={nf(t.commercial)}
+              sub={chart.length ? `último dia ${nf(chart[chart.length - 1]?.commercial)}` : `${t.daysWithData} dia(s) com dado`}
+            />
+            <IllustratedKpi
+              img="/producao/grafico.svg"
+              label="Postura média"
+              value={pf(t.layRatePct)}
+              sub={t.standardLayRatePct != null ? `padrão ${pf(t.standardLayRatePct)}` : 'sem padrão da linhagem'}
+            />
+            <IllustratedKpi
+              img={OPERACAO_DASHBOARD_KPI_ICONS.mortality}
+              label="Mortalidade no período"
+              value={nf(t.mortality)}
+              sub={`${pf(t.mortalityPct, 2)} do alojado`}
+            />
+          </div>
+
+          <div className="mb-4 grid gap-4 lg:grid-cols-5">
+            <Card title="Produção de ovos (últimos 7 dias)" className="h-72 lg:col-span-3">
+              <ResponsiveContainer width="100%" height="85%">
+                <BarChart data={chart.slice(-7)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" fontSize={11} />
+                  <YAxis fontSize={11} />
+                  <Tooltip />
+                  <Bar dataKey="commercial" name="Ovos comerciais" fill="#166534" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+            <Card title="Produtividade" className="flex h-72 flex-col items-center justify-center lg:col-span-2">
+              <p className="text-5xl font-semibold text-emerald-800">{pf(t.layRatePct, 0)}</p>
+              <p className="mt-1 text-sm text-slate-500">postura média no período</p>
+              <p className="mt-4 text-center text-sm text-slate-600">
+                {nf(t.commercial)} ovos comerciais
+                <br />
+                {nf(t.produced)} produzidos no total
+                <br />
+                <span className="text-xs text-slate-500">
+                  Embalagem: {nf(t.packagingBoxes)} caixa(s) + {nf(t.packagingLooseCartons)} cart. avulsa(s)
+                </span>
+              </p>
+            </Card>
+          </div>
+
+          <Card title="Resumo por lote — produção no período" className="mb-6">
+            <p className="mb-2 text-xs leading-relaxed text-slate-600">
+              <strong>Formas (coleta):</strong> comerciais ÷ {data!.packaging?.eggsPerForma ?? 30} (bandeja).
+              {' '}
+              <strong>Caixas / cart. avulsas:</strong> mesma regra da postura que alimenta o estoque (
+              {data!.packaging?.eggsPerCarton ?? 30} ovos/cartela, {data!.packaging?.cartonsPerBox ?? 12}{' '}
+              cartelas/caixa).{' '}
+              <Link href="/estoque" className="text-emerald-800 underline">
+                Saldo físico no depósito
+              </Link>{' '}
+              está no Painel → Produtos e estoque (após vendas e saídas).
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-2 py-1.5">Lote</th>
+                    <th className="px-2 py-1.5">Galpão</th>
+                    <th className="px-2 py-1.5 text-right">Idade</th>
+                    <th className="px-2 py-1.5 text-right">Aves vivas</th>
+                    <th className="px-2 py-1.5 text-right">Formas</th>
+                    <th className="px-2 py-1.5 text-right">Caixas</th>
+                    <th className="px-2 py-1.5 text-right">Cart. avulsas</th>
+                    <th className="px-2 py-1.5 text-right">Ovos produzidos</th>
+                    <th className="px-2 py-1.5 text-right">Postura</th>
+                    <th className="px-2 py-1.5 text-right">Mortalidade</th>
+                    <th className="px-2 py-1.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data!.byLot.map((l) => (
+                    <tr key={l.lot.id} className="border-t border-slate-100">
+                      <td className="px-2 py-1.5">
+                        <Link href={`/cadastros/lotes?lote=${l.lot.id}`} className="font-medium text-emerald-900 hover:underline">
+                          {l.lot.code}
+                        </Link>
+                      </td>
+                      <td className="px-2 py-1.5">{l.barn.name}</td>
+                      <td className="px-2 py-1.5 text-right">{l.ageWeeks} sem.</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.liveBirds)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.formas)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.packagingBoxes)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.packagingLooseCartons)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.produced)}</td>
+                      <td className="px-2 py-1.5 text-right">{pf(l.layRatePct)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.mortality)}</td>
+                      <td className="px-2 py-1.5">{labelEnum(l.lot.status)}</td>
+                    </tr>
+                  ))}
+                  {!data!.byLot.length ? (
+                    <tr>
+                      <td colSpan={11} className="px-2 py-4 text-center text-slate-500">
+                        Sem lotes no filtro.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Detalhamento do período</h2>
           <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6">
             <Kpi label="Aves vivas" value={nf(t.liveBirds)} sub={`${t.lots} lote(s) · ${t.barns} galpão(ões)`} />
             <Kpi label="Ovos comerciais" value={nf(t.commercial)} sub={`${nf(t.produced)} produzidos · ${t.daysWithData} dia(s)`} />
+            <Kpi
+              label="Embalagem (período)"
+              value={`${nf(t.packagingBoxes)} cx`}
+              sub={`+ ${nf(t.packagingLooseCartons)} cart. avulsas · ${nf(t.equivalentCartons)} equiv. cartelas`}
+            />
             <Kpi
               label="Postura média"
               value={pf(t.layRatePct)}
@@ -348,6 +483,10 @@ export default function OperacaoDashboardPage() {
                     <th className="px-2 py-1.5">Linhagem</th>
                     <th className="px-2 py-1.5 text-right">Idade (sem)</th>
                     <th className="px-2 py-1.5 text-right">Aves</th>
+                    <th className="px-2 py-1.5 text-right">Formas</th>
+                    <th className="px-2 py-1.5 text-right">Caixas</th>
+                    <th className="px-2 py-1.5 text-right">Cart. avulsas</th>
+                    <th className="px-2 py-1.5 text-right">Ovos prod.</th>
                     <th className="px-2 py-1.5 text-right">Postura</th>
                     <th className="px-2 py-1.5 text-right">Padrão</th>
                     <th className="px-2 py-1.5 text-right">
@@ -372,6 +511,10 @@ export default function OperacaoDashboardPage() {
                       <td className="px-2 py-1.5 text-xs">{l.lineage}</td>
                       <td className="px-2 py-1.5 text-right">{l.ageWeeks}</td>
                       <td className="px-2 py-1.5 text-right">{nf(l.liveBirds)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.formas)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.packagingBoxes)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.packagingLooseCartons)}</td>
+                      <td className="px-2 py-1.5 text-right">{nf(l.produced)}</td>
                       <td className="px-2 py-1.5 text-right">{pf(l.layRatePct)}</td>
                       <td className="px-2 py-1.5 text-right text-slate-500">{pf(l.standardLayRatePct)}</td>
                       <td className={`px-2 py-1.5 text-right ${l.layGapPct == null ? '' : l.layGapPct < -5 ? 'font-medium text-red-700' : l.layGapPct < 0 ? 'text-amber-700' : 'text-emerald-700'}`}>

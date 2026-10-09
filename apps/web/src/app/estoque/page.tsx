@@ -13,6 +13,7 @@ import {
 import { AdminShell } from '@/components/admin-shell';
 import { PageIntro } from '@/components/crud';
 import { ClickableKpi, DashboardColumn, Kpi } from '@/components/dashboard/kpi-card';
+import { EggStockReconciliationPanel } from '@/components/inventory/egg-stock-reconciliation-panel';
 import { ErrorBox } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { errorMessage } from '@/lib/labels';
@@ -122,6 +123,10 @@ export default function EstoqueDashboardPage() {
                 ))
               )}
             </DashboardColumn>
+          </div>
+
+          <div className="mt-6">
+            <EggStockReconciliationPanel compact />
           </div>
 
           {chartData.length > 0 ? (

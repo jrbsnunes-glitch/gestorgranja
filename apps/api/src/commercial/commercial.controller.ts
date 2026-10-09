@@ -38,6 +38,12 @@ export class CommercialController {
     return this.commercial.confirmOrder(user, id);
   }
 
+  @Post('orders/:id/void')
+  @RequirePermissions('sales.write', '*')
+  voidOrder(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.commercial.voidOrder(user, id);
+  }
+
   @Get('orders/:id/receipt')
   @RequirePermissions('sales.read', 'sales.write', 'cash.read', '*')
   receipt(@CurrentUser() user: JwtPayload, @Param('id') id: string) {

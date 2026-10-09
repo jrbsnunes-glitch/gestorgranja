@@ -27,6 +27,7 @@ import { SalesOrdersReportService } from './sales-orders-report.service';
 import { HrEmployeesReportService } from './hr-employees-report.service';
 import { HrLeavesReportService } from './hr-leaves-report.service';
 import { HrVacationsReportService } from './hr-vacations-report.service';
+import { OperationProductionReportService } from './operation-production-report.service';
 import { ZootechnicalMetricsService } from './zootechnical-metrics.service';
 
 @ApiTags('reports')
@@ -51,7 +52,18 @@ export class ReportsController {
     private readonly hrEmployeesReportSvc: HrEmployeesReportService,
     private readonly hrLeavesReportSvc: HrLeavesReportService,
     private readonly hrVacationsReportSvc: HrVacationsReportService,
+    private readonly operationProductionReport: OperationProductionReportService,
   ) {}
+
+  @Get('operation-barn-comparison')
+  @RequirePermissions('reports.read', 'production.read', '*')
+  operationBarnComparisonReport(
+    @CurrentUser() user: JwtPayload,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.operationProductionReport.report(user, from, to);
+  }
 
   @Get('receivable-aging')
   @RequirePermissions('reports.read', 'finance.write', '*')

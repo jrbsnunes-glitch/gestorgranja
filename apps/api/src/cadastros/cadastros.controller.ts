@@ -27,7 +27,7 @@ export class CadastrosController {
   }
 
   @Post('barns')
-  @RequirePermissions('operation.settings', '*')
+  @RequirePermissions('operation.settings', 'production.write', '*')
   createBarn(@CurrentUser() user: JwtPayload, @Body() body: BarnPayload) {
     return this.cadastros.createBarn(user, body);
   }
@@ -42,6 +42,12 @@ export class CadastrosController {
   @RequirePermissions('production.read', '*')
   lineages(@CurrentUser() user: JwtPayload) {
     return this.cadastros.listBreedLineages(user);
+  }
+
+  @Post('breed-lineages')
+  @RequirePermissions('production.write', '*')
+  createLineage(@CurrentUser() user: JwtPayload, @Body() body: { code?: string; name: string }) {
+    return this.cadastros.createBreedLineage(user, body);
   }
 
   @Get('partners')

@@ -1,52 +1,60 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CashSessionStatus } from '../generated/tenant-client';
+import { SicoobCobrancaService } from '../finance/sicoob-cobranca.service';
+import { calendarDayKeyInTz, monthDayKeysInTz, prismaDateOnly } from '../common/calendar-date.util';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+
+function isBoletoKind(kind?: string | null) {
+  return (kind ?? '').toUpperCase() === 'BOLETO';
+}
 
 @Injectable()
 export class CommercialService {
-  constructor(private readonly tenantPrisma: TenantPrismaService) {}
+  constructor(
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly sicoob: SicoobCobrancaService,
+  ) {}
 
-  listOrders(user: JwtPayload) {
-    return this.tenantPrisma.getClient(user.tenantSlug).then((p) =>
-      p.salesOrder.findMany({
-        orderBy: { orderDate: 'desc' },
-        take: 200,
-        include: {
-          partner: true,
-          items: { include: { product: true } },
-          fiscalDoc: true,
-        },
-      }),
-    );
-  }
-
-  private localDayBounds(dayKey: string) {
-    const from = new Date(`${dayKey}T00:00:00.000`);
-    const to = new Date(`${dayKey}T23:59:59.999`);
-    return { from, to };
-  }
-
-  private monthBounds(ref = new Date()) {
-    const from = new Date(ref.getFullYear(), ref.getMonth(), 1);
-    const to = new Date(ref.getFullYear(), ref.getMonth() + 1, 0, 23, 59, 59, 999);
-    return { from, to };
+  async listOrders(user: JwtPayload) {
+    const p = await this.tenantPrisma.getClient(user.tenantSlug);
+    const rows = await p.salesOrder.findMany({
+      orderBy: { orderDate: 'desc' },
+      take: 200,
+      include: {
+        partner: true,
+        items: { include: { product: true } },
+        fiscalDoc: true,
+        boletos: { orderBy: { createdAt: 'desc' }, take: 1 },
+        paymentForm: true,
+        secondaryPaymentForm: true,
+      },
+    });
+    return rows.map((o) => ({
+      ...o,
+      boletos: o.boletos.map((b) => this.sicoob.toBoletoDto(b)),
+    }));
   }
 
   async getSalesStats(user: JwtPayload) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const now = new Date();
-    const dayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const { from: dayFrom, to: dayTo } = this.localDayBounds(dayKey);
-    const { from: monthFrom, to: monthTo } = this.monthBounds(now);
+    const dayKey = calendarDayKeyInTz(now);
+    const monthKeys = monthDayKeysInTz(now);
+    const dayDate = prismaDateOnly(dayKey);
+    const monthFrom = prismaDateOnly(monthKeys.from);
+    const monthTo = prismaDateOnly(monthKeys.to);
 
     const [dayOrders, monthOrders] = await Promise.all([
       prisma.salesOrder.findMany({
-        where: { status: 'CONFIRMED', orderDate: { gte: dayFrom, lte: dayTo } },
+        where: { status: 'CONFIRMED', orderDate: dayDate },
         select: { totalAmount: true },
       }),
       prisma.salesOrder.findMany({
-        where: { status: 'CONFIRMED', orderDate: { gte: monthFrom, lte: monthTo } },
+        where: {
+          status: 'CONFIRMED',
+          orderDate: { gte: monthFrom, lte: monthTo },
+        },
         select: { totalAmount: true },
       }),
     ]);
@@ -150,11 +158,11 @@ export class CommercialService {
     });
     if (!session) throw new BadRequestException('Abra o caixa antes de confirmar vendas');
 
-    return prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx) => {
       const updated = await tx.salesOrder.update({
         where: { id: orderId },
         data: { status: 'CONFIRMED', cashSessionId: session.id },
-        include: { items: true, partner: true },
+        include: { items: true, partner: true, paymentForm: true, secondaryPaymentForm: true },
       });
       const saleRef = `Venda ${updated.controlNumber}`;
       const total = Number(updated.totalAmount);
@@ -164,25 +172,29 @@ export class CommercialService {
         const secondaryForm = await tx.paymentForm.findUnique({
           where: { id: updated.secondaryPaymentFormId },
         });
-        await tx.cashMovement.create({
-          data: {
-            sessionId: session.id,
-            type: 'IN',
-            amount: primaryAmt,
-            paymentMethod: updated.paymentMethod ?? 'CASH',
-            reason: `${saleRef} (1/2)`,
-          },
-        });
-        await tx.cashMovement.create({
-          data: {
-            sessionId: session.id,
-            type: 'IN',
-            amount: secondaryAmt,
-            paymentMethod: secondaryForm?.kind ?? 'CASH',
-            reason: `${saleRef} (2/2)`,
-          },
-        });
-      } else {
+        if (!isBoletoKind(updated.paymentMethod)) {
+          await tx.cashMovement.create({
+            data: {
+              sessionId: session.id,
+              type: 'IN',
+              amount: primaryAmt,
+              paymentMethod: updated.paymentMethod ?? 'CASH',
+              reason: `${saleRef} (1/2)`,
+            },
+          });
+        }
+        if (!isBoletoKind(secondaryForm?.kind)) {
+          await tx.cashMovement.create({
+            data: {
+              sessionId: session.id,
+              type: 'IN',
+              amount: secondaryAmt,
+              paymentMethod: secondaryForm?.kind ?? 'CASH',
+              reason: `${saleRef} (2/2)`,
+            },
+          });
+        }
+      } else if (!isBoletoKind(updated.paymentMethod)) {
         await tx.cashMovement.create({
           data: {
             sessionId: session.id,
@@ -212,6 +224,102 @@ export class CommercialService {
         }
       }
       return updated;
+    });
+    const boleto = await this.sicoob.afterSaleConfirmed(user, orderId);
+    return { ...updated, boleto };
+  }
+
+  /** Estorna venda confirmada (estoque + caixa). Não disponível com NF autorizada ou boleto emitido. */
+  async voidOrder(user: JwtPayload, orderId: string) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const order = await prisma.salesOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        fiscalDoc: true,
+        boletos: { where: { status: { not: 'CANCELLED' } }, take: 1 },
+        paymentForm: true,
+        secondaryPaymentForm: true,
+      },
+    });
+    if (!order) throw new BadRequestException('Pedido não encontrado');
+    if (order.status !== 'CONFIRMED') {
+      throw new BadRequestException('Só é possível estornar vendas confirmadas');
+    }
+    const fiscalStatus = order.fiscalDoc?.status?.toUpperCase();
+    if (fiscalStatus && !['DRAFT', 'REJECTED', 'CANCELLED', 'CANCELED'].includes(fiscalStatus)) {
+      throw new BadRequestException('Venda com documento fiscal autorizado — cancele a NF antes de estornar');
+    }
+    if (order.boletos.length > 0) {
+      throw new BadRequestException('Estorne ou cancele o boleto antes de anular a venda');
+    }
+
+    const estornoRef = `Estorno ${order.controlNumber}`;
+
+    return prisma.$transaction(async (tx) => {
+      const stockAccount = await tx.chartAccount.findFirst({
+        where: { code: '1.1.3.04', isActive: true, isPosting: true },
+      });
+
+      for (const item of order.items) {
+        if (item.productId && stockAccount) {
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              chartAccountId: stockAccount.id,
+              type: 'IN',
+              quantity: item.quantity,
+              reference: `estorno:venda:${orderId}`,
+            },
+          });
+        }
+      }
+
+      if (order.cashSessionId) {
+        const total = Number(order.totalAmount);
+        if (order.secondaryPaymentFormId && order.primaryPaymentAmount != null) {
+          const primaryAmt = Number(order.primaryPaymentAmount);
+          const secondaryAmt = Math.round((total - primaryAmt) * 100) / 100;
+          if (!isBoletoKind(order.paymentMethod)) {
+            await tx.cashMovement.create({
+              data: {
+                sessionId: order.cashSessionId,
+                type: 'OUT',
+                amount: primaryAmt,
+                paymentMethod: order.paymentMethod ?? 'CASH',
+                reason: `${estornoRef} (1/2)`,
+              },
+            });
+          }
+          if (!isBoletoKind(order.secondaryPaymentForm?.kind)) {
+            await tx.cashMovement.create({
+              data: {
+                sessionId: order.cashSessionId,
+                type: 'OUT',
+                amount: secondaryAmt,
+                paymentMethod: order.secondaryPaymentForm?.kind ?? 'CASH',
+                reason: `${estornoRef} (2/2)`,
+              },
+            });
+          }
+        } else if (!isBoletoKind(order.paymentMethod)) {
+          await tx.cashMovement.create({
+            data: {
+              sessionId: order.cashSessionId,
+              type: 'OUT',
+              amount: total,
+              paymentMethod: order.paymentMethod ?? 'CASH',
+              reason: estornoRef,
+            },
+          });
+        }
+      }
+
+      return tx.salesOrder.update({
+        where: { id: orderId },
+        data: { status: 'CANCELLED' },
+        include: { partner: true, items: true },
+      });
     });
   }
 
@@ -245,7 +353,9 @@ export class CommercialService {
             ? 'Cartão'
             : kind === 'TRANSFER'
               ? 'Transferência'
-              : kind ?? '—');
+              : kind === 'BOLETO'
+                ? 'Boleto'
+                : kind ?? '—');
     let paymentLabel = labelForForm(order.paymentForm?.name, order.paymentMethod);
     if (order.secondaryPaymentFormId && order.primaryPaymentAmount != null) {
       const primaryAmt = Number(order.primaryPaymentAmount);

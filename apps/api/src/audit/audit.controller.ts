@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
@@ -19,11 +19,23 @@ export class AuditController {
   list(
     @CurrentUser() user: JwtPayload,
     @Query('entity') entity?: string,
+    @Query('entityId') entityId?: string,
     @Query('limit') limit?: string,
   ) {
     return this.audit.listLogs(user.tenantSlug, {
       entity,
+      entityId,
       limit: limit ? Number(limit) : 100,
     });
+  }
+
+  @Get('records/:entity/:id/history')
+  @RequirePermissions('*', 'admin.users', 'production.read')
+  recordHistory(
+    @CurrentUser() user: JwtPayload,
+    @Param('entity') entity: string,
+    @Param('id') id: string,
+  ) {
+    return this.audit.historyFor(user.tenantSlug, entity, id);
   }
 }

@@ -6,10 +6,17 @@ import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 export class AuditService {
   constructor(private readonly tenantPrisma: TenantPrismaService) {}
 
-  async listLogs(tenantSlug: string, opts: { entity?: string; limit?: number }) {
+  async listLogs(tenantSlug: string, opts: { entity?: string; entityId?: string; limit?: number }) {
     const prisma = await this.tenantPrisma.getClient(tenantSlug);
+    const where =
+      opts.entity || opts.entityId
+        ? {
+            ...(opts.entity ? { entity: opts.entity } : {}),
+            ...(opts.entityId ? { entityId: opts.entityId } : {}),
+          }
+        : undefined;
     return prisma.auditLog.findMany({
-      where: opts.entity ? { entity: opts.entity } : undefined,
+      where,
       orderBy: { createdAt: 'desc' },
       take: Math.min(opts.limit ?? 100, 500),
       include: { user: { select: { username: true, name: true } } },

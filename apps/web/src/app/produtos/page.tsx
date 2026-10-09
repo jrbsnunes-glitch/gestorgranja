@@ -19,6 +19,7 @@ import {
 import { ProductGroupPicker, type ProductGroup } from '@/components/product-group-picker';
 import { ProductsReportLauncher } from '@/components/products-report-launcher';
 import { PaginatedTable, usePagination } from '@/components/list-crud';
+import { EggStockReconciliationPanel } from '@/components/inventory/egg-stock-reconciliation-panel';
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { labelEnum, PRODUCT_TYPES } from '@/lib/labels';
@@ -238,6 +239,9 @@ export default function ProdutosPage() {
         title="Produtos e materiais"
         description="Catálogo de ração, medicamentos, insumos e ovos embalados."
       />
+      <div className="mb-4">
+        <EggStockReconciliationPanel compact />
+      </div>
       <ErrorBox message={error} />
       <PageCard>
         <CrudListChrome

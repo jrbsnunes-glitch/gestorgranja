@@ -11,6 +11,7 @@ import {
   type ProductionReportFilters,
   type ProductionReportVariant,
 } from '@/lib/production-report-query';
+import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
 type ReportPayload = {
@@ -76,11 +77,13 @@ function PrintBody() {
     if (!data) return null;
     const parts: string[] = [];
     if (data.period.from && data.period.to) {
-      parts.push(`Período: ${data.period.from} a ${data.period.to}`);
+      parts.push(
+        `Período: ${formatCalendarDatePtBR(data.period.from)} a ${formatCalendarDatePtBR(data.period.to)}`,
+      );
     } else if (data.period.from) {
-      parts.push(`A partir de ${data.period.from}`);
+      parts.push(`A partir de ${formatCalendarDatePtBR(data.period.from)}`);
     } else if (data.period.to) {
-      parts.push(`Até ${data.period.to}`);
+      parts.push(`Até ${formatCalendarDatePtBR(data.period.to)}`);
     }
     if (data.flockLotCode) parts.push(`Lote ${data.flockLotCode}`);
     if (parts.length === 0) return null;

@@ -1,0 +1,257 @@
+Novidades e Atualizações
+Não perca nossas últimas novidades e atualizações! Descubra o que há de novo e aproveite as melhorias feitas especialmente para você. Confira agora mesmo!
+
+⚠️IMPORTANTE
+
+Alteração de TPS – API PIX Recebimentos
+
+Data: 13/07/2026 (segunda-feira)
+
+Com o objetivo de preservar a estabilidade, a disponibilidade e a qualidade dos serviços disponibilizados no Portal do Sicoob para Desenvolvedores (Portal Developers), informamos que o limite de TPS (Transactions per Second) das APIs Pix de Recebimento será ajustado de 50 para 5 requisições por segundo.
+
+A alteração é resultado de análises de utilização da plataforma, que identificaram padrões de consumo incompatíveis com o uso esperado, especialmente em consultas recorrentes de status de QR Codes.
+
+Essa adequação visa aprimorar a governança do consumo das APIs, promover o uso eficiente dos recursos compartilhados e garantir maior previsibilidade e estabilidade na prestação dos serviços.
+
+NOVO
+
+Novas Opções de Impressão de Boletos - API Cobrança Bancária V3
+
+Disponibilizar, aos usuários que utilizam o serviço de API do módulo Cobrança Bancária, as opções de impressão de boletos descritas a seguir.
+No campo tipo FormularioImpressaoPDF no EndPoint: Post/Boletos, foram disponibilizados os tipos de impressão de boletos:
+sem envelopamento – A4
+sem envelopamento – A4 (3 vias)
+autoenvelopável – A4
+No campo tipo FormularioImpressaoPDF no EndPoint: GET/Boletos/Segunda via, foram disponibilizados os tipos de impressão de boletos:
+sem envelopamento – A4
+sem envelopamento – A4 (3 vias)
+autoenvelopável – A4
+Caminho: API Open Banking → Cobrança Bancária → Boletos: Post e API Open Banking → Cobrança Bancária → Boletos/Segunda via GET.
+⚠️IMPORTANTE
+
+Manutenção Programada – API Cobrança Bancária V3
+
+Data: 23/04/2026 (quinta-feira)
+Horário: a partir das 22h
+
+Será realizada uma atualização no ambiente da API de Cobrança Bancária com o objetivo de otimizar o consumo e melhorar o desempenho do serviço.
+
+Durante a janela de manutenção, os serviços poderão apresentar indisponibilidade temporária.
+
+NOVO
+
+API Pix Pagamentos: envio de pagamentos por Copia e Cola
+
+Disponibilizamos uma nova funcionalidade na API Pix Pagamentos que permite a iniciação e efetivação de pagamentos por meio de código Copia e Cola, ampliando as possibilidades de integração.
+
+Com essa evolução, as aplicações passam a contar com um fluxo mais ágil, padronizado e aderente ao ecossistema Pix, possibilitando atender diferentes cenários de pagamento com maior eficiência.
+
+⚠️IMPORTANTE
+
+Modernização do CNPJ para o formato Alfanumérico
+
+Em cumprimento aos normativos publicados pela Receita Federal do Brasil (RFB) – por meio da Instrução Normativa RFB nº 2.229, de 15/10/2024, e da Nota Técnica Conjunta COCAD/SUARA/RFB nº 49, de 14/5/2024, informamos que o CNPJ passará por um processo de modernização, deixando de adotar exclusivamente o formato numérico para passar a utilizar o formato alfanumérico (letras e números) e entrará em vigor a partir de julho de 2026.
+
+Esclarecemos que as APIs disponíveis no Portal Developers do Sicoob já estão preparadas para suportar essa mudança. Os campos que trafegam o CNPJ nas integrações já utilizam o tipo de dado String, permitindo o correto processamento tanto dos CNPJs numéricos atuais quanto dos futuros CNPJs alfanuméricos.
+
+No entanto, é fundamental que os sistemas integrados ao Sicoob sob sua responsabilidade também sejam adequados. Por isso, recomendamos que as equipes técnicas realizem as devidas validações e adequações com antecedência, a fim de evitar impactos no consumo das integrações.
+
+⚠️IMPORTANTE
+
+Manutenção de Certificados para Acesso às APIs
+
+Com o compromisso de garantir melhoria contínua, confiabilidade e segurança no consumo de nossas APIs, é indispensável que os cooperados mantenham seus certificados sempre atualizados.
+
+Caso um cooperado esteja consumindo as APIs disponibilizadas no Portal Developers e receba um erro 403, a causa mais provável é um certificado público vencido ou inválido sendo enviado na requisição.
+Nessa situação, é necessário atualizar o certificado público utilizado na requisição para restabelecer o consumo das APIs.
+
+Importante destacar que:
+
+A cadeia ICP-Brasil e o CN (Common Name) do novo certificado permanecem os mesmos;
+Não é necessária nenhuma alteração na credencial cadastrada no Portal Developers.
+Após a atualização do certificado, o acesso às APIs será restabelecido normalmente.
+
+NOVO
+
+API Cobrança Bancária V3: Atualização no serviço GET /webhooks/{idWebhook}/solicitacoes
+
+A partir de 11/09/2025, o Sicoob passa a disponibilizar uma atualização no serviço GET /webhooks/{idWebhook}/solicitacoes, permitindo agora realizar consultas adicionais pelos campos:
+
+codigoBarras → Código de barras do boleto presente na notificação webhook
+nossoNumero → Nosso número do boleto presente na notificação webhook
+Além disso, esses campos também passam a ser retornados na resposta do endpoint, facilitando a localização e identificação de notificações recebidas.
+
+⚠️IMPORTANTE
+
+Manutenção Programada – API Cobrança Bancária V2
+
+✅ Já Realizada
+
+• Sexta-feira (08/08/2025) – Início às 00h00 e encerramento às 12h00.
+
+✅ Já Realizada
+
+• Terça-feira (19/08/2025) – Início às 00h00 e previsão de encerramento às 15h00.
+
+Durante esses períodos, os serviços relacionados à API Cobrança Bancária versão 2 permanecem indisponíveis.
+
+Para evitar impactos, verifique com sua equipe de tecnologia se a API que você utiliza já está na versão mais recente, neste caso, a V3. Sendo assim, os usuários da nova versão não sofrerão qualquer impacto.
+
+Reforçamos, também, que a API Cobrança Bancária V2 será descontinuada no dia 31/08/2025.
+
+Agradecemos pela compreensão.
+
+NOVO
+
+OCRED: Nova movimentação nos arquivos da API Cobrança Bancária V3
+
+A partir de 01/08/2025, o Sicoob passa a disponibilizar uma nova movimentação identificada pela sigla OCRED nos arquivos de movimentações da
+API Cobrança Bancária V3.
+
+Essa movimentação está relacionada ao sistema de adiantamento de valores a receber, permitindo que o cooperado antecipe os valores de boletos emitidos antes que os mesmos sejam efetivamente pagos pelos pagadores.
+
+O retorno da API também incluirá o campo tipoCarteiraOpCredito, indicando o tipo de operação que será antecipada, permitindo a correta identificação da natureza da transação na carteira.
+
+❗LEMBRETE
+
+Não se esqueça do Rate Limit
+
+É importante sempre verificar o limite de requisições por segundo de cada API, para isso, acesse o item da documentação que detalha essas informações, no link abaixo:
+
+(Rate Limit - APIs Sicoob).
+
+⚠️IMPORTANTE
+
+Prorrogação do Prazo para Desativação da API Cobrança Bancária V2
+
+Informamos que em caráter de exceção, fica concedido o prazo adicional até 30/06/2025 para que as soluções sejam atualizadas para consumir a API Cobrança Bancária V3 disponibilizada no Portal Developers Sicoob (https://developers.sicoob.com.br/).
+
+31 de dezembro de 2024 - Orientações sobre o fator de vencimento no código de barras de boletos.
+
+De acordo com o Comunicado FB-009/2023, publicado em 17/2/2023 pela Federação Brasileira de Bancos (Febraban), que trata da nova fórmula de cálculo do fator de vencimento do código de barras de boletos de cobrança, que expirará em 21/2/2025, quando atingir o fator 9999, encerrando o seu ciclo de utilização. Dessa forma, foi definido pelos bancos e pela Febraban que deverá ser zerada a contagem, iniciando no fator 1000, com a data de vencimento 22/2/2025.
+
+⚠️IMPORTANTE
+
+Desativação da API Cobrança Bancária V2
+
+Informamos que a API Cobrança Bancária V2 será descontinuada em 30 de abril de 2025. Essa medida está sendo tomada em função do lançamento da API Cobrança Bancária V3, que já está disponível e oferece melhorias significativas.
+
+Orientamos que os cooperados que ainda utilizam a versão 2 realizem a migração para a versão 3 para garantir a continuidade dos serviços e o acesso às novas funcionalidades.
+
+Abaixo está o cronograma da desativação:
+
+31/01/2025 Desativação da criação de credenciais para novas integrações:
+Para incentivar a adoção da nova versão, não será mais possível criar credenciais para a API Cobrança Bancária V2. A criação de credenciais estará disponível apenas para a V3.
+
+30/04/2025 Interrupção do funcionamento da API Cobrança Bancária V2:
+A partir dessa data, a V2 da API será desativada. Todos os integradores e empresas parceiras que ainda utilizam a versão V2 devem migrar para a V3 antes desta data para evitar impactos nos serviços.
+
+⚠️IMPORTANTE
+
+13 de dezembro de 2024 - Obrigatoriedade do Header client_id nas Requisições de Consumo
+
+Foi implementada uma alteração nas APIs com o objetivo de aprimorar a monitoração das requisições, tornando obrigatório o envio do client_id no cabeçalho da requisição. Caso esse cabeçalho não seja incluído, será retornado o erro 401. Tal erro ocorre quando o client_id está ausente ou não corresponde ao utilizado na geração do token.
+
+27 de novembro de 2024 - Disponibilização do Webhook da API Cobrança Bancária V3
+
+Informamos que o Webhook da API Cobrança Bancária já está disponível. Agora, os cooperados podem receber notificações em tempo real sobre o pagamento das cobranças, facilitando a integração e o acompanhamento das transações.
+
+Para utilizar, basta seguir a documentação de integração. Recomendamos a adoção do Webhook para otimizar as operações.
+
+Escopos necessários:
+
+webhooks_alteracao
+
+webhooks_consulta
+
+webhooks_inclusao
+
+21 de Outubro de 2024 - Desativação da obrigatoriedade de geração do dígito verificador do nosso número na API Cobrança Bancária
+
+A obrigatoriedade de geração do Nosso Número (NN) com Dígito Verificador (DV) foi desativada. Essa mudança visa ampliar a faixa de NN disponível para os cooperados nos boletos de cobrança do Sicoob, possibilitando um aumento de 10 milhões para quase 100 milhões de números no campo NN.
+
+Os cooperados que preferirem manter o formato atual não precisam fazer nenhuma modificação. Os beneficiários continuarão gerando o NN como de costume, sem qualquer impacto.
+
+04 de Outubro de 2024 - Adição de EndPoint na API Cobrança Bancária Pagamentos
+
+Informamos que foi realizada a adição do EndPoint “Movimentações DDA”, na API Cobrança Bancária Pagamentos. Sendo assim possível analisar as movimentações feitas no sistema DDA.
+
+A descrição da modificação está detalhada na documentação presente no catalogo de APIs.
+
+20 de Setembro de 2024 - Atualização no endpoint Consulta de Faixas Nosso Número - API Cobrança Bancária V2/V3
+
+Informamos que foi realizada atualização no retorno da consulta das faixas de nosso número disponíveis. Adicionou-se o campo “validaDigitoVerificadorNossoNumero” no retorno.
+
+A descrição da modificação está detalhada na documentação presente no catalogo de APIs.
+
+05 de setembro de 2024 - Atualização do Rate Limit - API Cobrança Bancária
+
+Atualizamos os limites de requisições por segundo para a API Cobrança Bancária, a fim de manter a alta disponibilidade e rapidez no retorno:
+
+Endpoints de Movimentações (Solicitar, Consultar e Download):
+10 por segundo
+Endpoints GET Consultar boleto, Listar Boletos por Pagador, Emissão segunda via de boleto e Consulta de dados de faixas de nosso número disponíveis:
+10 por segundo
+Endpoint de Incluir Boletos:
+2 por segundo
+Demais endpoints:
+20 por segundo.
+01 de Agosto de 2024 - Disponibilização do PIX Saque e PIX Troco na API Pix
+
+Cooperados Pessoa Jurídica (PJ) podem integrar a API para oferecer saques em espécie via Pix Saque e Pix Troco em seus sistemas de caixa, onde clientes retiram dinheiro ao ler um QR Code e o Pix Troco permite que o cliente receba troco em dinheiro ao realizar uma compra com Pix.
+
+Para isso é necessário que o cooperado PJ seja um Agente de Saque com contrato ativo junto à cooperativa de relacionamento.
+
+Abril de 2024 - Atualização do Campo Devedor - API PIX Recebimentos
+
+Corrigimos o parâmetro devedor nos endpoints de criação de cobrança para conformidade com a especificação do Banco Central.
+
+28 de Maio de 2024 - Atualização de Versão - API Cobrança Bancária V3
+
+Com o intuito de aprimorar nossos serviços, efetuamos a atualização da versão da API Cobrança Bancária para a versão 3. As principais alterações são:
+
+URL Base:
+Foi disponibilizado o novo endereço: https://api.sicoob.com.br/cobranca-bancaria/v3.
+Timestamp das datas:
+No JSON de inclusão de boletos, alterado de YYYY:MM:DDT00:00:00-03:00 para YYYY:MM:DD.
+Campo de mensagens de instrução:
+Agora é uma lista em array, antes era um objeto.
+Novas modalidades:
+Inclusas para a consulta de boletos.
+CAUCIONADA
+VINCULADA
+CARNÊ DE PAGAMENTOS
+INDEXADA
+COBRANÇA CONTA CAPITAL
+Alterações nos nomes dos campos:
+numeroContrato → numeroCliente
+modalidade → codigoModalidade
+especieDocumento → codigoEspecieDocumento
+E-mail do pagador:
+No JSON de inclusão de boletos, mudou de array para string.
+Escopos:
+Os escopos para geração de token foram alterados para boletos_inclusao, boletos_consulta e boletos_alteracao
+Essas alterações visam melhorar a eficiência e a usabilidade da API.
+
+10 de Abril de 2024 - Disponibilização de nova API - API Cobrança Bancária Pagamentos
+
+Foi disponibilizada em nosso portal, a API que disponibiliza serviços para o pagamento de boletos, consulta de pagamentos e comprovantes e cancelamento de agendamentos, proporcionando uma gestão ágil e eficiente da carteira de cobrança.
+02 de Abril de 2024 - Atualização de Versão - API Conta Corrente (v.4.0)
+
+Com o intuito de aprimorar nossos serviços, efetuamos a atualização da versão da API Conta Corrente para a versão 4. Como resultado, a URL BASE mudou de https://api.sicoob.com.br/conta-corrente/v3, para https://api.sicoob.com.br/conta-corrente/v4. Além disso, introduzimos novos endpoints para transferência entre contas, exigindo agora o uso do novo escopo openid.
+
+06 de Março de 2024 - Implementação do TPS
+
+Para garantir a qualidade da experiência e a estabilidade de nossos serviços, implementamos um limite de solicitações por segundo (Rate Limit) em nossas APIs. Para obter mais informações, acesse: Rate Limit: Limite de requisições por segundo.
+
+15 de Março de 2024 - Disponibilização de nova API - API de Convênios
+
+Essa API oferece serviços relacionados à arrecadação de convênios para uso exclusivo do cooperado, não sendo indicada para prestação de serviços a terceiros.
+
+19 de Janeiro de 2024 - Disponibilização de nova API - API SPB Transferência
+
+Essa API possibilita o fornecimento de serviços para realizar transferências eletrônicas disponíveis (TEDs).
+
+31 de Janeiro de 2024 - Disponibilização de nova API - API PIX Pagamentos e Cobrança Bancária Pagamentos
+
+A API Cobrança bancária pagamentos disponibiliza funcionalidades para realização de pagamentos de boletos de Cobrança Bancária. A API PIX Pagamentos permite a realização de pagamentos Pix e possui funcionalidades de Webhook.

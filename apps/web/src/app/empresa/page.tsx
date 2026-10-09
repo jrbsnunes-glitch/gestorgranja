@@ -7,6 +7,7 @@ import { AdminShell } from '@/components/admin-shell';
 import { PageIntro } from '@/components/crud';
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { useCompanyLogoUrl } from '@/hooks/use-company-logo-url';
+import { dispatchCompanyBrandingUpdated } from '@/hooks/use-company-branding';
 import { apiFetch, apiUpload } from '@/lib/api';
 import { errorMessage } from '@/lib/labels';
 
@@ -92,6 +93,7 @@ export default function EmpresaPage() {
       });
       setCompany(updated);
       setSaved(true);
+      dispatchCompanyBrandingUpdated();
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -113,6 +115,7 @@ export default function EmpresaPage() {
       setLogoFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       setLogoOk(true);
+      dispatchCompanyBrandingUpdated();
     } catch (err) {
       setLogoError(errorMessage(err));
     } finally {

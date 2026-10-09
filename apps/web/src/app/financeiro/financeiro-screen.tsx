@@ -16,7 +16,8 @@ import { ChartAccountSelect } from '@/components/chart-account-select';
 import { PartnerLookupField } from '@/components/partner-lookup-field';
 import { FinanceTitlesReportLauncher } from '@/components/finance-titles-report-launcher';
 import { TitleSettlementForm } from '@/components/title-settlement-form';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, downloadAuthFile, openAuthFileInNewTab } from '@/lib/api';
+import type { BankBoletoDto } from '@/lib/boleto';
 import { labelEnum } from '@/lib/labels';
 import { formatBrl } from '@/lib/money';
 
@@ -48,6 +49,7 @@ type Receivable = {
   overdueDays?: number;
   settled?: boolean;
   settlementNotes?: string | null;
+  boletos?: BankBoletoDto[];
 };
 
 type Concentration = {
@@ -498,6 +500,38 @@ export function FinanceiroScreen({
     }
   }
 
+  async function emitReceivableBoleto() {
+    if (!viewRec) return;
+    setError(null);
+    try {
+      const boleto = await apiFetch<BankBoletoDto>(`/v1/finance/receivables/${viewRec.id}/boleto`, {
+        method: 'POST',
+      });
+      setViewRec({ ...viewRec, boletos: [boleto, ...(viewRec.boletos ?? [])] });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao gerar boleto');
+    }
+  }
+
+  async function downloadReceivableBoleto(boletoId: string) {
+    setError(null);
+    try {
+      await downloadAuthFile(`/v1/finance/boletos/${boletoId}/pdf`, `boleto-${boletoId}.pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao baixar PDF');
+    }
+  }
+
+  async function viewReceivableBoleto(boletoId: string) {
+    setError(null);
+    try {
+      await openAuthFileInNewTab(`/v1/finance/boletos/${boletoId}/pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao abrir boleto');
+    }
+  }
+
   async function cancelReceivableTitle() {
     if (!viewRec) return;
     if (!window.confirm('Cancelar este registro de conta a receber?')) return;
@@ -826,6 +860,12 @@ export function FinanceiroScreen({
                     ...(viewRec.settlementNotes
                       ? [{ label: 'Obs. baixa', value: viewRec.settlementNotes }]
                       : []),
+                    ...(viewRec.boletos?.[0]?.linhaDigitavel
+                      ? [{ label: 'Linha digitável', value: viewRec.boletos[0].linhaDigitavel }]
+                      : []),
+                    ...(viewRec.boletos?.[0]?.nossoNumero
+                      ? [{ label: 'Nosso número', value: viewRec.boletos[0].nossoNumero }]
+                      : []),
                   ],
                 },
               ]
@@ -844,8 +884,35 @@ export function FinanceiroScreen({
                 Estornar recebimento
               </Button>
             ) : null}
+            {viewRec.boletos?.[0]?.id && receivableHasPayment(viewRec) ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void downloadReceivableBoleto(viewRec.boletos![0].id)}
+              >
+                Baixar PDF do boleto
+              </Button>
+            ) : null}
             {!isTitleCancelledStatus(viewRec.approvalStatus) && !receivableHasPayment(viewRec) ? (
               <>
+                {viewRec.boletos?.[0]?.status === 'REGISTERED' && viewRec.boletos[0].id ? (
+                  <Button type="button" onClick={() => void viewReceivableBoleto(viewRec.boletos![0].id)}>
+                    Ver boleto Sicoob
+                  </Button>
+                ) : (
+                  <Button type="button" onClick={() => void emitReceivableBoleto()}>
+                    Gerar boleto Sicoob
+                  </Button>
+                )}
+                {viewRec.boletos?.[0]?.id ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void downloadReceivableBoleto(viewRec.boletos![0].id)}
+                  >
+                    Baixar PDF
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"

@@ -241,15 +241,24 @@ export class GeneralCadastrosService {
       { name: 'PIX', kind: 'PIX', colorHex: '#0284c7', sortOrder: 20 },
       { name: 'Cartão', kind: 'CARD', colorHex: '#7c3aed', sortOrder: 30 },
       { name: 'Transferência', kind: 'TRANSFER', colorHex: '#475569', sortOrder: 40 },
+      { name: 'Boleto', kind: 'BOLETO', colorHex: '#b45309', sortOrder: 50 },
     ];
   }
 
   async ensureDefaultPaymentForms(user: JwtPayload) {
     const p = await this.db(user);
     const count = await p.paymentForm.count();
-    if (count > 0) return;
-    for (const row of GeneralCadastrosService.defaultPaymentForms()) {
-      await p.paymentForm.create({ data: row });
+    if (count === 0) {
+      for (const row of GeneralCadastrosService.defaultPaymentForms()) {
+        await p.paymentForm.create({ data: row });
+      }
+      return;
+    }
+    const boleto = await p.paymentForm.findFirst({ where: { kind: 'BOLETO' } });
+    if (!boleto) {
+      await p.paymentForm.create({
+        data: { name: 'Boleto', kind: 'BOLETO', colorHex: '#b45309', sortOrder: 50 },
+      });
     }
   }
 

@@ -9,6 +9,14 @@ export { ModuleReportsModal } from './module-reports-modal';
 export { ModalBackdrop } from './modal-backdrop';
 export { PageIntro } from './page-intro';
 export { RecordViewModal, type RecordViewSection, type RecordViewField } from './record-view-modal';
+export {
+  RecordViewTile,
+  RecordViewHero,
+  RecordViewFieldsGrid,
+  RecordViewMiniMetric,
+  iconForRecordField,
+  RECORD_VIEW_EGG_ICON,
+} from './record-view-presentation';
 export { RowRecordActions } from './row-record-actions';
 export { SearchModal } from './search-modal';
 export { StandardReportHeader } from './standard-report-header';

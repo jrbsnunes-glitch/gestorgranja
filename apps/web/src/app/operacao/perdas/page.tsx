@@ -5,7 +5,6 @@ import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { FormCadastroModal, PageIntro, RecordViewModal, useCrudList } from '@/components/crud';
 import { ListToolbar, PaginatedTable, RowActions, usePagination, type ModalMode } from '@/components/list-crud';
-import { RecordHistorySection } from '@/components/operation/record-history-section';
 import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
@@ -262,10 +261,10 @@ export default function PerdasPage() {
                     { label: 'Registrado por', value: selected.createdByName ?? '—' },
                   ],
                 },
-                { title: 'Histórico de alterações', content: <RecordHistorySection entity="OperationalLoss" id={selected.id} /> },
               ]
             : []
         }
+        auditTrail={selected ? { entity: 'OperationalLoss', entityId: selected.id } : null}
       />
     </AdminShell>
   );

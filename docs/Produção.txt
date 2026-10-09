@@ -1,0 +1,5 @@
+Cadastro de lotes: idade inicial, data de chegada, galpão e quantidade de aves.
+Produção diária: formas produzidas por lote e data.
+Mortalidade: quantidade de mortes e atualização do saldo de aves.
+Painel geral: produção total da granja, galinhas vivas, mortalidade e produtividade por lote.
+Relatórios: comparação entre galpões e evolução da produção ao longo das semanas.

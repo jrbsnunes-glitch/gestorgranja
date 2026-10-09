@@ -307,6 +307,9 @@ export class ProductionService {
   }
 
   async updateDailyMortality(user: JwtPayload, id: string, dto: UpsertDailyMortalityDto) {
+    if (!id?.trim() || id === 'null' || id === 'undefined') {
+      throw new BadRequestException('Identificador do registro inválido.');
+    }
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const row = await prisma.dailyMortality.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Registro não encontrado');

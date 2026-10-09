@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
@@ -10,7 +11,9 @@ import {
   PageIntro,
   RecordViewModal,
   useCrudList,
+  type RecordViewField,
 } from '@/components/crud';
+import { RECORD_VIEW_EGG_ICON } from '@/components/crud/record-view-presentation';
 import { ProductionReportLauncher } from '@/components/production-report-launcher';
 import {
   ListToolbar,
@@ -20,7 +23,6 @@ import {
   usePagination,
   type ModalMode,
 } from '@/components/list-crud';
-import { RecordHistorySection } from '@/components/operation/record-history-section';
 import { RecordStatusBadge } from '@/components/operation/record-status-badge';
 import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
@@ -69,6 +71,23 @@ function dateInputValue(iso: string) {
 
 function eggCommercialQty(r: EggRow) {
   return r.extra + r.large + r.medium + r.small;
+}
+
+function eggPostureViewFields(row: EggRow): RecordViewField[] {
+  const eggIcon = RECORD_VIEW_EGG_ICON;
+  return [
+    { label: 'Data', value: formatCalendarDatePtBR(row.date) },
+    { label: 'Lote', value: row.flockLot.code },
+    { label: 'Comerciais (un)', value: eggCommercialQty(row), icon: eggIcon },
+    ...EGG_PRODUCTION_FIELDS.map((f) => ({
+      label: labelEggProductionField(f),
+      value: row[f] ?? 0,
+      icon: eggIcon,
+    })),
+    { label: 'Motivo do descarte', value: row.discardReason ?? '—', icon: eggIcon },
+    { label: 'Peso médio (g)', value: row.avgEggWeightG ?? '—', icon: eggIcon },
+    { label: 'Observações', value: row.notes ?? '—' },
+  ];
 }
 
 type MortRow = RecordMeta & {
@@ -132,10 +151,48 @@ type TabId = 'postura' | 'mortalidade' | 'racao' | 'ambiente' | 'transferencia';
 
 const TAB_IDS: TabId[] = ['postura', 'mortalidade', 'racao', 'ambiente', 'transferencia'];
 
+const AUX_TABS: { id: TabId; label: string }[] = [
+  { id: 'racao', label: 'Ração' },
+  { id: 'ambiente', label: 'Ambiente' },
+  { id: 'transferencia', label: 'Transferência' },
+];
+
+function producaoPageCopy(tab: TabId) {
+  if (tab === 'mortalidade') {
+    return {
+      shell: 'Mortalidade',
+      title: 'Registrar mortalidade',
+      description: 'Preencha o formulário acima e use Salvar mortalidade. O histórico aparece na lista abaixo.',
+    };
+  }
+  if (tab === 'racao' || tab === 'ambiente' || tab === 'transferencia') {
+    const label = AUX_TABS.find((t) => t.id === tab)?.label ?? tab;
+    return {
+      shell: `Produção — ${label}`,
+      title: `Lançamentos — ${label}`,
+      description: 'Postura e mortalidade ficam no menu acima (Produção / Mortalidade).',
+    };
+  }
+  return {
+    shell: 'Produção',
+    title: 'Registrar produção',
+    description: 'Preencha o formulário acima e use Salvar produção. Ração, ambiente e transferência nos links abaixo.',
+  };
+}
+
 function parseProducaoTab(raw: string | null): TabId {
   if (raw && TAB_IDS.includes(raw as TabId)) return raw as TabId;
   return 'postura';
 }
+
+function formFieldString(fd: FormData, name: string): string {
+  const v = fd.get(name);
+  if (v == null) return '';
+  return String(v).trim();
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default function ProducaoPage() {
   const router = useRouter();
@@ -152,6 +209,7 @@ export default function ProducaoPage() {
   const [envs, setEnvs] = useState<EnvRow[]>([]);
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalMode>(null);
   const [viewOpen, setViewOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
@@ -170,7 +228,7 @@ export default function ProducaoPage() {
   });
   const mortList = useCrudList({
     items: morts,
-    searchFields: (r) => [r.flockLot.code, r.causeNotes],
+    searchFields: (r) => [r.flockLot?.code, r.causeNotes],
     dateField: (r) => r.date,
   });
   const feedList = useCrudList({
@@ -211,6 +269,8 @@ export default function ProducaoPage() {
   }, [tab, eggList, mortList, feedList, envList, transferList]);
 
   const today = new Date().toISOString().slice(0, 10);
+  const [quickKey, setQuickKey] = useState(0);
+  const mortEditIdRef = useRef<string | null>(null);
   const editingEgg = modal === 'edit' && tab === 'postura' ? selectedEgg : null;
   const editingMort = modal === 'edit' && tab === 'mortalidade' ? selectedMort : null;
   const editingFeed = modal === 'edit' && tab === 'racao' ? selectedFeed : null;
@@ -236,6 +296,7 @@ export default function ProducaoPage() {
 
   useEffect(() => {
     setTab(parseProducaoTab(searchParams.get('tab')));
+    setNotice(null);
   }, [searchParams]);
 
   const setProducaoTab = useCallback(
@@ -265,7 +326,10 @@ export default function ProducaoPage() {
   async function submitEgg(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const fd = new FormData(e.currentTarget);
+    setNotice(null);
+    const formEl = e.currentTarget;
+    const formDomId = formEl.id;
+    const fd = new FormData(formEl);
     try {
       await apiFetch('/v1/production/daily-eggs', {
         method: 'POST',
@@ -287,6 +351,10 @@ export default function ProducaoPage() {
         }),
       });
       setModal(null);
+      setQuickKey((k) => k + 1);
+      if (formDomId !== 'egg-form') {
+        setNotice('Produção registrada com sucesso.');
+      }
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro');
@@ -296,10 +364,18 @@ export default function ProducaoPage() {
   async function submitMortality(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const fd = new FormData(e.currentTarget);
+    setNotice(null);
+    const formEl = e.currentTarget;
+    const formDomId = formEl.id;
+    const fd = new FormData(formEl);
     try {
+      const flockLotId = formFieldString(fd, 'flockLotId') || lotId;
+      if (!flockLotId) {
+        setError('Selecione o lote.');
+        return;
+      }
       const body = {
-        flockLotId: lotId,
+        flockLotId,
         date: fd.get('date'),
         quantity: Number(fd.get('quantity')),
         cause: fd.get('cause') || undefined,
@@ -307,8 +383,11 @@ export default function ProducaoPage() {
         shift: fd.get('shift') || undefined,
         reason: fd.get('reason') || undefined,
       };
-      if (editingMort) {
-        await apiFetch(`/v1/production/daily-mortality/${editingMort.id}`, {
+      const recordId =
+        formFieldString(fd, '_recordId') || mortEditIdRef.current || editingMort?.id || '';
+      const isEdit = UUID_RE.test(recordId);
+      if (isEdit) {
+        await apiFetch(`/v1/production/daily-mortality/${recordId}`, {
           method: 'PATCH',
           body: JSON.stringify(body),
         });
@@ -318,7 +397,13 @@ export default function ProducaoPage() {
           body: JSON.stringify(body),
         });
       }
+      mortEditIdRef.current = null;
       setModal(null);
+      setSelectedMort(null);
+      setQuickKey((k) => k + 1);
+      if (formDomId !== 'mort-form') {
+        setNotice('Mortalidade registrada com sucesso.');
+      }
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro');
@@ -424,9 +509,13 @@ export default function ProducaoPage() {
               ? 'Incluir leitura ambiental'
               : 'Incluir transferência';
 
+  const quickEntryTab = tab === 'postura' || tab === 'mortalidade';
   const formOpen =
-    modal === 'include' ||
-    (modal === 'edit' && (tab === 'postura' || tab === 'mortalidade' || tab === 'racao'));
+    (modal === 'include' && !quickEntryTab) ||
+    (modal === 'edit' &&
+      ((tab === 'postura' && selectedEgg != null) ||
+        (tab === 'mortalidade' && selectedMort != null) ||
+        (tab === 'racao' && selectedFeed != null)));
 
   const formId =
     tab === 'postura'
@@ -441,7 +530,13 @@ export default function ProducaoPage() {
 
   const lotSelect = (
     <Field label="Lote">
-      <select className={inputClass} value={lotId} onChange={(e) => setLotId(e.target.value)}>
+      <select
+        name="flockLotId"
+        className={inputClass}
+        value={lotId}
+        onChange={(e) => setLotId(e.target.value)}
+        required
+      >
         {lots.map((l) => (
           <option key={l.id} value={l.id}>
             {l.code} — {l.barn.name}
@@ -451,29 +546,119 @@ export default function ProducaoPage() {
     </Field>
   );
 
+  function closeFormModal() {
+    setModal(null);
+    mortEditIdRef.current = null;
+    if (tab === 'postura') setSelectedEgg(null);
+    if (tab === 'mortalidade') setSelectedMort(null);
+    if (tab === 'racao') setSelectedFeed(null);
+  }
+
+  const copy = producaoPageCopy(tab);
+
   return (
-    <AdminShell title="Produção — lançamentos diários">
-      <PageIntro
-        title="Produção — lançamentos diários"
-        description="Postura, mortalidade, ração, ambiente e transferências entre lotes."
-      />
+    <AdminShell title={copy.shell}>
+      <PageIntro title={copy.title} description={copy.description} />
       <ErrorBox message={error} />
-      <TabBar
-        active={tab}
-        onChange={(id) => setProducaoTab(id as TabId)}
-        tabs={[
-          { id: 'postura', label: 'Postura' },
-          { id: 'mortalidade', label: 'Mortalidade' },
-          { id: 'racao', label: 'Ração' },
-          { id: 'ambiente', label: 'Ambiente' },
-          { id: 'transferencia', label: 'Transferência' },
-        ]}
-      />
+      {notice ? (
+        <p className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900" role="status">
+          {notice}
+        </p>
+      ) : null}
+      {tab === 'postura' && !modal ? (
+        <section className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+          <div className="mb-3 flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/producao/ovo.svg" alt="" className="h-10 w-10" />
+            <div>
+              <h2 className="text-base font-semibold text-emerald-950">Registrar produção</h2>
+              <p className="text-xs text-slate-600">Quantidades por classe de ovo. Um lançamento por lote e data.</p>
+            </div>
+          </div>
+          <form key={`egg-quick-${quickKey}`} onSubmit={submitEgg} className="grid gap-3 md:grid-cols-2">
+            {lotSelect}
+            <Field label="Data">
+              <input name="date" type="date" className={inputClass} defaultValue={today} required />
+            </Field>
+            <div className="grid grid-cols-2 gap-3 md:col-span-2 md:grid-cols-4">
+              {EGG_PRODUCTION_FIELDS.map((f) => (
+                <Field key={f} label={labelEggProductionField(f)}>
+                  <input name={f} type="number" min={0} className={inputClass} defaultValue={0} />
+                </Field>
+              ))}
+            </div>
+            <Field label="Peso médio (g)">
+              <input name="avgEggWeightG" type="number" step="0.1" className={inputClass} />
+            </Field>
+            <Field label="Observações">
+              <input name="discardReason" className={inputClass} placeholder="Descarte, comportamento, coleta…" />
+            </Field>
+            <div className="md:col-span-2">
+              <Button type="submit">Salvar produção</Button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+      {tab === 'mortalidade' && !modal ? (
+        <section className="mb-4 rounded-xl border border-rose-100 bg-rose-50/50 p-4">
+          <div className="mb-3 flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/producao/silhueta-galinha-erp.png" alt="" className="h-10 w-10 object-contain" />
+            <div>
+              <h2 className="text-base font-semibold text-rose-950">Registrar mortalidade</h2>
+              <p className="text-xs text-slate-600">O saldo de aves do lote é atualizado com este lançamento.</p>
+            </div>
+          </div>
+          <form key={`mort-quick-${quickKey}`} onSubmit={submitMortality} className="grid gap-3 md:grid-cols-2">
+            {lotSelect}
+            <Field label="Data">
+              <input name="date" type="date" className={inputClass} defaultValue={today} required />
+            </Field>
+            <Field label="Quantidade de mortes">
+              <input name="quantity" type="number" min={0} className={inputClass} required />
+            </Field>
+            <Field label="Causa">
+              <select name="cause" className={inputClass} defaultValue="UNKNOWN">
+                {MORTALITY_CAUSES.map((c) => (
+                  <option key={c} value={c}>
+                    {labelEnum(c)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Observações">
+              <input name="causeNotes" className={inputClass} placeholder="Sinais, tratamento, local…" />
+            </Field>
+            <div className="md:col-span-2">
+              <Button type="submit">Salvar mortalidade</Button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+      {tab === 'postura' || tab === 'mortalidade' ? (
+        <p className="mb-3 text-sm text-slate-600">
+          Outros lançamentos:{' '}
+          {AUX_TABS.map((t, i) => (
+            <span key={t.id}>
+              {i > 0 ? ' · ' : null}
+              <Link href={`/producao?tab=${t.id}`} className="font-medium text-emerald-800 underline-offset-2 hover:underline">
+                {t.label}
+              </Link>
+            </span>
+          ))}
+        </p>
+      ) : (
+        <TabBar active={tab} onChange={(id) => setProducaoTab(id as TabId)} tabs={AUX_TABS} />
+      )}
 
       <ListToolbar
         list={activeList}
         onInclude={
-          tab === 'ambiente' || tab === 'transferencia' ? () => setModal('include') : openInclude
+          quickEntryTab
+            ? undefined
+            : tab === 'ambiente' || tab === 'transferencia'
+              ? () => setModal('include')
+              : openInclude
         }
         onReports={() => setReportsOpen(true)}
         searchPlaceholder={searchPlaceholder}
@@ -516,7 +701,7 @@ export default function ProducaoPage() {
           recordItems={mortPag.slice}
           rows={mortPag.slice.map((r) => [
             formatCalendarDatePtBR(r.date),
-            r.flockLot.code,
+            r.flockLot?.code ?? '—',
             String(r.quantity),
             labelEnum(r.cause ?? 'UNKNOWN'),
             <RecordStatusBadge key={`${r.id}-st`} status={r.status ?? 'RECORDED'} />,
@@ -527,6 +712,17 @@ export default function ProducaoPage() {
                 setViewOpen(true);
               }}
               onEdit={() => {
+                setError(null);
+                setViewOpen(false);
+                if (!r.id || !UUID_RE.test(r.id)) {
+                  setError('Não foi possível abrir o registro (identificador ausente). Recarregue a lista.');
+                  return;
+                }
+                if (!r.flockLot?.code) {
+                  setError('Registro sem lote associado.');
+                  return;
+                }
+                mortEditIdRef.current = r.id;
                 setLotId(lotIdForCode(r.flockLot.code));
                 setSelectedMort(r);
                 setModal('edit');
@@ -619,15 +815,18 @@ export default function ProducaoPage() {
 
       <FormCadastroModal
         open={formOpen}
-        onClose={() => setModal(null)}
+        onClose={closeFormModal}
         title={formTitle}
         wide
         footer={
           <>
-            <Button type="button" variant="secondary" onClick={() => setModal(null)}>
+            <Button type="button" variant="secondary" onClick={closeFormModal}>
               Cancelar
             </Button>
-            <Button type="submit" form={formId}>
+            <Button
+              type="button"
+              onClick={() => document.getElementById(formId)?.requestSubmit()}
+            >
               Salvar
             </Button>
           </>
@@ -680,6 +879,7 @@ export default function ProducaoPage() {
 
         {(modal === 'include' || modal === 'edit') && tab === 'mortalidade' ? (
           <form id="mort-form" onSubmit={submitMortality} key={editingMort?.id ?? 'mort-new'}>
+            {editingMort?.id ? <input type="hidden" name="_recordId" value={editingMort.id} /> : null}
             {lotSelect}
             <Field label="Data">
               <input
@@ -852,30 +1052,8 @@ export default function ProducaoPage() {
         sections={
           tab === 'postura' && selectedEgg
             ? [
-                {
-                  title: 'Postura',
-                  fields: [
-                    { label: 'Data', value: formatCalendarDatePtBR(selectedEgg.date) },
-                    { label: 'Lote', value: selectedEgg.flockLot.code },
-                    { label: 'Comerciais (un)', value: eggCommercialQty(selectedEgg) },
-                    { label: 'Extra', value: selectedEgg.extra },
-                    { label: 'Grande', value: selectedEgg.large },
-                    { label: 'Médio', value: selectedEgg.medium },
-                    { label: 'Pequeno', value: selectedEgg.small },
-                    { label: 'Trincados', value: selectedEgg.cracked ?? 0 },
-                    { label: 'Sujos', value: selectedEgg.dirty ?? 0 },
-                    { label: 'Deformados', value: selectedEgg.deformed ?? 0 },
-                    { label: 'Descarte', value: selectedEgg.discard ?? 0 },
-                    { label: 'Motivo do descarte', value: selectedEgg.discardReason ?? '—' },
-                    { label: 'Peso médio (g)', value: selectedEgg.avgEggWeightG ?? '—' },
-                    { label: 'Observações', value: selectedEgg.notes ?? '—' },
-                  ],
-                },
+                { title: 'Postura', fields: eggPostureViewFields(selectedEgg) },
                 { title: 'Registro e conferência', fields: recordMetaFields(selectedEgg) },
-                {
-                  title: 'Histórico de alterações',
-                  content: <RecordHistorySection entity="DailyEggProduction" id={selectedEgg.id} />,
-                },
               ]
             : tab === 'mortalidade' && selectedMort
               ? [
@@ -890,10 +1068,6 @@ export default function ProducaoPage() {
                     ],
                   },
                   { title: 'Registro e conferência', fields: recordMetaFields(selectedMort) },
-                  {
-                    title: 'Histórico de alterações',
-                    content: <RecordHistorySection entity="DailyMortality" id={selectedMort.id} />,
-                  },
                 ]
               : tab === 'racao' && selectedFeed
                 ? [
@@ -911,10 +1085,6 @@ export default function ProducaoPage() {
                       ],
                     },
                     { title: 'Registro e conferência', fields: recordMetaFields(selectedFeed) },
-                    {
-                      title: 'Histórico de alterações',
-                      content: <RecordHistorySection entity="DailyFeedConsumption" id={selectedFeed.id} />,
-                    },
                   ]
                 : tab === 'ambiente' && selectedEnv
                   ? [
@@ -948,6 +1118,15 @@ export default function ProducaoPage() {
                         },
                       ]
                     : []
+        }
+        auditTrail={
+          tab === 'postura' && selectedEgg
+            ? { entity: 'DailyEggProduction', entityId: selectedEgg.id }
+            : tab === 'mortalidade' && selectedMort
+              ? { entity: 'DailyMortality', entityId: selectedMort.id }
+              : tab === 'racao' && selectedFeed
+                ? { entity: 'DailyFeedConsumption', entityId: selectedFeed.id }
+                : null
         }
       />
 
