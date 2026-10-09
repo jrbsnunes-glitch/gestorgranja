@@ -825,7 +825,10 @@ export default function ProducaoPage() {
             </Button>
             <Button
               type="button"
-              onClick={() => document.getElementById(formId)?.requestSubmit()}
+              onClick={() => {
+                const el = document.getElementById(formId);
+                if (el instanceof HTMLFormElement) el.requestSubmit();
+              }}
             >
               Salvar
             </Button>
