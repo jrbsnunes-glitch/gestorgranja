@@ -51,6 +51,7 @@ export default function UsuariosPage() {
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [viewAssignment, setViewAssignment] = useState<AssignmentRow | null>(null);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [reactivate, setReactivate] = useState<UserRow | null>(null);
   const session = readSession();
 
   const userList = useCrudList({
@@ -154,12 +155,38 @@ export default function UsuariosPage() {
     }
   }
 
-  async function setUserActive(u: UserRow, isActive: boolean) {
-    const verb = isActive ? 'Reativar' : 'Inativar';
-    if (!confirm(`${verb} o usuário ${u.username}?`)) return;
+  async function inactivateUser(u: UserRow) {
+    if (!confirm(`Inativar o usuário ${u.username}?`)) return;
     setError(null);
     try {
-      await apiFetch(`/v1/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+      await apiFetch(`/v1/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: false }) });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
+  }
+
+  async function confirmReactivate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!reactivate) return;
+    setError(null);
+    const fd = new FormData(e.currentTarget);
+    const password = String(fd.get('password') ?? '').trim();
+    const confirm = String(fd.get('confirm') ?? '').trim();
+    if (password.length < 6) {
+      setError('A senha provisória deve ter no mínimo 6 caracteres.');
+      return;
+    }
+    if (password !== confirm) {
+      setError('A confirmação não coincide com a senha provisória.');
+      return;
+    }
+    try {
+      await apiFetch(`/v1/users/${reactivate.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: true, password }),
+      });
+      setReactivate(null);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro');
@@ -182,7 +209,7 @@ export default function UsuariosPage() {
     <AdminShell title="Usuários e perfis">
       <PageIntro
         title="Usuários e perfis"
-        description="Contas de acesso, perfis RBAC e escopo por galpão quando aplicável. Use Inativar para bloquear o login sem apagar o histórico; Reativar restaura o acesso. Você não pode inativar a própria conta."
+        description="Contas de acesso, perfis RBAC e escopo por galpão quando aplicável. Inativar bloqueia o login. Reativar pede uma senha provisória: no próximo acesso o usuário define a senha pessoal."
       />
       <ErrorBox message={error} />
       <TabBar
@@ -232,8 +259,11 @@ export default function UsuariosPage() {
                   session?.sub === u.id
                     ? undefined
                     : u.isActive
-                      ? () => void setUserActive(u, false)
-                      : () => void setUserActive(u, true)
+                      ? () => void inactivateUser(u)
+                      : () => {
+                          setError(null);
+                          setReactivate(u);
+                        }
                 }
                 inactivateLabel={u.isActive ? 'Inativar' : 'Reativar'}
               />,
@@ -428,6 +458,28 @@ export default function UsuariosPage() {
               </select>
             </Field>
             <SubmitButton label="Atribuir perfil" />
+          </form>
+        ) : null}
+      </Modal>
+
+      <Modal
+        title="Reativar usuário"
+        open={reactivate !== null}
+        onClose={() => setReactivate(null)}
+      >
+        {reactivate ? (
+          <form onSubmit={confirmReactivate} key={reactivate.id}>
+            <p className="mb-3 text-sm text-slate-600">
+              <strong>{reactivate.username}</strong> — {reactivate.name}. Defina a senha provisória. No primeiro
+              login o usuário será obrigado a criar uma senha pessoal.
+            </p>
+            <Field label="Senha provisória">
+              <input name="password" type="password" className={inputClass} required minLength={6} autoComplete="new-password" />
+            </Field>
+            <Field label="Confirmar senha provisória">
+              <input name="confirm" type="password" className={inputClass} required minLength={6} autoComplete="new-password" />
+            </Field>
+            <SubmitButton label="Reativar e definir senha" />
           </form>
         ) : null}
       </Modal>

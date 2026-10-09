@@ -18,7 +18,12 @@ export function getApiBase(): string {
     return `${origin}${configured.replace(/\/$/, '')}`;
   }
 
-  if (configured && configured.includes('localhost') && !isLocalHost) {
+  const configuredIsLoopback =
+    !!configured &&
+    (/localhost/i.test(configured) ||
+      /127\.0\.0\.1/.test(configured) ||
+      /0\.0\.0\.0/.test(configured));
+  if (configuredIsLoopback && !isLocalHost) {
     return `${origin}/api`;
   }
 
@@ -33,6 +38,12 @@ export function getToken() {
 }
 
 function apiUnavailableMessage(base: string): string {
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h !== 'localhost' && h !== '127.0.0.1') {
+      return `Não foi possível contactar a API (${base}). O serviço pode estar parado ou em atualização — avise o administrador ou tente de novo em instantes.`;
+    }
+  }
   return `Não foi possível conectar à API (${base}). Verifique se o backend está rodando na porta 3010 (pnpm dev na pasta apps/api ou turbo dev).`;
 }
 

@@ -275,9 +275,9 @@ export function labelRole(roleName: string | null | undefined): string {
 
 const HTTP_MESSAGES: Record<string, string> = {
   'Internal server error':
-    'Erro ao contactar a API. Confira se o backend está ativo na porta 3010 e recarregue a página.',
+    'Erro no servidor (API). Se acabou de atualizar o sistema, o administrador deve rodar o deploy/migrations no VPS; depois recarregue a página.',
   'Internal Server Error':
-    'Erro ao contactar a API. Confira se o backend está ativo na porta 3010 e recarregue a página.',
+    'Erro no servidor (API). Se acabou de atualizar o sistema, o administrador deve rodar o deploy/migrations no VPS; depois recarregue a página.',
   Unauthorized: 'Sessão expirada ou não autorizado. Faça login novamente.',
   Forbidden: 'Você não tem permissão para esta ação.',
   'Not Found': 'Registro não encontrado.',

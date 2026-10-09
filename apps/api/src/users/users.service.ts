@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '../generated/tenant-client';
 import * as bcrypt from 'bcrypt';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -135,18 +136,41 @@ export class UsersService {
     const role = await prisma.role.findUniqueOrThrow({ where: { name: data.roleName } });
     const hash = await bcrypt.hash(data.password, 10);
     const email = data.email.toLowerCase();
-    const username = data.username?.trim()
-      ? assertValidUsername(data.username)
-      : usernameFromEmail(email);
-    return prisma.user.create({
-      data: {
-        username,
-        email,
-        name: data.name,
-        passwordHash: hash,
-        mustChangePassword: true,
-        roleAssignments: { create: { roleId: role.id, barnId: data.barnId } },
-      },
+    let username: string;
+    try {
+      username = data.username?.trim()
+        ? assertValidUsername(data.username)
+        : usernameFromEmail(email);
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : 'Usuário inválido');
+    }
+
+    const taken = await prisma.user.findFirst({
+      where: { OR: [{ username }, { email }] },
+      select: { username: true, email: true, isActive: true },
     });
+    if (taken) {
+      const which = taken.username === username ? `login "${username}"` : `e-mail ${email}`;
+      const state = taken.isActive ? '' : ' (usuário inativo — reative em vez de criar outro)';
+      throw new BadRequestException(`Já existe conta com este ${which}${state}.`);
+    }
+
+    try {
+      return await prisma.user.create({
+        data: {
+          username,
+          email,
+          name: data.name,
+          passwordHash: hash,
+          mustChangePassword: true,
+          roleAssignments: { create: { roleId: role.id, barnId: data.barnId } },
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new BadRequestException('Login ou e-mail já cadastrado.');
+      }
+      throw e;
+    }
   }
 }
