@@ -8,6 +8,7 @@ export type SessionUser = {
   name: string;
   permissions: string[];
   roles: string[];
+  mustChangePassword: boolean;
 };
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -32,7 +33,12 @@ export function readSession(): SessionUser | null {
     name: typeof p.name === 'string' ? p.name : '',
     permissions: Array.isArray(p.permissions) ? (p.permissions as string[]) : [],
     roles: Array.isArray(p.roles) ? (p.roles as string[]) : [],
+    mustChangePassword: p.mustChangePassword === true,
   };
+}
+
+export function sessionMustChangePassword(): boolean {
+  return readSession()?.mustChangePassword === true;
 }
 
 /** Nome de exibição na UI (nome cadastrado ou login). */

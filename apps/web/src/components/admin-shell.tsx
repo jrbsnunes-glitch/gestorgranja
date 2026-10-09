@@ -7,7 +7,7 @@ import { moduleForPath } from '@/lib/module-nav';
 import { usePathname } from 'next/navigation';
 import { SidebarBrand } from '@/components/sidebar-brand';
 import { useShellTitle, useShellTitleContext } from '@/components/shell-title-context';
-import { getToken, logout, requireAuth } from '@/lib/auth';
+import { getToken, logout, requirePasswordChanged } from '@/lib/auth';
 import { APP_VERSION } from '@/lib/app-version';
 import { readSession, sessionDisplayName } from '@/lib/session';
 import { MOBILE_MEDIA_QUERY } from '@/lib/use-mobile';
@@ -20,10 +20,7 @@ export function AdminShellFrame({ children }: { children: React.ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) {
-      requireAuth();
-      return;
-    }
+    if (!requirePasswordChanged()) return;
     setAuthOk(true);
   }, []);
 

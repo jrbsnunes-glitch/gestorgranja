@@ -17,6 +17,7 @@ export class UsersService {
         email: true,
         name: true,
         isActive: true,
+        mustChangePassword: true,
         roleAssignments: { include: { role: true, barn: true } },
       },
     });
@@ -49,12 +50,17 @@ export class UsersService {
     const existing = await prisma.user.findUnique({ where: { id } });
     if (!existing) throw new BadRequestException('Usuário não encontrado');
 
+    if (data.isActive === false && id === user.sub) {
+      throw new BadRequestException('Você não pode inativar sua própria conta');
+    }
+
     const patch: {
       name?: string;
       isActive?: boolean;
       email?: string;
       username?: string;
       passwordHash?: string;
+      mustChangePassword?: boolean;
     } = {};
 
     if (data.name !== undefined) patch.name = data.name.trim();
@@ -90,6 +96,9 @@ export class UsersService {
         throw new BadRequestException('Senha deve ter no mínimo 6 caracteres');
       }
       patch.passwordHash = await bcrypt.hash(newPassword, 10);
+      if (id !== user.sub) {
+        patch.mustChangePassword = true;
+      }
     }
 
     if (!Object.keys(patch).length) {
@@ -105,6 +114,7 @@ export class UsersService {
         email: true,
         name: true,
         isActive: true,
+        mustChangePassword: true,
         roleAssignments: { include: { role: true, barn: true } },
       },
     });
@@ -134,6 +144,7 @@ export class UsersService {
         email,
         name: data.name,
         passwordHash: hash,
+        mustChangePassword: true,
         roleAssignments: { create: { roleId: role.id, barnId: data.barnId } },
       },
     });

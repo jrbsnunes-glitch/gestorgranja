@@ -12,6 +12,7 @@ export type JwtPayload = {
   permissions: string[];
   roles: string[];
   barnIds: string[];
+  mustChangePassword?: boolean;
 };
 
 @Injectable()

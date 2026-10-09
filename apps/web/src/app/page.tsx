@@ -24,6 +24,10 @@ export default function LoginPage() {
         String(fd.get('password')),
       );
       localStorage.setItem('gg_token', res.accessToken);
+      if (res.mustChangePassword || readSession()?.mustChangePassword) {
+        router.push('/trocar-senha');
+        return;
+      }
       router.push(getPostLoginPath(readSession()));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha no login');

@@ -16,6 +16,7 @@ import {
 import { ErrorBox, Field, SubmitButton, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { labelRole, SYSTEM_ROLE_OPTIONS } from '@/lib/labels';
+import { readSession } from '@/lib/session';
 
 type RoleAssignment = {
   role: { name: string };
@@ -50,6 +51,7 @@ export default function UsuariosPage() {
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [viewAssignment, setViewAssignment] = useState<AssignmentRow | null>(null);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const session = readSession();
 
   const userList = useCrudList({
     items: rows,
@@ -152,10 +154,16 @@ export default function UsuariosPage() {
     }
   }
 
-  async function inactivateUser(u: UserRow) {
-    if (!confirm(`Inativar usuário ${u.username}?`)) return;
-    await apiFetch(`/v1/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: false }) });
-    load();
+  async function setUserActive(u: UserRow, isActive: boolean) {
+    const verb = isActive ? 'Reativar' : 'Inativar';
+    if (!confirm(`${verb} o usuário ${u.username}?`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/v1/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro');
+    }
   }
 
   const roleSelect = (
@@ -174,7 +182,7 @@ export default function UsuariosPage() {
     <AdminShell title="Usuários e perfis">
       <PageIntro
         title="Usuários e perfis"
-        description="Contas de acesso, perfis RBAC e escopo por galpão quando aplicável. Todos os perfis podem bater ponto (plano Completo): vincule o usuário ao funcionário em RH → Funcionários."
+        description="Contas de acesso, perfis RBAC e escopo por galpão quando aplicável. Use Inativar para bloquear o login sem apagar o histórico; Reativar restaura o acesso. Você não pode inativar a própria conta."
       />
       <ErrorBox message={error} />
       <TabBar
@@ -201,7 +209,7 @@ export default function UsuariosPage() {
             headers={['Usuário', 'Nome', 'E-mail', 'Perfis', 'Ativo', 'Ações']}
             recordItems={userPag.slice}
             rows={userPag.slice.map((u) => [
-              u.username,
+              u.isActive ? u.username : `${u.username} (inativo)`,
               u.name,
               u.email,
               u.roleAssignments
@@ -220,7 +228,14 @@ export default function UsuariosPage() {
                   setSelected(u);
                   setModal('edit');
                 }}
-                onInactivate={u.isActive ? () => void inactivateUser(u) : undefined}
+                onInactivate={
+                  session?.sub === u.id
+                    ? undefined
+                    : u.isActive
+                      ? () => void setUserActive(u, false)
+                      : () => void setUserActive(u, true)
+                }
+                inactivateLabel={u.isActive ? 'Inativar' : 'Reativar'}
               />,
             ])}
             page={userPag.page}
@@ -316,9 +331,12 @@ export default function UsuariosPage() {
                 <Field label="E-mail (interno)">
                   <input name="email" type="email" className={inputClass} required />
                 </Field>
-                <Field label="Senha inicial">
+                <Field label="Senha provisória">
                   <input name="password" type="password" className={inputClass} required minLength={6} />
                 </Field>
+                <p className="-mt-2 mb-3 text-xs text-slate-500">
+                  No primeiro login o usuário será obrigado a definir uma senha pessoal.
+                </p>
                 <Field label="Perfil inicial">{roleSelect}</Field>
                 <p className="-mt-2 mb-3 text-xs text-slate-500">
                   Batida de ponto (QR) está disponível em todos os perfis, desde que o login esteja vinculado a um
@@ -389,11 +407,13 @@ export default function UsuariosPage() {
             <Field label="Usuário">
               <select name="userId" className={inputClass} required>
                 <option value="">Selecione…</option>
-                {rows.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.username} — {u.name}
-                  </option>
-                ))}
+                {rows
+                  .filter((u) => u.isActive)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.username} — {u.name}
+                    </option>
+                  ))}
               </select>
             </Field>
             <Field label="Perfil">{roleSelect}</Field>

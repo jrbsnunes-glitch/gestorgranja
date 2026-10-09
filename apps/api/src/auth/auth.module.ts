@@ -6,6 +6,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { MustChangePasswordGuard } from './must-change-password.guard';
 import { PermissionsGuard } from './permissions.guard';
 
 @Module({
@@ -24,7 +25,7 @@ import { PermissionsGuard } from './permissions.guard';
     TenantModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PermissionsGuard],
-  exports: [AuthService, JwtModule, PermissionsGuard],
+  providers: [AuthService, JwtStrategy, PermissionsGuard, MustChangePasswordGuard],
+  exports: [AuthService, JwtModule, PermissionsGuard, MustChangePasswordGuard],
 })
 export class AuthModule {}
