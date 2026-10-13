@@ -78,7 +78,9 @@ const MODULE_ACCESS: Record<string, string[]> = {
   ],
   produtos: ['cadastros.read', 'cadastros.write', 'inventory.write'],
   estoque: ['inventory.write', 'purchasing.write'],
-  comercial: ['sales.read', 'sales.write', 'cash.read', 'cash.write'],
+  venda: ['sales.read', 'sales.write'],
+  caixas: ['cash.read', 'cash.write', 'cash.reconcile'],
+  'notas-fiscais': ['fiscal.read', 'fiscal.emit', 'sales.write'],
   parceiros: ['cadastros.read', 'cadastros.write', 'sales.read'],
   financeiro: ['finance.write', 'cash.read', 'cash.write', 'cash.reconcile'],
   rh: ['hr.read', 'hr.write'],
@@ -195,23 +197,6 @@ export function filterModuleTabs(
     if (hasAnyPermission(session, ['purchasing.write'])) {
       const c = mod.tabs.find((t) => t.id === 'compras');
       if (c) tabs.push(c);
-    }
-    return tabs;
-  }
-
-  if (mod.id === 'comercial') {
-    const tabs: typeof mod.tabs = [];
-    if (hasAnyPermission(session, ['sales.read', 'sales.write'])) {
-      const v = mod.tabs.find((t) => t.id === 'vendas');
-      if (v) tabs.push(v);
-    }
-    if (hasAnyPermission(session, ['cash.read', 'cash.write', 'cash.reconcile'])) {
-      const c = mod.tabs.find((t) => t.id === 'caixa');
-      if (c) tabs.push(c);
-    }
-    if (hasAnyPermission(session, ['fiscal.read', 'fiscal.emit', 'sales.write'])) {
-      const f = mod.tabs.find((t) => t.id === 'fiscal');
-      if (f) tabs.push(f);
     }
     return tabs;
   }

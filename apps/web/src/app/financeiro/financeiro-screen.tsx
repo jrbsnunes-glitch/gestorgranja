@@ -19,6 +19,8 @@ import { TitleSettlementForm } from '@/components/title-settlement-form';
 import { apiFetch, downloadAuthFile, openAuthFileInNewTab } from '@/lib/api';
 import type { BankBoletoDto } from '@/lib/boleto';
 import { labelEnum } from '@/lib/labels';
+import { formatCalendarDatePtBR, prismaDateDayKey } from '@/lib/calendar-date';
+import { titleDueDayOffset, titleDueRowClass, titleDueUrgency } from '@/lib/finance-title-due';
 import { formatBrl } from '@/lib/money';
 
 type Partner = { id: string; name: string };
@@ -119,11 +121,7 @@ export type FinanceListFilter = { dueDays?: number; overdueOnly?: boolean };
 
 function matchDueFilter(dueDate: string, filter?: FinanceListFilter) {
   if (!filter?.dueDays && !filter?.overdueOnly) return true;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(dueDate);
-  due.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
+  const diffDays = titleDueDayOffset(dueDate);
   if (filter.overdueOnly) return diffDays < 0;
   if (filter.dueDays != null) return diffDays >= 0 && diffDays <= filter.dueDays;
   return true;
@@ -378,7 +376,12 @@ export function FinanceiroScreen({
   }
 
   function titleDueDateInput(iso: string) {
-    return iso.slice(0, 10);
+    return prismaDateDayKey(iso);
+  }
+
+  function dueRowClassForTitle(dueDate: string, skipHighlight = false) {
+    if (skipHighlight) return '';
+    return titleDueRowClass(titleDueUrgency(dueDate));
   }
 
   async function submitEditPayable(e: FormEvent<HTMLFormElement>) {
@@ -577,7 +580,7 @@ export function FinanceiroScreen({
               p.description,
               p.partner.name,
               formatBrl(Number(p.amount)),
-              new Date(p.dueDate).toLocaleDateString('pt-BR'),
+              formatCalendarDatePtBR(p.dueDate),
               labelEnum(p.approvalStatus),
               p.approvalStatus === 'PENDING' ? (
                 <Button
@@ -611,6 +614,9 @@ export function FinanceiroScreen({
             totalPages={payPag.totalPages}
             total={payPag.total}
             onPage={payPag.setPage}
+            rowClassNames={payPag.slice.map((p) =>
+              dueRowClassForTitle(p.dueDate, payableHasPayment(p) || isTitleCancelledStatus(p.approvalStatus)),
+            )}
           />
         </PageCard>
       ) : (
@@ -647,7 +653,7 @@ export function FinanceiroScreen({
               rows={recPag.slice.map((r) => [
                 r.description,
                 r.partner.name,
-                new Date(r.dueDate).toLocaleDateString('pt-BR'),
+                formatCalendarDatePtBR(r.dueDate),
                 r.overdueDays && r.overdueDays > 0 ? `${r.overdueDays}d` : '—',
                 formatBrl(r.balance ?? Number(r.amount)),
                 <RowActions
@@ -670,6 +676,9 @@ export function FinanceiroScreen({
               totalPages={recPag.totalPages}
               total={recPag.total}
               onPage={recPag.setPage}
+              rowClassNames={recPag.slice.map((r) =>
+                dueRowClassForTitle(r.dueDate, receivableHasPayment(r) || isTitleCancelledStatus(r.approvalStatus)),
+              )}
             />
           </PageCard>
         </>
@@ -762,7 +771,7 @@ export function FinanceiroScreen({
                     { label: 'Valor', value: formatBrl(Number(viewPay.amount)) },
                     {
                       label: 'Vencimento',
-                      value: new Date(viewPay.dueDate).toLocaleDateString('pt-BR'),
+                      value: formatCalendarDatePtBR(viewPay.dueDate),
                     },
                     { label: 'Status', value: labelEnum(viewPay.approvalStatus) },
                     {
@@ -846,7 +855,7 @@ export function FinanceiroScreen({
                     { label: 'Valor', value: formatBrl(Number(viewRec.amount)) },
                     {
                       label: 'Vencimento',
-                      value: new Date(viewRec.dueDate).toLocaleDateString('pt-BR'),
+                      value: formatCalendarDatePtBR(viewRec.dueDate),
                     },
                     { label: 'Status', value: labelEnum(viewRec.approvalStatus) },
                     {

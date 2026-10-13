@@ -4,7 +4,9 @@ import { PANEL_MENU_LOGO_PATH } from '@/lib/product-branding';
 export const MODULE_NAV_ICONS = {
   dashboard: PANEL_MENU_LOGO_PATH,
   operacao: '/nav/operacao.svg',
-  comercial: '/nav/vendas-caixa.svg',
+  venda: '/nav/venda.svg',
+  caixas: '/nav/caixas.svg',
+  notasFiscais: '/nav/notas-fiscais.svg',
   produtos: '/nav/produtos.svg',
   estoque: '/nav/estoque.svg',
   financeiro: '/nav/financeiro.svg',

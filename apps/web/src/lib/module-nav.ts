@@ -20,6 +20,13 @@ function matchAny(pathname: string, bases: string[]) {
   return bases.some((b) => pathUnder(pathname, b));
 }
 
+/** PDV e impressão de cupom — não inclui caixa nem documentos fiscais. */
+function matchVendaPath(pathname: string) {
+  if (pathUnder(pathname, '/vendas/caixa')) return false;
+  if (pathUnder(pathname, '/vendas/documentos-fiscais')) return false;
+  return pathUnder(pathname, '/vendas');
+}
+
 export const APP_MODULES: AppModule[] = [
   {
     id: 'dashboard',
@@ -51,16 +58,25 @@ export const APP_MODULES: AppModule[] = [
     ],
   },
   {
-    id: 'comercial',
-    label: 'Vendas e Caixas',
+    id: 'venda',
+    label: 'Venda',
     href: '/vendas',
-    navIcon: MODULE_NAV_ICONS.comercial,
-    match: (p) => pathUnder(p, '/vendas'),
-    tabs: [
-      { id: 'vendas', label: 'Vendas', href: '/vendas' },
-      { id: 'caixa', label: 'Caixa', href: '/vendas/caixa' },
-      { id: 'fiscal', label: 'Documentos fiscais', href: '/vendas/documentos-fiscais' },
-    ],
+    navIcon: MODULE_NAV_ICONS.venda,
+    match: matchVendaPath,
+  },
+  {
+    id: 'caixas',
+    label: 'Caixas',
+    href: '/vendas/caixa',
+    navIcon: MODULE_NAV_ICONS.caixas,
+    match: (p) => pathUnder(p, '/vendas/caixa'),
+  },
+  {
+    id: 'notas-fiscais',
+    label: 'Notas Fiscais',
+    href: '/vendas/documentos-fiscais',
+    navIcon: MODULE_NAV_ICONS.notasFiscais,
+    match: (p) => pathUnder(p, '/vendas/documentos-fiscais'),
   },
   {
     id: 'produtos',

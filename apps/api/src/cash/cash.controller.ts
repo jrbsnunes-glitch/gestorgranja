@@ -148,4 +148,14 @@ export class CashController {
   reconcile(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() body: { notes?: string }) {
     return this.cash.reconcile(user, id, body.notes);
   }
+
+  @Patch('sessions/:id/draft')
+  @RequirePermissions('cash.read', 'cash.write', 'cash.reconcile', '*')
+  saveDraft(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() body: { reconciliationNotes?: string; closingNotes?: string },
+  ) {
+    return this.cash.saveSessionDraft(user, id, body);
+  }
 }

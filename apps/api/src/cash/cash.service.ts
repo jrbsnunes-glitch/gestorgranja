@@ -112,34 +112,46 @@ export class CashService {
     query: { status?: string; from?: string; to?: string; take?: number; skip?: number },
   ) {
     const prisma = await this.db(user);
-    const take = Math.min(Math.max(query.take ?? 100, 1), 200);
+    const take = Math.min(Math.max(query.take ?? 30, 1), 200);
     const skip = Math.max(query.skip ?? 0, 0);
     const openedAt: { gte?: Date; lte?: Date } = {};
     if (query.from) openedAt.gte = new Date(`${query.from.slice(0, 10)}T00:00:00.000Z`);
     if (query.to) openedAt.lte = new Date(`${query.to.slice(0, 10)}T23:59:59.999Z`);
 
-    const statusFilter =
-      query.status === 'OPEN' ||
-      query.status === 'PENDING_RECONCILIATION' ||
-      query.status === 'RECONCILED'
-        ? (query.status as CashSessionStatus)
-        : undefined;
+    const allowedStatuses = new Set<string>([
+      CashSessionStatus.OPEN,
+      CashSessionStatus.PENDING_RECONCILIATION,
+      CashSessionStatus.RECONCILED,
+    ]);
+    const statusList = (query.status ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => allowedStatuses.has(s)) as CashSessionStatus[];
 
-    const rows = await prisma.cashRegisterSession.findMany({
-      where: {
-        ...(statusFilter ? { status: statusFilter } : {}),
-        ...(Object.keys(openedAt).length ? { openedAt } : {}),
-      },
-      orderBy: { openedAt: 'desc' },
-      take,
-      skip,
-      include: {
-        user: { select: { id: true, name: true, username: true } },
-        movements: { select: { type: true, amount: true, isExpense: true } },
-      },
-    });
+    const where = {
+      ...(statusList.length === 1
+        ? { status: statusList[0] }
+        : statusList.length > 1
+          ? { status: { in: statusList } }
+          : {}),
+      ...(Object.keys(openedAt).length ? { openedAt } : {}),
+    };
 
-    return rows.map((s) => {
+    const [total, rows] = await Promise.all([
+      prisma.cashRegisterSession.count({ where }),
+      prisma.cashRegisterSession.findMany({
+        where,
+        orderBy: { openedAt: 'desc' },
+        take,
+        skip,
+        include: {
+          user: { select: { id: true, name: true, username: true } },
+          movements: { select: { type: true, amount: true, isExpense: true } },
+        },
+      }),
+    ]);
+
+    const items = rows.map((s) => {
       const summary = summarizeCashSession(
         Number(s.openingBalance),
         s.movements.map((m) => ({ type: m.type, amount: Number(m.amount), isExpense: m.isExpense })),
@@ -162,6 +174,39 @@ export class CashService {
         isMine: s.userId === user.sub,
         user: s.user,
       };
+    });
+
+    return { total, items };
+  }
+
+  async saveSessionDraft(
+    user: JwtPayload,
+    sessionId: string,
+    data: { reconciliationNotes?: string; closingNotes?: string },
+  ) {
+    const prisma = await this.db(user);
+    const session = await prisma.cashRegisterSession.findUnique({ where: { id: sessionId } });
+    if (!session) throw new NotFoundException();
+    if (session.status === CashSessionStatus.RECONCILED) {
+      throw new BadRequestException('Caixa já conferido — somente visualização.');
+    }
+    if (session.status === CashSessionStatus.PENDING_RECONCILIATION) {
+      if (!hasPerm(user, 'cash.reconcile', 'cash.write', '*')) {
+        throw new ForbiddenException('Sem permissão para gravar a conferência.');
+      }
+    } else if (session.status === CashSessionStatus.OPEN) {
+      if (session.userId !== user.sub && !hasPerm(user, 'cash.reconcile', '*')) {
+        throw new ForbiddenException('Somente o operador ou conferente pode gravar.');
+      }
+    }
+    return prisma.cashRegisterSession.update({
+      where: { id: sessionId },
+      data: {
+        ...(data.reconciliationNotes !== undefined
+          ? { reconciliationNotes: data.reconciliationNotes || null }
+          : {}),
+        ...(data.closingNotes !== undefined ? { closingNotes: data.closingNotes || null } : {}),
+      },
     });
   }
 
@@ -239,10 +284,10 @@ export class CashService {
     const prisma = await this.db(user);
     const session = await prisma.cashRegisterSession.findUnique({ where: { id: sessionId } });
     if (!session) throw new BadRequestException('Sessão não encontrada');
-    if (
-      session.status !== CashSessionStatus.OPEN &&
-      session.status !== CashSessionStatus.PENDING_RECONCILIATION
-    ) {
+    if (session.status === CashSessionStatus.RECONCILED) {
+      throw new BadRequestException('Caixa conferido — não é possível incluir despesas ou lançamentos.');
+    }
+    if (session.status !== CashSessionStatus.OPEN && session.status !== CashSessionStatus.PENDING_RECONCILIATION) {
       throw new BadRequestException('Só é possível lançar com caixa aberto ou em conferência.');
     }
     const isExpense = Boolean(data.isExpense);

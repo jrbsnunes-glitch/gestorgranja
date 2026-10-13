@@ -224,10 +224,10 @@ export default function DocumentosFiscaisPage() {
   }
 
   return (
-    <AdminShell title="Documentos fiscais">
+    <AdminShell title="Notas Fiscais">
       <PageIntro
-        title="NF-e / NFC-e"
-        description="Emita notas para vendas confirmadas. Homologação AM exige certificado e cadastros fiscais completos."
+        title="Notas Fiscais"
+        description="Emita NF-e para vendas confirmadas ou inclua notas manualmente. Homologação AM exige certificado e cadastros fiscais completos."
       />
       <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
         <Link href="/empresa/fiscal" className="text-emerald-800 underline">

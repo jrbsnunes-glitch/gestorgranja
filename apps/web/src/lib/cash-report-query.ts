@@ -9,6 +9,8 @@ export type CashReportFilters = {
   date: string;
   controlMin: string;
   controlMax: string;
+  summaryOnly: boolean;
+  detailProducts: boolean;
 };
 
 function todayIso() {
@@ -36,6 +38,8 @@ export function defaultCashReportFilters(variant: CashReportVariant = 'dia'): Ca
     date: today,
     controlMin: '',
     controlMax: '',
+    summaryOnly: false,
+    detailProducts: false,
   };
 }
 
@@ -51,6 +55,8 @@ export function buildCashReportSearchParams(filters: CashReportFilters): URLSear
   } else {
     if (filters.date) p.set('date', filters.date);
   }
+  if (filters.summaryOnly) p.set('summaryOnly', '1');
+  if (filters.detailProducts) p.set('detailProducts', '1');
   return p;
 }
 

@@ -13,6 +13,8 @@ export type CashReportQuery = {
   date?: string;
   controlMin?: number;
   controlMax?: number;
+  summaryOnly?: boolean;
+  detailProducts?: boolean;
 };
 
 function parseDay(raw: string | undefined, mode: 'start' | 'end'): Date | undefined {
@@ -145,10 +147,18 @@ export class CashReportService {
           movements: { orderBy: { createdAt: 'asc' } },
         },
       });
+      const sessionIds = sessions.map((s) => s.id);
+      const productGroups =
+        query.detailProducts && sessionIds.length
+          ? await this.productGroupsForSessions(prisma, sessionIds)
+          : null;
       return {
         variant: 'controle' as const,
         controlRange: { min, max: cMax },
         sessions: sessions.map(mapSessionBlock),
+        summaryOnly: Boolean(query.summaryOnly),
+        detailProducts: Boolean(query.detailProducts),
+        productGroups,
         company: reportCompany,
       };
     }
@@ -195,6 +205,12 @@ export class CashReportService {
 
     const totals = movementTotals(movements);
 
+    const sessionIdsForProducts = sessions.map((s) => s.id);
+    const productGroups =
+      query.detailProducts && sessionIdsForProducts.length
+        ? await this.productGroupsForSessions(prisma, sessionIdsForProducts)
+        : null;
+
     return {
       variant: query.variant,
       period: {
@@ -210,7 +226,38 @@ export class CashReportService {
       },
       sessions: sessions.map(mapSessionBlock),
       movements: movements.map(mapMovement),
+      summaryOnly: Boolean(query.summaryOnly),
+      detailProducts: Boolean(query.detailProducts),
+      productGroups,
       company: reportCompany,
     };
+  }
+
+  private async productGroupsForSessions(
+    prisma: Awaited<ReturnType<TenantPrismaService['getClient']>>,
+    sessionIds: string[],
+  ) {
+    const items = await prisma.salesOrderItem.findMany({
+      where: {
+        salesOrder: {
+          cashSessionId: { in: sessionIds },
+          status: 'CONFIRMED',
+        },
+      },
+      include: {
+        product: { select: { sku: true, name: true, unit: true } },
+      },
+    });
+    const map = new Map<string, { label: string; quantity: number; total: number }>();
+    for (const it of items) {
+      const label = it.product ? `${it.product.sku} — ${it.product.name}` : 'Item avulso';
+      const line =
+        Math.round((Number(it.quantity) * Number(it.unitPrice) - Number(it.discount)) * 100) / 100;
+      const prev = map.get(label) ?? { label, quantity: 0, total: 0 };
+      prev.quantity += Number(it.quantity);
+      prev.total += line;
+      map.set(label, prev);
+    }
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
   }
 }

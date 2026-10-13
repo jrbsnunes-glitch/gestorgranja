@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { prismaDateOnly } from '../common/calendar-date.util';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { PaymentApprovalStatus, Prisma } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -70,7 +71,7 @@ export class FinanceService {
           description: `${baseDesc}${suffix}`.slice(0, 200),
           amount: inst.amount,
           controlNumber: controlNumber++,
-          dueDate: new Date(inst.dueDate + 'T12:00:00'),
+          dueDate: prismaDateOnly(inst.dueDate),
           approvalStatus: PaymentApprovalStatus.PENDING,
         },
       });
@@ -109,9 +110,7 @@ export class FinanceService {
 
     const newPaid = paid + pay;
     const fullyPaid = newPaid >= total - 0.005;
-    const paidAt = input.settlementDate
-      ? new Date(input.settlementDate + 'T12:00:00')
-      : new Date();
+    const paidAt = input.settlementDate ? prismaDateOnly(input.settlementDate) : new Date();
 
     if (input.chartAccountId) {
       const acc = await prisma.chartAccount.findUnique({ where: { id: input.chartAccountId } });
@@ -165,7 +164,7 @@ export class FinanceService {
           description: `${baseDesc}${suffix}`.slice(0, 200),
           amount: inst.amount,
           controlNumber: controlNumber++,
-          dueDate: new Date(inst.dueDate + 'T12:00:00'),
+          dueDate: prismaDateOnly(inst.dueDate),
           approvalStatus: PaymentApprovalStatus.PENDING,
         },
       });
@@ -270,9 +269,7 @@ export class FinanceService {
 
     const newPaid = paid + pay;
     const fullyPaid = newPaid >= total - 0.005;
-    const receivedAt = input.settlementDate
-      ? new Date(input.settlementDate + 'T12:00:00')
-      : new Date();
+    const receivedAt = input.settlementDate ? prismaDateOnly(input.settlementDate) : new Date();
 
     if (input.chartAccountId) {
       const acc = await prisma.chartAccount.findUnique({ where: { id: input.chartAccountId } });
@@ -322,7 +319,7 @@ export class FinanceService {
           chartAccountId: data.chartAccountId,
           description: `Compra ${order.orderNumber} — ${order.purchaseRequest.description}`.slice(0, 200),
           amount: t.amount,
-          dueDate: new Date(t.dueDate + 'T12:00:00'),
+          dueDate: prismaDateOnly(t.dueDate),
           approvalStatus: PaymentApprovalStatus.PENDING,
         },
       });
@@ -398,7 +395,7 @@ export class FinanceService {
         chartAccountId: data.chartAccountId,
         description: desc.slice(0, 200),
         amount: data.amount,
-        dueDate: new Date(data.dueDate + 'T12:00:00'),
+        dueDate: prismaDateOnly(data.dueDate),
       },
       include: { partner: true, chartAccount: true },
     });
@@ -435,7 +432,7 @@ export class FinanceService {
         chartAccountId: data.chartAccountId,
         description: desc.slice(0, 200),
         amount: data.amount,
-        dueDate: new Date(data.dueDate + 'T12:00:00'),
+        dueDate: prismaDateOnly(data.dueDate),
       },
       include: { partner: true, chartAccount: true },
     });

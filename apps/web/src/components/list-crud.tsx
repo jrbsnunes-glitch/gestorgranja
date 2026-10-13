@@ -231,6 +231,7 @@ export function PaginatedTable({
   headers,
   rows,
   recordItems,
+  rowClassNames,
   page,
   totalPages,
   total,
@@ -241,6 +242,7 @@ export function PaginatedTable({
   /** Mesma ordem de `rows`: exibe coluna Controle com o número do registro. */
   /** Itens alinhados a `rows`; coluna Controle só aparece se tiver `controlNumber`. */
   recordItems?: unknown[];
+  rowClassNames?: string[];
   page: number;
   totalPages: number;
   total: number;
@@ -257,7 +259,7 @@ export function PaginatedTable({
 
   return (
     <>
-      <SimpleTable headers={tableHeaders} rows={tableRows} />
+      <SimpleTable headers={tableHeaders} rows={tableRows} rowClassNames={rowClassNames} />
       <PaginationBar page={page} totalPages={totalPages} total={total} onPage={onPage} />
     </>
   );

@@ -1,8 +1,17 @@
 'use client';
 
 import { Button, Card } from '@gestor-granja/ui';
+import { titleDueMobileCardClass } from '@/lib/finance-title-due';
 import { formatApiError } from '@/lib/labels';
 import { useIsMobile } from '@/lib/use-mobile';
+
+function mobileCardClassFromRow(rowClass?: string) {
+  const base = 'rounded-lg border p-3 shadow-sm ';
+  if (!rowClass) return `${base}border-slate-200 bg-white`;
+  if (rowClass.includes('red-50')) return `${base}${titleDueMobileCardClass('overdue')}`;
+  if (rowClass.includes('amber-50')) return `${base}${titleDueMobileCardClass('dueToday')}`;
+  return `${base}border-slate-200 bg-white`;
+}
 
 export function PageCard({
   title,
@@ -58,9 +67,12 @@ export function ErrorBox({ message }: { message: string | null }) {
 export function SimpleTable({
   headers,
   rows,
+  rowClassNames,
 }: {
   headers: string[];
   rows: (string | React.ReactNode)[][];
+  /** Classes por linha (mesma ordem de `rows`). */
+  rowClassNames?: string[];
 }) {
   const isMobile = useIsMobile();
 
@@ -72,7 +84,7 @@ export function SimpleTable({
     return (
       <ul className="space-y-3">
         {rows.map((row, i) => (
-          <li key={i} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <li key={i} className={mobileCardClassFromRow(rowClassNames?.[i])}>
             {headers.map((h, j) => (
               <div
                 key={`${i}-${h}`}
@@ -106,7 +118,10 @@ export function SimpleTable({
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr
+              key={i}
+              className={['border-b border-slate-100', rowClassNames?.[i]].filter(Boolean).join(' ')}
+            >
               {row.map((cell, j) => (
                 <td key={j} className="px-2 py-2">
                   {cell}

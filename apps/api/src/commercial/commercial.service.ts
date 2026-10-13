@@ -9,6 +9,79 @@ function isBoletoKind(kind?: string | null) {
   return (kind ?? '').toUpperCase() === 'BOLETO';
 }
 
+type SalesStatsBucket = { noAto: number; requisicao: number; boleto: number };
+
+function isRequisicaoPayment(_kind?: string | null, name?: string | null) {
+  return Boolean(name && /requis/i.test(name));
+}
+
+function paymentBucket(kind?: string | null, name?: string | null): keyof SalesStatsBucket {
+  if (isBoletoKind(kind)) return 'boleto';
+  if (isRequisicaoPayment(kind, name)) return 'requisicao';
+  return 'noAto';
+}
+
+function emptyBuckets(): SalesStatsBucket {
+  return { noAto: 0, requisicao: 0, boleto: 0 };
+}
+
+function addToBuckets(
+  buckets: SalesStatsBucket,
+  order: {
+    totalAmount: { toString(): string };
+    paymentMethod: string | null;
+    paymentForm: { kind: string; name: string } | null;
+    secondaryPaymentForm: { kind: string; name: string } | null;
+    primaryPaymentAmount: { toString(): string } | null;
+    secondaryPaymentFormId: string | null;
+  },
+) {
+  const total = Number(order.totalAmount);
+  const slices: { kind: string | null; name: string | null; amount: number }[] =
+    order.secondaryPaymentFormId && order.primaryPaymentAmount != null
+      ? [
+          {
+            kind: order.paymentMethod ?? order.paymentForm?.kind ?? null,
+            name: order.paymentForm?.name ?? null,
+            amount: Number(order.primaryPaymentAmount),
+          },
+          {
+            kind: order.secondaryPaymentForm?.kind ?? null,
+            name: order.secondaryPaymentForm?.name ?? null,
+            amount: Math.round((total - Number(order.primaryPaymentAmount)) * 100) / 100,
+          },
+        ]
+      : [
+          {
+            kind: order.paymentMethod ?? order.paymentForm?.kind ?? null,
+            name: order.paymentForm?.name ?? null,
+            amount: total,
+          },
+        ];
+
+  for (const s of slices) {
+    const key = paymentBucket(s.kind, s.name);
+    buckets[key] = Math.round((buckets[key] + s.amount) * 100) / 100;
+  }
+}
+
+function aggregateSalesStats(
+  rows: {
+    totalAmount: { toString(): string };
+    paymentMethod: string | null;
+    paymentForm: { kind: string; name: string } | null;
+    secondaryPaymentForm: { kind: string; name: string } | null;
+    primaryPaymentAmount: { toString(): string } | null;
+    secondaryPaymentFormId: string | null;
+  }[],
+) {
+  const buckets = emptyBuckets();
+  for (const row of rows) addToBuckets(buckets, row);
+  const sum = (r: typeof rows) =>
+    Math.round(r.reduce((s, x) => s + Number(x.totalAmount), 0) * 100) / 100;
+  return { count: rows.length, totalAmount: sum(rows), ...buckets };
+}
+
 @Injectable()
 export class CommercialService {
   constructor(
@@ -45,26 +118,33 @@ export class CommercialService {
     const monthFrom = prismaDateOnly(monthKeys.from);
     const monthTo = prismaDateOnly(monthKeys.to);
 
+    const orderSelect = {
+      totalAmount: true,
+      paymentMethod: true,
+      primaryPaymentAmount: true,
+      secondaryPaymentFormId: true,
+      paymentForm: { select: { kind: true, name: true } },
+      secondaryPaymentForm: { select: { kind: true, name: true } },
+    } as const;
+
     const [dayOrders, monthOrders] = await Promise.all([
       prisma.salesOrder.findMany({
-        where: { status: 'CONFIRMED', orderDate: dayDate },
-        select: { totalAmount: true },
+        where: { status: 'CONFIRMED', orderDate: dayDate, cashSessionId: { not: null } },
+        select: orderSelect,
       }),
       prisma.salesOrder.findMany({
         where: {
           status: 'CONFIRMED',
           orderDate: { gte: monthFrom, lte: monthTo },
+          cashSessionId: { not: null },
         },
-        select: { totalAmount: true },
+        select: orderSelect,
       }),
     ]);
 
-    const sum = (rows: { totalAmount: { toString(): string } }[]) =>
-      Math.round(rows.reduce((s, r) => s + Number(r.totalAmount), 0) * 100) / 100;
-
     return {
-      day: { count: dayOrders.length, totalAmount: sum(dayOrders) },
-      month: { count: monthOrders.length, totalAmount: sum(monthOrders) },
+      day: aggregateSalesStats(dayOrders),
+      month: aggregateSalesStats(monthOrders),
     };
   }
 

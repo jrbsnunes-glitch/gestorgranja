@@ -11,6 +11,7 @@ import {
 } from '@/lib/finance-titles-report-query';
 import { apiFetch } from '@/lib/api';
 import { ReportPrintActions } from '@/components/report-print-actions';
+import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 
@@ -135,7 +136,7 @@ function PrintBody() {
                       <td className="py-2 pr-2">{r.description}</td>
                       <td className="py-2 pr-2">{r.partnerName}</td>
                       <td className="py-2 pr-2 whitespace-nowrap">
-                        {new Date(r.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        {formatCalendarDatePtBR(r.dueDate)}
                       </td>
                       <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.amount)}</td>
                       <td className="py-2 pr-2 text-right tabular-nums">{formatBrl(r.amountPaid)}</td>

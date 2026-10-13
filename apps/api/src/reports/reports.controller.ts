@@ -410,6 +410,8 @@ export class ReportsController {
     @Query('date') date?: string,
     @Query('controlMin') controlMin?: string,
     @Query('controlMax') controlMax?: string,
+    @Query('summaryOnly') summaryOnly?: string,
+    @Query('detailProducts') detailProducts?: string,
   ) {
     if (variant !== 'controle' && variant !== 'periodo' && variant !== 'dia') {
       throw new BadRequestException('variant deve ser controle, periodo ou dia');
@@ -419,6 +421,7 @@ export class ReportsController {
       const n = Number(v);
       return Number.isFinite(n) ? n : undefined;
     };
+    const flag = (v: string | undefined) => v === '1' || v === 'true';
     return this.cashReport.report(user, {
       variant,
       from,
@@ -426,6 +429,8 @@ export class ReportsController {
       date,
       controlMin: parseIntOpt(controlMin),
       controlMax: parseIntOpt(controlMax),
+      summaryOnly: flag(summaryOnly),
+      detailProducts: flag(detailProducts),
     });
   }
 

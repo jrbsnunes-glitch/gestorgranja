@@ -1,24 +1,19 @@
 'use client';
 
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { AdminShell } from '@/components/admin-shell';
-import { PageIntro } from '@/components/crud';
-import { CashSessionWorkspacePage } from '@/components/cash/cash-session-workspace-page';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { cashSessionListHref } from '@/lib/cash-session-nav';
 
-export default function VendasCaixaSessaoPage() {
+/** Atalho legado — abre o modal na listagem de caixas. */
+export default function VendasCaixaSessaoRedirectPage() {
   const params = useParams();
+  const router = useRouter();
   const id = typeof params.id === 'string' ? params.id : '';
 
-  return (
-    <AdminShell title="Caixa">
-      <p className="mb-2 text-sm">
-        <Link href="/vendas/caixa" className="font-medium text-emerald-800 hover:underline">
-          ← Voltar à lista de caixas
-        </Link>
-      </p>
-      <PageIntro title="Sessão de caixa" description="Movimentos, fechamento ou consulta da sessão selecionada." />
-      <CashSessionWorkspacePage focusSessionId={id} embedded />
-    </AdminShell>
-  );
+  useEffect(() => {
+    if (id) router.replace(cashSessionListHref(id));
+    else router.replace('/vendas/caixa');
+  }, [id, router]);
+
+  return <p className="p-4 text-sm text-slate-600">Abrindo caixa…</p>;
 }

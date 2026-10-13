@@ -1,3 +1,10 @@
+import {
+  calendarDayKeyInTz,
+  DEFAULT_BUSINESS_TZ,
+  dayKeysDiff,
+  prismaDateOnly,
+  prismaDateToDayKey,
+} from '../common/calendar-date.util';
 import { PaymentApprovalStatus, Prisma } from '../generated/tenant-client';
 
 export function dec(n: Prisma.Decimal | number | string): number {
@@ -42,11 +49,9 @@ export function isReceivableSettled(row: {
 }
 
 export function daysOverdue(dueDate: Date, today = new Date()): number {
-  const d = new Date(dueDate);
-  d.setHours(0, 0, 0, 0);
-  const t = new Date(today);
-  t.setHours(0, 0, 0, 0);
-  const diff = Math.floor((t.getTime() - d.getTime()) / 86400000);
+  const dueKey = prismaDateToDayKey(dueDate);
+  const todayKey = calendarDayKeyInTz(today, DEFAULT_BUSINESS_TZ);
+  const diff = dayKeysDiff(dueKey, todayKey);
   return diff > 0 ? diff : 0;
 }
 
@@ -62,10 +67,10 @@ export function buildInstallmentsFromTotal(
   if (count === 1) return [{ amount: total, dueDate: firstDueDate }];
   const part = Math.round((total / count) * 100) / 100;
   return Array.from({ length: count }, (_, i) => {
-    const d = new Date(firstDueDate + 'T12:00:00');
-    d.setMonth(d.getMonth() + i);
+    const d = prismaDateOnly(firstDueDate);
+    d.setUTCMonth(d.getUTCMonth() + i);
     const amount = i === count - 1 ? Math.round((total - part * (count - 1)) * 100) / 100 : part;
-    return { amount, dueDate: d.toISOString().slice(0, 10) };
+    return { amount, dueDate: prismaDateToDayKey(d) };
   });
 }
 

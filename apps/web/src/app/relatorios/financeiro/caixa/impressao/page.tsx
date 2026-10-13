@@ -37,10 +37,15 @@ type SessionBlock = {
   movements: CashReportMovement[];
 };
 
+type ProductGroup = { label: string; quantity: number; total: number };
+
 type ControlePayload = {
   variant: 'controle';
   controlRange: { min: number; max: number };
   sessions: SessionBlock[];
+  summaryOnly?: boolean;
+  detailProducts?: boolean;
+  productGroups?: ProductGroup[] | null;
   company: ReportCompanyBranding;
 };
 
@@ -56,6 +61,9 @@ type PeriodPayload = {
   };
   sessions: SessionBlock[];
   movements: CashReportMovement[];
+  summaryOnly?: boolean;
+  detailProducts?: boolean;
+  productGroups?: ProductGroup[] | null;
   company: ReportCompanyBranding;
 };
 
@@ -85,6 +93,8 @@ function parseFilters(sp: URLSearchParams): CashReportFilters | null {
     date: sp.get('date') ?? '',
     controlMin: sp.get('controlMin') ?? '',
     controlMax: sp.get('controlMax') ?? '',
+    summaryOnly: sp.get('summaryOnly') === '1',
+    detailProducts: sp.get('detailProducts') === '1',
   };
 }
 
@@ -145,7 +155,7 @@ function CorpSectionTable({
   );
 }
 
-function SessionReport({ session }: { session: SessionBlock }) {
+function SessionReport({ session, summaryOnly }: { session: SessionBlock; summaryOnly?: boolean }) {
   const split = splitMovementsBySection(session.movements);
   const diff =
     session.closingBalance != null
@@ -184,17 +194,23 @@ function SessionReport({ session }: { session: SessionBlock }) {
         </p>
       ) : null}
 
-      <CorpSectionTable index={1} title="Vendas" rows={split.sales} total={split.totalSales} />
-      <CorpSectionTable
-        index={2}
-        title="Contas recebidas no caixa"
-        rows={split.receivablesAtCash}
-        total={split.totalReceivablesAtCash}
-      />
-      <CorpSectionTable index={3} title="Despesas" rows={split.expenses} total={split.totalExpenses} />
+      {!summaryOnly ? (
+        <>
+          <CorpSectionTable index={1} title="Vendas" rows={split.sales} total={split.totalSales} />
+          <CorpSectionTable
+            index={2}
+            title="Contas recebidas no caixa"
+            rows={split.receivablesAtCash}
+            total={split.totalReceivablesAtCash}
+          />
+          <CorpSectionTable index={3} title="Despesas" rows={split.expenses} total={split.totalExpenses} />
+        </>
+      ) : null}
 
       <div className="corp-reconcile">
-        <p className="corp-reconcile-title">4. Conferência — total do caixa × total apresentado</p>
+        <p className="corp-reconcile-title">
+          {summaryOnly ? '1.' : '4.'} Conferência — total do caixa × total apresentado
+        </p>
         <table className="corp-table">
           <thead>
             <tr>
@@ -315,6 +331,8 @@ function PrintBody() {
   }, [data]);
 
   const sessions = data?.sessions ?? [];
+  const summaryOnly = Boolean(data?.summaryOnly);
+  const productGroups = data?.productGroups ?? null;
 
   return (
     <div ref={printRootRef} className="cash-corp report-print-surface bg-white py-6 print:py-0">
@@ -360,8 +378,34 @@ function PrintBody() {
             {sessions.length === 0 ? (
               <p className="corp-footnote">Nenhuma sessão com movimentação no filtro informado.</p>
             ) : (
-              sessions.map((s) => <SessionReport key={s.controlNumber} session={s} />)
+              sessions.map((s) => (
+                <SessionReport key={s.controlNumber} session={s} summaryOnly={summaryOnly} />
+              ))
             )}
+
+            {data.detailProducts && productGroups && productGroups.length > 0 ? (
+              <section className="corp-section">
+                <h3 className="corp-section-title">Produtos vendidos (consolidado)</h3>
+                <table className="corp-table">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th className="num">Quantidade</th>
+                      <th className="num">Total (R$)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productGroups.map((g) => (
+                      <tr key={g.label}>
+                        <td>{g.label}</td>
+                        <td className="num">{g.quantity.toLocaleString('pt-BR')}</td>
+                        <td className="num">{formatBrl(g.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            ) : null}
 
             <footer className="corp-footer">
               Documento gerado eletronicamente · GestorGranja · Uso interno e conferência de caixa

@@ -827,6 +827,8 @@ export function CashSessionWorkspacePage({
                     date: '',
                     controlMin: String(reconcileDetail.controlNumber),
                     controlMax: String(reconcileDetail.controlNumber),
+                    summaryOnly: false,
+                    detailProducts: false,
                   })
                 }
               >

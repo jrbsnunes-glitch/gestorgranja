@@ -106,6 +106,27 @@ export function CashReportLauncher() {
           />
         </Field>
       ) : null}
+      <fieldset className="rounded-md border border-slate-200 bg-white p-3">
+        <legend className="px-1 text-sm font-medium text-slate-700">Conteúdo</legend>
+        <div className="mt-1 flex flex-col gap-2 text-sm text-slate-700">
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={filters.summaryOnly}
+              onChange={(e) => patch({ summaryOnly: e.target.checked, detailProducts: e.target.checked ? false : filters.detailProducts })}
+            />
+            Apenas resumo (sem detalhar lançamentos)
+          </label>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={filters.detailProducts}
+              onChange={(e) => patch({ detailProducts: e.target.checked })}
+            />
+            Detalhar produtos vendidos
+          </label>
+        </div>
+      </fieldset>
       <Button type="button" className="w-full sm:w-auto" onClick={generate}>
         Gerar relatório
       </Button>
