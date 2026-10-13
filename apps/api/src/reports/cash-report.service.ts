@@ -208,7 +208,7 @@ export class CashReportService {
     const sessionIdsForProducts = sessions.map((s) => s.id);
     const productGroups =
       query.detailProducts && sessionIdsForProducts.length
-        ? await this.productGroupsForSessions(prisma, sessionIdsForProducts)
+        ? await this.productGroupsForSessions(prisma, sessionIdsForProducts, { from, to })
         : null;
 
     return {
@@ -236,12 +236,21 @@ export class CashReportService {
   private async productGroupsForSessions(
     prisma: Awaited<ReturnType<TenantPrismaService['getClient']>>,
     sessionIds: string[],
+    period?: { from: Date; to: Date },
   ) {
     const items = await prisma.salesOrderItem.findMany({
       where: {
         salesOrder: {
           cashSessionId: { in: sessionIds },
           status: 'CONFIRMED',
+          ...(period
+            ? {
+                orderDate: {
+                  gte: period.from,
+                  lte: period.to,
+                },
+              }
+            : {}),
         },
       },
       include: {

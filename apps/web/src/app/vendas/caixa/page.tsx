@@ -336,7 +336,18 @@ function VendasCaixaListPageInner() {
       </FormCadastroModal>
 
       <ModuleReportsModal open={reportsOpen} title="Caixas" onClose={() => setReportsOpen(false)} compactLauncher wide>
-        <CashReportLauncher />
+        <CashReportLauncher
+          key={selectedRow ? `ctrl-${selectedRow.controlNumber}` : 'ctrl-none'}
+          initialFilters={
+            selectedRow
+              ? {
+                  variant: 'controle',
+                  controlMin: String(selectedRow.controlNumber),
+                  controlMax: String(selectedRow.controlNumber),
+                }
+              : { variant: 'controle' }
+          }
+        />
       </ModuleReportsModal>
 
       <FormCadastroModal

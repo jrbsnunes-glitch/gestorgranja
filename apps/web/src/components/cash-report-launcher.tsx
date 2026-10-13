@@ -18,8 +18,16 @@ const VARIANTS: { id: CashReportVariant; label: string; hint: string }[] = [
   { id: 'dia', label: 'Caixa do dia', hint: 'Movimentos de um único dia (padrão: hoje).' },
 ];
 
-export function CashReportLauncher() {
-  const [filters, setFilters] = useState<CashReportFilters>(() => defaultCashReportFilters('dia'));
+type CashReportLauncherProps = {
+  /** Ex.: linha selecionada na listagem de caixas — preenche controle e usa relatório por sessão. */
+  initialFilters?: Partial<CashReportFilters>;
+};
+
+export function CashReportLauncher({ initialFilters }: CashReportLauncherProps = {}) {
+  const [filters, setFilters] = useState<CashReportFilters>(() => ({
+    ...defaultCashReportFilters(initialFilters?.variant ?? 'controle'),
+    ...initialFilters,
+  }));
   const [error, setError] = useState<string | null>(null);
 
   function patch(partial: Partial<CashReportFilters>) {
@@ -97,14 +105,26 @@ export function CashReportLauncher() {
         />
       ) : null}
       {filters.variant === 'dia' ? (
-        <Field label="Data">
-          <input
-            type="date"
-            className={inputClass}
-            value={filters.date}
-            onChange={(e) => patch({ date: e.target.value })}
-          />
-        </Field>
+        <>
+          <Field label="Data">
+            <input
+              type="date"
+              className={inputClass}
+              value={filters.date}
+              onChange={(e) => patch({ date: e.target.value })}
+            />
+          </Field>
+          <p className="text-xs text-amber-800">
+            Só entram lançamentos nesta data. Sessão aberta em vários dias exige o tipo{' '}
+            <strong>Controle</strong> com o número da sessão.
+          </p>
+        </>
+      ) : null}
+      {filters.variant === 'periodo' ? (
+        <p className="text-xs text-amber-800">
+          Cada sessão lista apenas movimentos dentro do período. Para todos os lançamentos da sessão, use{' '}
+          <strong>Controle</strong>.
+        </p>
       ) : null}
       <fieldset className="rounded-md border border-slate-200 bg-white p-3">
         <legend className="px-1 text-sm font-medium text-slate-700">Conteúdo</legend>
