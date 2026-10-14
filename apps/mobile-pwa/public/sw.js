@@ -1,7 +1,11 @@
 const CACHE = 'gg-campo-v1';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/campo'])));
+  event.waitUntil(
+    caches.open(CACHE).then((c) =>
+      c.addAll(['/campo', '/campo/branding/login-logo.png', '/campo/pwa-icon-512.png']),
+    ),
+  );
   self.skipWaiting();
 });
 

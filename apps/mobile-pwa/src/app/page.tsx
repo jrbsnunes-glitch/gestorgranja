@@ -6,6 +6,7 @@ import { campoDb } from '@/lib/db';
 import { getApiBase } from '@/lib/api-base';
 import { EGG_PRODUCTION_FIELDS } from '@/lib/labels';
 import { enqueue, flushSyncQueue } from '@/lib/sync';
+import { PRODUCT_LOGO_PATH } from '@/lib/product-branding';
 
 type Lot = {
   id: string;
@@ -181,11 +182,19 @@ export default function CampoPage() {
 
   return (
     <main className="mx-auto max-w-lg p-4 pb-16">
-      <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-emerald-900">Campo — Postura diária</h1>
-        <span className={`text-xs ${online ? 'text-emerald-700' : 'text-amber-700'}`}>
-          {online ? 'Conectado' : 'Sem internet'}
-        </span>
+      <header className="mb-4 flex flex-col gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={PRODUCT_LOGO_PATH}
+          alt="Gestor Granja"
+          className="mx-auto h-auto w-full max-w-[min(100%,14rem)] object-contain"
+        />
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-lg font-bold text-emerald-900">Campo — Postura diária</h1>
+          <span className={`shrink-0 text-xs ${online ? 'text-emerald-700' : 'text-amber-700'}`}>
+            {online ? 'Conectado' : 'Sem internet'}
+          </span>
+        </div>
       </header>
 
       {!token ? (

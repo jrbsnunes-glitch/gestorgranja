@@ -1,11 +1,25 @@
 {
   "name": "Gestor Granja — Campo",
   "short_name": "GG Campo",
+  "description": "Postura e ponto no galpão, com ou sem internet",
   "lang": "pt-BR",
   "start_url": "/campo",
   "scope": "/campo",
   "display": "standalone",
   "background_color": "#ecfdf5",
   "theme_color": "#047857",
-  "icons": []
+  "icons": [
+    {
+      "src": "/campo/branding/login-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/campo/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
