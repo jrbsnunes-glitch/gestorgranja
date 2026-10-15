@@ -10,6 +10,7 @@ export function FilterPeriodRangeFields({
   onToChange,
   fromLabel = 'Período de',
   toLabel = 'Período até',
+  className = 'grid gap-3 sm:grid-cols-2',
 }: {
   idPrefix: string;
   from: string;
@@ -18,9 +19,10 @@ export function FilterPeriodRangeFields({
   onToChange: (v: string) => void;
   fromLabel?: string;
   toLabel?: string;
+  className?: string;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className={className}>
       <label className="block text-sm">
         <span className="mb-1 block text-slate-600">{fromLabel}</span>
         <input

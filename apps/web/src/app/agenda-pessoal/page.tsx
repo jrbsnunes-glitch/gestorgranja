@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { FormCadastroModal, PageIntro } from '@/components/crud';
@@ -40,6 +41,7 @@ function statusLabel(b: PersonalBill) {
 }
 
 export default function AgendaPessoalPage() {
+  const router = useRouter();
   const [items, setItems] = useState<PersonalBill[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -198,9 +200,14 @@ export default function AgendaPessoalPage() {
           description="Controle seus pagamentos pessoais. Esses registros não afetam o caixa da Granja Aurora."
           showModuleTabs={false}
         />
-        <Button type="button" onClick={() => setFormOpen(true)}>
-          + Nova conta
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={() => router.push('/agenda-pessoal/relatorios')}>
+            Relatórios
+          </Button>
+          <Button type="button" onClick={() => setFormOpen(true)}>
+            + Nova conta
+          </Button>
+        </div>
       </div>
       <ErrorBox message={error} />
 
