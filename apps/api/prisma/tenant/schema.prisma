@@ -52,6 +52,35 @@ model User {
   employees       Employee[]
   cashSessions    CashRegisterSession[] @relation("CashSessionUser")
   reconciledCashSessions CashRegisterSession[] @relation("CashSessionReconciledBy")
+  personalBills   PersonalBill[]
+}
+
+enum PersonalBillStatus {
+  OPEN
+  PAID
+}
+
+/// Contas pessoais do usuário. Não entram no caixa nem no financeiro da granja.
+model PersonalBill {
+  id                 String             @id @default(uuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description        String
+  /// LUZ, FACULDADE, CARRO, CARTAO, INTERNET, TELEFONE, SEGURO ou OUTROS.
+  category           String             @default("OUTROS")
+  amount             Decimal            @db.Decimal(14, 2)
+  amountPaid         Decimal            @default(0) @db.Decimal(14, 2)
+  dueDate            DateTime           @db.Date
+  status             PersonalBillStatus @default(OPEN)
+  settlementNotes    String?
+  paymentLabel       String?
+  installmentIndex   Int?
+  installmentCount   Int?
+  paidAt             DateTime?
+  createdAt          DateTime           @default(now())
+
+  @@index([userId, dueDate])
+  @@index([userId, status])
 }
 
 model UserRoleAssignment {
@@ -980,6 +1009,8 @@ model Partner {
   state              String?
   isCustomer         Boolean             @default(false)
   isSupplier         Boolean             @default(false)
+  /// Teto de saldo em aberto (requisição) para vendas a prazo do cliente.
+  requisitionLimit   Decimal?            @db.Decimal(14, 2)
   payables           AccountPayable[]
   receivables        AccountReceivable[]
   salesOrders        SalesOrder[]
@@ -1019,6 +1050,15 @@ model RecurringFinanceRule {
   receivables    AccountReceivable[]
 }
 
+model FinanceExpenseType {
+  id        String           @id @default(uuid())
+  name      String           @unique
+  iconKey   String
+  isBuiltin Boolean          @default(false)
+  isActive  Boolean          @default(true)
+  payables  AccountPayable[]
+}
+
 model AccountPayable {
   id             String                @id @default(uuid())
   controlNumber  Int
@@ -1026,6 +1066,8 @@ model AccountPayable {
   partner        Partner               @relation(fields: [partnerId], references: [id])
   chartAccountId String
   chartAccount   ChartAccount          @relation(fields: [chartAccountId], references: [id])
+  expenseTypeId  String?
+  expenseType    FinanceExpenseType?   @relation(fields: [expenseTypeId], references: [id], onDelete: SetNull)
   description    String
   amount         Decimal               @db.Decimal(14, 2)
   amountPaid     Decimal               @default(0) @db.Decimal(14, 2)
@@ -1038,6 +1080,7 @@ model AccountPayable {
 
   @@unique([controlNumber])
   @@index([recurringRuleId, dueDate])
+  @@index([expenseTypeId])
 }
 
 model AccountReceivable {
@@ -1161,7 +1204,7 @@ model PaymentForm {
   id            String       @id @default(uuid())
   controlNumber Int          @unique @default(autoincrement())
   name          String
-  /// CASH, PIX, CARD, TRANSFER, BOLETO, OTHER — usado no movimento do caixa
+  /// CASH, PIX, CARD, TRANSFER, BOLETO, REQUISICAO, OTHER — usado no movimento do caixa
   kind          String
   colorHex      String       @default("#0f766e")
   sortOrder     Int          @default(0)
@@ -1188,6 +1231,8 @@ model SalesOrder {
   cashSessionId String?
   cashSession   CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   totalAmount Decimal         @default(0) @db.Decimal(14, 2)
+  /// Parcelas da requisição: { installmentCount, firstDueDate, intervalDays[] }
+  requisitionTermsJson Json?
   items      SalesOrderItem[]
   fiscalDoc  FiscalDocument?
   receivables AccountReceivable[]

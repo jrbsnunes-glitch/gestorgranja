@@ -1,0 +1,1 @@
+ALTER TABLE "PersonalBill" ADD COLUMN "category" TEXT NOT NULL DEFAULT 'OUTROS';

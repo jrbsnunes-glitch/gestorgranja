@@ -10,6 +10,7 @@ export const MODULE_NAV_ICONS = {
   produtos: '/nav/produtos.svg',
   estoque: '/nav/estoque.svg',
   financeiro: '/nav/financeiro.svg',
+  agendaPessoal: '/nav/agenda-pessoal.svg',
   parceiros: '/nav/parceiros.svg',
   rh: '/nav/rh.svg',
   cadastros: '/nav/cadastros.svg',

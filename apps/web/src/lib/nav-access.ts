@@ -83,6 +83,7 @@ const MODULE_ACCESS: Record<string, string[]> = {
   'notas-fiscais': ['fiscal.read', 'fiscal.emit', 'sales.write'],
   parceiros: ['cadastros.read', 'cadastros.write', 'sales.read'],
   financeiro: ['finance.write', 'cash.read', 'cash.write', 'cash.reconcile'],
+  'agenda-pessoal': ['*'],
   rh: ['hr.read', 'hr.write'],
   empresa: ['cadastros.read', 'cadastros.write', 'admin.users'],
   cadastros: ['cadastros.read', 'cadastros.write'],
@@ -98,6 +99,7 @@ function canAccessModule(mod: AppModule, session: SessionUser, sub: TenantSubscr
 
   const required = MODULE_ACCESS[mod.id];
   if (!required) return false;
+  if (mod.id === 'agenda-pessoal') return true;
   return hasAnyPermission(session, required);
 }
 
@@ -113,7 +115,15 @@ export function navItemsForSession(
   }
 
   if (isFieldOperatorLike(session)) {
-    const items: NavItem[] = [PRODUCAO_ITEM];
+    const items: NavItem[] = [
+      PRODUCAO_ITEM,
+      {
+        id: 'agenda-pessoal',
+        label: 'Agenda Pessoal',
+        href: '/agenda-pessoal',
+        icon: MODULE_NAV_ICONS.agendaPessoal,
+      },
+    ];
     return withPontoItem(items, session, sub);
   }
 

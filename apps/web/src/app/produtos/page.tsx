@@ -216,7 +216,6 @@ export default function ProdutosPage() {
         await apiFetch('/v1/inventory/products', {
           method: 'POST',
           body: JSON.stringify({
-            sku: fd.get('sku'),
             type: fd.get('type'),
             ...payload,
             groupId: groupId || undefined,
@@ -248,7 +247,7 @@ export default function ProdutosPage() {
           list={list}
           onInclude={openInclude}
           onReports={() => setReportsOpen(true)}
-          searchPlaceholder="SKU, nome, grupo…"
+          searchPlaceholder="Nome, grupo, controle…"
           filtersActive={list.filtersActive || productFiltersActive(productFilterApplied)}
           onFilterApply={() => setProductFilterApplied(productFilterDraft)}
           onFilterClear={() => {
@@ -323,9 +322,6 @@ export default function ProdutosPage() {
         >
           {!editMode ? (
             <>
-              <Field label="SKU">
-                <input name="sku" className={inputClass} required />
-              </Field>
               <Field label="Tipo">
                 <select name="type" className={inputClass} required>
                   {PRODUCT_TYPES.map((t) => (
@@ -341,8 +337,7 @@ export default function ProdutosPage() {
             </>
           ) : (
             <div className="rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs text-slate-600 sm:col-span-2 lg:col-span-3">
-              SKU <strong className="text-slate-900">{selected?.sku}</strong> · Tipo{' '}
-              <strong className="text-slate-900">{labelEnum(selected?.type)}</strong> · Un.{' '}
+              Tipo <strong className="text-slate-900">{labelEnum(selected?.type)}</strong> · Un.{' '}
               <strong className="text-slate-900">{selected?.unit}</strong>
             </div>
           )}

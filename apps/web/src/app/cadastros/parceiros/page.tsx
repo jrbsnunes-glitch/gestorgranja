@@ -42,6 +42,7 @@ type Partner = {
   state: string | null;
   isCustomer: boolean;
   isSupplier: boolean;
+  requisitionLimit: string | null;
 };
 
 type PartnerTab = 'clientes' | 'fornecedores';
@@ -125,6 +126,8 @@ export default function ParceirosPage() {
         district: selected.district ?? '',
         city: selected.city ?? '',
         state: selected.state ?? '',
+        requisitionLimit:
+          selected.requisitionLimit != null ? String(selected.requisitionLimit) : '',
       });
     }
     return partnerToForm({ personType: tab === 'clientes' ? 'PF' : 'PJ' });
@@ -132,7 +135,14 @@ export default function ParceirosPage() {
 
   async function save(values: PartnerFormValues) {
     setError(null);
-    const body = { ...values, ...flagsForSave() };
+    const limitRaw = values.requisitionLimit.trim();
+    const requisitionLimit =
+      limitRaw === '' ? null : Math.round(Number(limitRaw) * 100) / 100;
+    const body = {
+      ...values,
+      ...flagsForSave(),
+      requisitionLimit,
+    };
     try {
       if (modal === 'edit' && selected) {
         await apiFetch(`/v1/cadastros/partners/${selected.id}`, { method: 'PATCH', body: JSON.stringify(body) });
@@ -218,6 +228,7 @@ export default function ParceirosPage() {
           initial={formInitial()}
           submitLabel="Salvar"
           showStateRegistration
+          showRequisitionLimit={tab === 'clientes'}
           onSubmit={save}
         />
       </FormCadastroModal>

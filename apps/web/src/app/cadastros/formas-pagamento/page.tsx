@@ -19,7 +19,7 @@ type PaymentForm = {
   isActive: boolean;
 };
 
-const KINDS = ['CASH', 'PIX', 'CARD', 'TRANSFER', 'BOLETO', 'OTHER'] as const;
+const KINDS = ['CASH', 'PIX', 'CARD', 'TRANSFER', 'BOLETO', 'REQUISICAO', 'OTHER'] as const;
 
 export default function FormasPagamentoPage() {
   const [rows, setRows] = useState<PaymentForm[]>([]);
@@ -74,7 +74,7 @@ export default function FormasPagamentoPage() {
     <AdminShell title="Formas de pagamento">
       <PageIntro
         title="Formas de pagamento"
-        description="Opções do PDV. Tipo boleto não entra no caixa: gera conta a receber e registro Sicoob."
+        description="Opções do PDV. Boleto e Requisição não entram no caixa: geram contas a receber (Sicoob ou parcelas definidas na venda)."
       />
       <ErrorBox message={error} />
       <ListToolbar list={list} onInclude={() => openForm('include')} searchPlaceholder="Nome, tipo…" />

@@ -4,15 +4,21 @@ import { CashSessionStatus } from '../generated/tenant-client';
 import { SicoobCobrancaService } from '../finance/sicoob-cobranca.service';
 import { calendarDayKeyInTz, monthDayKeysInTz, prismaDateOnly } from '../common/calendar-date.util';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+import { CommercialRequisitionService } from './commercial-requisition.service';
+import { isRequisicaoKind } from './requisition.util';
 
 function isBoletoKind(kind?: string | null) {
   return (kind ?? '').toUpperCase() === 'BOLETO';
 }
 
+function skipsCashInflow(kind?: string | null) {
+  return isBoletoKind(kind) || isRequisicaoKind(kind);
+}
+
 type SalesStatsBucket = { noAto: number; requisicao: number; boleto: number };
 
-function isRequisicaoPayment(_kind?: string | null, name?: string | null) {
-  return Boolean(name && /requis/i.test(name));
+function isRequisicaoPayment(kind?: string | null, name?: string | null) {
+  return isRequisicaoKind(kind) || Boolean(name && /requis/i.test(name));
 }
 
 function paymentBucket(kind?: string | null, name?: string | null): keyof SalesStatsBucket {
@@ -87,6 +93,7 @@ export class CommercialService {
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly sicoob: SicoobCobrancaService,
+    private readonly requisition: CommercialRequisitionService,
   ) {}
 
   async listOrders(user: JwtPayload) {
@@ -170,6 +177,7 @@ export class CommercialService {
       paymentFormId?: string;
       primaryPaymentAmount?: number;
       secondaryPaymentFormId?: string;
+      requisitionTerms?: unknown;
       items: { productId?: string; eggCategory?: string; quantity: number; unitPrice: number; discount?: number }[];
     },
   ) {
@@ -205,6 +213,35 @@ export class CommercialService {
       secondaryPaymentFormId = secondary.paymentFormId;
     }
 
+    let requisitionTermsJson: object | undefined;
+    const payKind = pay.paymentMethod;
+    const secondaryKind = secondaryPaymentFormId
+      ? (
+          await prisma.paymentForm.findUnique({
+            where: { id: secondaryPaymentFormId },
+            select: { kind: true },
+          })
+        )?.kind
+      : null;
+    const needsRequisition =
+      isRequisicaoKind(payKind) ||
+      (secondaryPaymentFormId != null && isRequisicaoKind(secondaryKind));
+    if (needsRequisition) {
+      if (!data.requisitionTerms) {
+        throw new BadRequestException('Informe parcelas, prazos e data da 1ª parcela da requisição.');
+      }
+      requisitionTermsJson = this.requisition.termsFromInput(data.requisitionTerms) as object;
+      const reqAmount =
+        isRequisicaoKind(payKind) && !isRequisicaoKind(secondaryKind)
+          ? primaryPaymentAmount ?? total
+          : isRequisicaoKind(secondaryKind)
+            ? Math.round((total - (primaryPaymentAmount ?? 0)) * 100) / 100
+            : total;
+      await this.requisition.assertCanUseRequisition(user, data.partnerId, reqAmount);
+    } else if (data.requisitionTerms) {
+      throw new BadRequestException('Parcelas de requisição só se aplicam à forma Requisição.');
+    }
+
     return prisma.salesOrder.create({
       data: {
         partnerId: data.partnerId,
@@ -212,6 +249,7 @@ export class CommercialService {
         paymentFormId: pay.paymentFormId,
         primaryPaymentAmount,
         secondaryPaymentFormId,
+        requisitionTermsJson,
         totalAmount: total,
         items: {
           create: data.items.map((i) => ({
@@ -252,7 +290,7 @@ export class CommercialService {
         const secondaryForm = await tx.paymentForm.findUnique({
           where: { id: updated.secondaryPaymentFormId },
         });
-        if (!isBoletoKind(updated.paymentMethod)) {
+        if (!skipsCashInflow(updated.paymentMethod)) {
           await tx.cashMovement.create({
             data: {
               sessionId: session.id,
@@ -263,7 +301,7 @@ export class CommercialService {
             },
           });
         }
-        if (!isBoletoKind(secondaryForm?.kind)) {
+        if (!skipsCashInflow(secondaryForm?.kind)) {
           await tx.cashMovement.create({
             data: {
               sessionId: session.id,
@@ -274,7 +312,7 @@ export class CommercialService {
             },
           });
         }
-      } else if (!isBoletoKind(updated.paymentMethod)) {
+      } else if (!skipsCashInflow(updated.paymentMethod)) {
         await tx.cashMovement.create({
           data: {
             sessionId: session.id,
@@ -306,7 +344,8 @@ export class CommercialService {
       return updated;
     });
     const boleto = await this.sicoob.afterSaleConfirmed(user, orderId);
-    return { ...updated, boleto };
+    const requisitionReceivables = await this.requisition.createReceivablesForOrder(user, orderId);
+    return { ...updated, boleto, requisitionReceivables };
   }
 
   /** Estorna venda confirmada (estoque + caixa). Não disponível com NF autorizada ou boleto emitido. */
@@ -337,6 +376,7 @@ export class CommercialService {
     const estornoRef = `Estorno ${order.controlNumber}`;
 
     return prisma.$transaction(async (tx) => {
+      await this.requisition.cancelReceivablesForOrder(tx, orderId);
       const stockAccount = await tx.chartAccount.findFirst({
         where: { code: '1.1.3.04', isActive: true, isPosting: true },
       });
@@ -360,7 +400,7 @@ export class CommercialService {
         if (order.secondaryPaymentFormId && order.primaryPaymentAmount != null) {
           const primaryAmt = Number(order.primaryPaymentAmount);
           const secondaryAmt = Math.round((total - primaryAmt) * 100) / 100;
-          if (!isBoletoKind(order.paymentMethod)) {
+          if (!skipsCashInflow(order.paymentMethod)) {
             await tx.cashMovement.create({
               data: {
                 sessionId: order.cashSessionId,
@@ -371,7 +411,7 @@ export class CommercialService {
               },
             });
           }
-          if (!isBoletoKind(order.secondaryPaymentForm?.kind)) {
+          if (!skipsCashInflow(order.secondaryPaymentForm?.kind)) {
             await tx.cashMovement.create({
               data: {
                 sessionId: order.cashSessionId,
@@ -382,7 +422,7 @@ export class CommercialService {
               },
             });
           }
-        } else if (!isBoletoKind(order.paymentMethod)) {
+        } else if (!skipsCashInflow(order.paymentMethod)) {
           await tx.cashMovement.create({
             data: {
               sessionId: order.cashSessionId,
@@ -435,7 +475,9 @@ export class CommercialService {
               ? 'Transferência'
               : kind === 'BOLETO'
                 ? 'Boleto'
-                : kind ?? '—');
+                : kind === 'REQUISICAO'
+                  ? 'Requisição'
+                  : kind ?? '—');
     let paymentLabel = labelForForm(order.paymentForm?.name, order.paymentMethod);
     if (order.secondaryPaymentFormId && order.primaryPaymentAmount != null) {
       const primaryAmt = Number(order.primaryPaymentAmount);

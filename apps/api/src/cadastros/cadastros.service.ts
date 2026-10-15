@@ -150,6 +150,7 @@ export class CadastrosService {
           state: row.state,
           isCustomer: data.isCustomer,
           isSupplier: data.isSupplier,
+          requisitionLimit: row.requisitionLimit,
         },
       }),
     );

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@gestor-granja/ui';
 import { ErrorBox } from '@/components/ui-parts';
@@ -62,9 +63,39 @@ function CheckPill({ ok, label }: { ok: boolean; label: string }) {
 
 type Row3 = { label: string; cartons: number; boxes: number; eggs: number };
 
+function CollapsibleSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 bg-slate-50 px-3 py-2.5 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">{title}</span>
+        <svg
+          viewBox="0 0 20 20"
+          className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          aria-hidden
+        >
+          <path fill="currentColor" d="M5.2 7.5 10 12.3l4.8-4.8 1.2 1.2L10 14.7 4 8.7l1.2-1.2Z" />
+        </svg>
+      </button>
+      {open ? <div className="border-t border-slate-200 bg-white p-3">{children}</div> : null}
+    </div>
+  );
+}
+
 function MetricTable({ rows }: { rows: Row3[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="overflow-x-auto">
       <table className="w-full min-w-[420px] text-left text-sm">
         <thead>
           <tr className="border-b border-slate-100 bg-slate-50/90 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -203,7 +234,9 @@ export function EggStockReconciliationPanel({
         <CheckPill ok={data.checks.stockMatchesProductionTargets} label="Saldo × postura (sem vendas)" />
       </div>
 
-      <MetricTable rows={rows} />
+      <CollapsibleSection title="Métricas">
+        <MetricTable rows={rows} />
+      </CollapsibleSection>
 
       <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
         <div className="rounded-lg bg-slate-50 px-3 py-2">
@@ -238,10 +271,7 @@ export function EggStockReconciliationPanel({
       </div>
 
       {data.otherMovesSample.length > 0 ? (
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Movimentos fora da postura (amostra)
-          </p>
+        <CollapsibleSection title="Movimentos fora da postura (amostra)">
           <ul className="space-y-1 text-sm">
             {data.otherMovesSample.map((m, i) => (
               <li key={`${m.at}-${i}`} className="flex flex-wrap gap-x-2 text-slate-700">
@@ -257,7 +287,7 @@ export function EggStockReconciliationPanel({
               Ver todas as movimentações
             </Link>
           </p>
-        </div>
+        </CollapsibleSection>
       ) : null}
 
       {!compact ? (

@@ -6,13 +6,23 @@ import { PermissionsGuard } from '../auth/permissions.guard';
 import { CurrentUser } from '../auth/tenant.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CommercialService } from './commercial.service';
+import { CommercialRequisitionService } from './commercial-requisition.service';
 
 @ApiTags('commercial')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('v1/commercial')
 export class CommercialController {
-  constructor(private readonly commercial: CommercialService) {}
+  constructor(
+    private readonly commercial: CommercialService,
+    private readonly requisition: CommercialRequisitionService,
+  ) {}
+
+  @Get('partners/:partnerId/requisition-credit')
+  @RequirePermissions('sales.read', 'sales.write', 'finance.read', '*')
+  requisitionCredit(@CurrentUser() user: JwtPayload, @Param('partnerId') partnerId: string) {
+    return this.requisition.getPartnerRequisitionCredit(user, partnerId);
+  }
 
   @Get('stats')
   @RequirePermissions('sales.read', 'sales.write', 'cash.read', '*')

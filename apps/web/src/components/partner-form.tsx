@@ -23,6 +23,7 @@ export type PartnerFormValues = {
   district: string;
   city: string;
   state: string;
+  requisitionLimit: string;
 };
 
 export const emptyPartnerForm = (personType: 'PF' | 'PJ' = 'PJ'): PartnerFormValues => ({
@@ -42,6 +43,7 @@ export const emptyPartnerForm = (personType: 'PF' | 'PJ' = 'PJ'): PartnerFormVal
   district: '',
   city: '',
   state: '',
+  requisitionLimit: '',
 });
 
 export function partnerIeModeFromRegistration(stateRegistration?: string | null): PartnerIeMode {
@@ -65,6 +67,7 @@ export function PartnerForm({
   submitLabel,
   onSubmit,
   showStateRegistration,
+  showRequisitionLimit,
   formId,
   hideSubmit,
 }: {
@@ -72,6 +75,8 @@ export function PartnerForm({
   submitLabel: string;
   onSubmit: (values: PartnerFormValues) => void | Promise<void>;
   showStateRegistration?: boolean;
+  /** Clientes — limite para vendas em requisição (a prazo). */
+  showRequisitionLimit?: boolean;
   formId?: string;
   hideSubmit?: boolean;
 }) {
@@ -211,6 +216,23 @@ export function PartnerForm({
                 : 'A NF-e usará a IE informada (operação B2B, indFinal normal).'}
           </p>
         </div>
+      ) : null}
+
+      {showRequisitionLimit ? (
+        <Field label="Limite de requisição (R$)">
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            step="0.01"
+            value={form.requisitionLimit}
+            onChange={(e) => set('requisitionLimit', e.target.value)}
+            placeholder="0 = sem compra a prazo por requisição"
+          />
+          <p className="mt-1 text-xs text-slate-600">
+            Teto do saldo em aberto (contas a receber de requisição) para este cliente.
+          </p>
+        </Field>
       ) : null}
 
       <div className="grid gap-0 sm:grid-cols-2 sm:gap-x-3">

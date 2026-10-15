@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { dateInInclusiveRange, dateRangeActive, type DateRangeFilter, EMPTY_DATE_RANGE } from '@/lib/list-filters';
 import { matchesListSearch } from '@/lib/list-search';
 
@@ -20,19 +20,34 @@ export function useCrudList<T>({
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterDraft, setFilterDraft] = useState<DateRangeFilter>(EMPTY_DATE_RANGE);
   const [filterApplied, setFilterApplied] = useState<DateRangeFilter>(EMPTY_DATE_RANGE);
+  const filterDraftRef = useRef(filterDraft);
+  filterDraftRef.current = filterDraft;
 
+  const applyFilters = useCallback(() => {
+    const next = { ...filterDraftRef.current };
+    setFilterApplied(next);
+    setFilterOpen(false);
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setFilterDraft(EMPTY_DATE_RANGE);
+    setFilterApplied(EMPTY_DATE_RANGE);
+  }, []);
+
+  const appliedFrom = filterApplied.from;
+  const appliedTo = filterApplied.to;
   const filtersActive = dateRangeActive(filterApplied);
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
       if (!matchesListSearch(searchFields(item), searchQuery)) return false;
-      if (dateField && filtersActive && !dateInInclusiveRange(dateField(item), filterApplied.from, filterApplied.to)) {
+      if (dateField && filtersActive && !dateInInclusiveRange(dateField(item), appliedFrom, appliedTo)) {
         return false;
       }
       if (extraFilter && !extraFilter(item, { dateRange: filterApplied })) return false;
       return true;
     });
-  }, [items, searchFields, searchQuery, dateField, filterApplied, filtersActive, extraFilter]);
+  }, [items, searchFields, searchQuery, dateField, appliedFrom, appliedTo, filtersActive, extraFilter, filterApplied]);
 
   const searchResultLabel = useCallback(
     (item: unknown) => {
@@ -58,13 +73,7 @@ export function useCrudList<T>({
     setFilterDraft,
     filterApplied,
     filtersActive,
-    applyFilters: () => {
-      setFilterApplied(filterDraft);
-      setFilterOpen(false);
-    },
-    clearFilters: () => {
-      setFilterDraft(EMPTY_DATE_RANGE);
-      setFilterApplied(EMPTY_DATE_RANGE);
-    },
+    applyFilters,
+    clearFilters,
   };
 }

@@ -30,6 +30,9 @@ export function ProductLookupField({
   placeholder = 'Clique para pesquisar…',
   disabled,
   allowEmpty,
+  bare = false,
+  hideClear = false,
+  className = '',
 }: {
   name?: string;
   value?: string;
@@ -41,6 +44,10 @@ export function ProductLookupField({
   disabled?: boolean;
   /** Exibe opção vazia (ex.: produto opcional) */
   allowEmpty?: boolean;
+  /** Só o campo, sem o rótulo do formulário — para alinhar com botões na mesma linha. */
+  bare?: boolean;
+  hideClear?: boolean;
+  className?: string;
 }) {
   const [internalId, setInternalId] = useState(defaultValue);
   const selectedId = controlledValue !== undefined ? controlledValue : internalId;
@@ -98,7 +105,6 @@ export function ProductLookupField({
       const created = await apiFetch<ProductRow>('/v1/inventory/products', {
         method: 'POST',
         body: JSON.stringify({
-          sku: fd.get('sku'),
           name: fd.get('name'),
           type: fd.get('type') || 'SUPPLY',
           unit: fd.get('unit') || 'UN',
@@ -116,38 +122,42 @@ export function ProductLookupField({
 
   const display = selected ? productLabel(selected) : '';
 
-  return (
+  const control = (
     <>
-      <Field label={label}>
-        {name ? (
-          <input type="hidden" name={name} value={selectedId} required={required && !selectedId && !allowEmpty} />
-        ) : null}
+      {name ? (
+        <input type="hidden" name={name} value={selectedId} required={required && !selectedId && !allowEmpty} />
+      ) : null}
+      <button
+        type="button"
+        disabled={disabled}
+        className={`${inputClass} ${className} flex w-full items-center justify-between gap-2 text-left ${disabled ? 'opacity-60' : ''}`}
+        onClick={() => {
+          if (!disabled) {
+            setQuery('');
+            setSearchOpen(true);
+          }
+        }}
+      >
+        <span className={display ? 'truncate text-slate-900' : 'truncate text-slate-400'}>
+          {display || placeholder}
+        </span>
+        <span className="shrink-0 text-xs font-medium text-emerald-800">Pesquisar</span>
+      </button>
+      {!hideClear && (selectedId || allowEmpty) ? (
         <button
           type="button"
-          disabled={disabled}
-          className={`${inputClass} flex w-full items-center justify-between gap-2 text-left ${disabled ? 'opacity-60' : ''}`}
-          onClick={() => {
-            if (!disabled) {
-              setQuery('');
-              setSearchOpen(true);
-            }
-          }}
+          className="mt-1 text-xs text-slate-500 hover:text-slate-800"
+          onClick={() => pick(null)}
         >
-          <span className={display ? 'truncate text-slate-900' : 'truncate text-slate-400'}>
-            {display || placeholder}
-          </span>
-          <span className="shrink-0 text-xs font-medium text-emerald-800">Pesquisar</span>
+          Limpar seleção
         </button>
-        {selectedId || allowEmpty ? (
-          <button
-            type="button"
-            className="mt-1 text-xs text-slate-500 hover:text-slate-800"
-            onClick={() => pick(null)}
-          >
-            Limpar seleção
-          </button>
-        ) : null}
-      </Field>
+      ) : null}
+    </>
+  );
+
+  return (
+    <>
+      {bare ? control : <Field label={label}>{control}</Field>}
 
       <FormCadastroModal
         open={searchOpen}
@@ -176,7 +186,7 @@ export function ProductLookupField({
             className={inputClass}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="SKU ou nome…"
+            placeholder="Nome ou controle…"
             autoFocus
           />
         </Field>
@@ -227,12 +237,11 @@ export function ProductLookupField({
       >
         {createError ? <p className="mb-3 text-sm text-red-700">{createError}</p> : null}
         <form id="product-quick-create" onSubmit={saveProduct} className="grid gap-3 sm:grid-cols-2">
-          <Field label="SKU">
-            <input name="sku" className={inputClass} required />
-          </Field>
-          <Field label="Nome">
-            <input name="name" className={inputClass} required />
-          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Nome">
+              <input name="name" className={inputClass} required />
+            </Field>
+          </div>
           <Field label="Tipo">
             <select name="type" className={inputClass} defaultValue="SUPPLY">
               {PRODUCT_TYPES.map((t) => (

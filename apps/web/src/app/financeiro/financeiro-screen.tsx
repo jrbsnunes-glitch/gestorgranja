@@ -1,8 +1,9 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
+import { ModuleSectionTabs } from '@/components/module-section-tabs';
 import {
   FormCadastroModal,
   ModuleReportsModal,
@@ -10,9 +11,18 @@ import {
   RecordViewModal,
   useCrudList,
 } from '@/components/crud';
-import { ListToolbar, PaginatedTable, RowActions, usePagination } from '@/components/list-crud';
+import {
+  FinanceTitlesToolbar,
+  type FinancePeriodPreset,
+  type FinanceStatusTab,
+} from '@/components/finance/finance-titles-toolbar';
+import { PayablesWorkspace } from '@/components/finance/payables-workspace';
+import { ReceivablesClientWorkspace } from '@/components/finance/receivables-client-workspace';
+import { rangeForFinancePeriodPreset } from '@/lib/finance-period-range';
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
+import { ExpenseTypeField } from '@/components/finance/expense-type-field';
+import { PersonalBillDescription } from '@/components/agenda/personal-bill-kind';
 import { PartnerLookupField } from '@/components/partner-lookup-field';
 import { FinanceTitlesReportLauncher } from '@/components/finance-titles-report-launcher';
 import { TitleSettlementForm } from '@/components/title-settlement-form';
@@ -22,8 +32,23 @@ import { labelEnum } from '@/lib/labels';
 import { formatCalendarDatePtBR, prismaDateDayKey } from '@/lib/calendar-date';
 import { titleDueDayOffset, titleDueRowClass, titleDueUrgency } from '@/lib/finance-title-due';
 import { formatBrl } from '@/lib/money';
+import {
+  dateInInclusiveRange,
+  dateRangeActive,
+  EMPTY_DATE_RANGE,
+  type DateRangeFilter,
+} from '@/lib/list-filters';
 
-type Partner = { id: string; name: string };
+type Partner = {
+  id: string;
+  name: string;
+  controlNumber?: number;
+  cpf?: string | null;
+  cnpj?: string | null;
+  document?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+};
 type ChartAccountRef = { id: string; code: string; name: string };
 type Payable = {
   id: string;
@@ -36,6 +61,10 @@ type Payable = {
   settlementNotes?: string | null;
   partner: Partner;
   chartAccount: ChartAccountRef;
+  expenseType?: { id: string; name: string; iconKey: string } | null;
+  balance?: number;
+  overdueDays?: number;
+  settled?: boolean;
 };
 type Receivable = {
   id: string;
@@ -52,15 +81,23 @@ type Receivable = {
   settled?: boolean;
   settlementNotes?: string | null;
   boletos?: BankBoletoDto[];
-};
-
-type Concentration = {
-  partnerName: string;
-  openBalance: number;
-  sharePct: number;
+  salesOrder?: {
+    controlNumber?: number;
+    orderDate: string;
+    paymentMethod?: string | null;
+    paymentForm?: { kind: string; name: string } | null;
+  } | null;
 };
 
 export type FinanceiroTab = 'pagar' | 'receber';
+
+function titlePaidAmount(amount: string, amountPaid?: string) {
+  return Number(amountPaid ?? 0);
+}
+
+function titleRemaining(amount: string, amountPaid?: string) {
+  return Number(amount) - titlePaidAmount(amount, amountPaid);
+}
 
 function TitleScheduleFields({
   isFixed,
@@ -127,6 +164,28 @@ function matchDueFilter(dueDate: string, filter?: FinanceListFilter) {
   return true;
 }
 
+function matchesFinanceStatusTab(dueDate: string, settled: boolean, tab: FinanceStatusTab): boolean {
+  if (tab === 'todos') return true;
+  const overdue = !settled && titleDueDayOffset(dueDate) < 0;
+  if (tab === 'pagos') return settled;
+  if (tab === 'vencidos') return overdue;
+  if (tab === 'aberto') return !settled && !overdue;
+  return true;
+}
+
+function receivableListDate(r: Receivable): string {
+  return prismaDateDayKey(r.salesOrder?.orderDate ?? r.dueDate);
+}
+
+function filterByAppliedDateRange<T>(
+  items: T[],
+  applied: DateRangeFilter,
+  dayKey: (item: T) => string,
+): T[] {
+  if (!dateRangeActive(applied)) return items;
+  return items.filter((item) => dateInInclusiveRange(dayKey(item), applied.from, applied.to));
+}
+
 export function FinanceiroScreen({
   tab,
   listFilter,
@@ -144,44 +203,87 @@ export function FinanceiroScreen({
   const [reportsOpen, setReportsOpen] = useState(false);
   const [viewPay, setViewPay] = useState<Payable | null>(null);
   const [viewRec, setViewRec] = useState<Receivable | null>(null);
-  const [concentration, setConcentration] = useState<Concentration[]>([]);
   const [settlementOpen, setSettlementOpen] = useState<'pay' | 'rec' | null>(null);
+  const [statusFilter, setStatusFilter] = useState<FinanceStatusTab>('aberto');
+  const [payDateDraft, setPayDateDraft] = useState(EMPTY_DATE_RANGE);
+  const [payDateApplied, setPayDateApplied] = useState(EMPTY_DATE_RANGE);
+  const [recDateDraft, setRecDateDraft] = useState(EMPTY_DATE_RANGE);
+  const [recDateApplied, setRecDateApplied] = useState(EMPTY_DATE_RANGE);
+  const [payPeriodPreset, setPayPeriodPreset] = useState<FinancePeriodPreset>('month');
+  const [ddaModalOpen, setDdaModalOpen] = useState(false);
+  const payDateDraftRef = useRef(payDateDraft);
+  payDateDraftRef.current = payDateDraft;
+  const recDateDraftRef = useRef(recDateDraft);
+  recDateDraftRef.current = recDateDraft;
   const [fixedRecurring, setFixedRecurring] = useState(false);
   const [editPay, setEditPay] = useState<Payable | null>(null);
   const [editRec, setEditRec] = useState<Receivable | null>(null);
 
+  function payableSettled(p: Payable) {
+    return (
+      p.settled === true ||
+      p.approvalStatus === 'PAID' ||
+      titleRemaining(p.amount, p.amountPaid) <= 0.004
+    );
+  }
+
+  function receivableSettled(r: Receivable) {
+    return (
+      r.settled === true ||
+      r.approvalStatus === 'PAID' ||
+      titleRemaining(r.amount, r.amountPaid) <= 0.004
+    );
+  }
+
   const payFiltered = payables.filter((p) => matchDueFilter(p.dueDate, listFilter));
 
-  const payList = useCrudList({
-    items: payFiltered,
-    searchFields: (p) => [p.description, p.partner.name, p.approvalStatus, p.chartAccount.code],
-  });
-  const payPag = usePagination(payList.filtered);
+  const payByDate = useMemo(
+    () =>
+      filterByAppliedDateRange(payFiltered, payDateApplied, (p) => prismaDateDayKey(p.dueDate)),
+    [payFiltered, payDateApplied],
+  );
 
-  const recOpenOnly = receivables.filter((r) => !r.settled && matchDueFilter(r.dueDate, listFilter));
+  const payStatusFilter = useCallback(
+    (p: Payable) => matchesFinanceStatusTab(p.dueDate, payableSettled(p), statusFilter),
+    [statusFilter],
+  );
+
+  const payList = useCrudList({
+    items: payByDate,
+    searchFields: (p) => [p.partner.name, p.description, p.approvalStatus, p.chartAccount.code],
+    extraFilter: (p) => payStatusFilter(p),
+  });
+  const recVisible = receivables.filter((r) => matchDueFilter(r.dueDate, listFilter));
+
+  const recByDate = useMemo(
+    () => filterByAppliedDateRange(recVisible, recDateApplied, receivableListDate),
+    [recVisible, recDateApplied],
+  );
+
+  const recStatusFilter = useCallback(
+    (r: Receivable) => matchesFinanceStatusTab(r.dueDate, receivableSettled(r), statusFilter),
+    [statusFilter],
+  );
+
   const recList = useCrudList({
-    items: recOpenOnly,
+    items: recByDate,
     searchFields: (r) => [
-      r.description,
       r.partner.name,
+      r.description,
       r.approvalStatus,
       r.chartAccount.code,
       String(r.controlNumber ?? ''),
     ],
+    extraFilter: (r) => recStatusFilter(r),
   });
-  const recPag = usePagination(recList.filtered);
-
   const load = useCallback(() => {
     if (tab === 'receber') {
-      void apiFetch<{ items: Receivable[]; concentration: Concentration[] }>('/v1/finance/receivables/detail').then(
-        (d) => {
-          setReceivables(d.items);
-          setConcentration(d.concentration);
-        },
-      );
+      void apiFetch<{ items: Receivable[] }>('/v1/finance/receivables/detail').then((d) => {
+        setReceivables(d.items);
+      });
     } else {
-      void apiFetch<{ payables: Payable[]; receivables: Receivable[] }>('/v1/finance/open').then((d) => {
-        setPayables(d.payables);
+      void apiFetch<{ items: Payable[] }>('/v1/finance/payables/detail').then((d) => {
+        setPayables(d.items);
       });
     }
     void apiFetch<Partner[]>('/v1/cadastros/partners').then(setPartners);
@@ -190,6 +292,42 @@ export function FinanceiroScreen({
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    setStatusFilter('aberto');
+    if (tab === 'pagar') {
+      const range = rangeForFinancePeriodPreset('month');
+      if (range) {
+        setPayDateDraft(range);
+        setPayDateApplied(range);
+        setPayPeriodPreset('month');
+      }
+    }
+  }, [tab]);
+
+  const applyPayPeriodPreset = useCallback((preset: FinancePeriodPreset, applyDates = true) => {
+    setPayPeriodPreset(preset);
+    const range = rangeForFinancePeriodPreset(preset);
+    if (range && applyDates) {
+      setPayDateDraft(range);
+      setPayDateApplied(range);
+    }
+  }, []);
+
+  const activeTitleList = tab === 'pagar' ? payList : recList;
+
+  const applyDateFilters = useCallback(() => {
+    const next = tab === 'pagar' ? payDateDraftRef.current : recDateDraftRef.current;
+    const snapshot = { from: next.from, to: next.to };
+    if (tab === 'pagar') {
+      setPayDateApplied(snapshot);
+    } else {
+      setRecDateApplied(snapshot);
+    }
+  }, [tab]);
+
+  const dateDraft = tab === 'pagar' ? payDateDraft : recDateDraft;
+  const setDateDraft = tab === 'pagar' ? setPayDateDraft : setRecDateDraft;
 
   async function createPayable(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -208,6 +346,7 @@ export function FinanceiroScreen({
     const base = {
       partnerId,
       chartAccountId,
+      expenseTypeId: String(fd.get('expenseTypeId') || '') || undefined,
       description: fd.get('description'),
       amount: Number(fd.get('amount')),
     };
@@ -304,6 +443,7 @@ export function FinanceiroScreen({
     settlementDate: string;
     notes: string;
     chartAccountId: string;
+    expenseTypeId?: string;
   }) {
     if (!viewPay) return;
     setError(null);
@@ -343,14 +483,6 @@ export function FinanceiroScreen({
     }
   }
 
-  function titlePaidAmount(amount: string, amountPaid?: string) {
-    return Number(amountPaid ?? 0);
-  }
-
-  function titleRemaining(amount: string, amountPaid?: string) {
-    return Number(amount) - titlePaidAmount(amount, amountPaid);
-  }
-
   function isTitleCancelledStatus(status: string) {
     return status === 'CANCELLED';
   }
@@ -379,6 +511,28 @@ export function FinanceiroScreen({
     return prismaDateDayKey(iso);
   }
 
+  type TitleSituation = 'pendente' | 'pago' | 'vencido';
+
+  function titleSituation(dueDate: string, settled: boolean): TitleSituation {
+    if (settled) return 'pago';
+    if (titleDueDayOffset(dueDate) < 0) return 'vencido';
+    return 'pendente';
+  }
+
+  function SituationBadge({ situation }: { situation: TitleSituation }) {
+    const cls =
+      situation === 'pago'
+        ? 'bg-emerald-100 text-emerald-800'
+        : situation === 'vencido'
+          ? 'bg-red-100 text-red-800'
+          : 'bg-amber-100 text-amber-900';
+    const label =
+      situation === 'pago' ? 'Pago' : situation === 'vencido' ? 'Vencido' : 'Em aberto';
+    return (
+      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{label}</span>
+    );
+  }
+
   function dueRowClassForTitle(dueDate: string, skipHighlight = false) {
     if (skipHighlight) return '';
     return titleDueRowClass(titleDueUrgency(dueDate));
@@ -405,6 +559,7 @@ export function FinanceiroScreen({
         body: JSON.stringify({
           partnerId,
           chartAccountId,
+          expenseTypeId: String(fd.get('expenseTypeId') || '') || null,
           description: fd.get('description'),
           amount: Number(fd.get('amount')),
           dueDate: fd.get('dueDate'),
@@ -552,137 +707,126 @@ export function FinanceiroScreen({
 
   const reportsTitle = tab === 'pagar' ? 'Contas a pagar' : 'Contas a receber';
 
+  const listTitle = tab === 'pagar' ? 'Contas a pagar' : 'Contas a receber';
+  const novaContaLabel = tab === 'pagar' ? '+ Nova despesa' : '+ Nova conta a receber';
+  const pageDescription =
+    tab === 'pagar'
+      ? 'Despesas da granja. Inclui compras no CNPJ e no CPF quando forem da granja.'
+      : undefined;
+
   return (
     <AdminShell title="Financeiro">
-      <PageIntro
-        title="Financeiro"
-        description="Inclusão com parcelas ou conta fixa mensal; aprovação e baixa nos títulos em aberto."
-      />
-      <ErrorBox message={error} />
-
-      {tab === 'pagar' ? (
-        <PageCard title="Contas a pagar em aberto">
-          <ListToolbar
-            list={payList}
-            onInclude={() => {
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <PageIntro title={listTitle} description={pageDescription} showModuleTabs={false} />
+        <div className="flex flex-wrap gap-2 pt-1">
+          {tab === 'pagar' ? (
+            <Button type="button" variant="secondary" onClick={() => setDdaModalOpen(true)}>
+              Consultar boletos DDA
+            </Button>
+          ) : null}
+          <Button type="button" variant="secondary" onClick={() => setReportsOpen(true)}>
+            Relatórios
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
               setFixedRecurring(false);
               setFormOpen(true);
               setError(null);
             }}
-            onReports={() => setReportsOpen(true)}
-            showPrint={false}
-            searchPlaceholder="Descrição, parceiro, status…"
-          />
-          <PaginatedTable
-            headers={['Descrição', 'Parceiro', 'Valor', 'Venc.', 'Status', 'Aprovar', 'Ações']}
-            recordItems={payPag.slice}
-            rows={payPag.slice.map((p) => [
-              p.description,
-              p.partner.name,
-              formatBrl(Number(p.amount)),
-              formatCalendarDatePtBR(p.dueDate),
-              labelEnum(p.approvalStatus),
-              p.approvalStatus === 'PENDING' ? (
-                <Button
-                  key={`ap-${p.id}`}
-                  type="button"
-                  className="px-2 py-1 text-xs"
-                  onClick={() => void approvePayable(p.id, true)}
-                >
-                  Aprovar
-                </Button>
-              ) : (
-                '—'
-              ),
-              <RowActions
-                key={p.id}
-                onView={() => {
-                  setViewPay(p);
-                  setViewPayOpen(true);
-                }}
-                onEdit={
-                  payableCanEdit(p)
-                    ? () => {
-                        setEditPay(p);
-                        setError(null);
-                      }
-                    : undefined
+          >
+            {novaContaLabel}
+          </Button>
+        </div>
+      </div>
+      <div className="mb-4">
+        <ModuleSectionTabs />
+      </div>
+      <ErrorBox message={error} />
+
+      <PageCard>
+        <FinanceTitlesToolbar
+          statusTab={statusFilter}
+          onStatusTabChange={setStatusFilter}
+          searchQuery={activeTitleList.searchQuery}
+          onSearchQueryChange={activeTitleList.setSearchQuery}
+          searchPlaceholder={
+            tab === 'pagar' ? 'Buscar fornecedor ou descrição…' : 'Pesquisar cliente…'
+          }
+          dateFrom={dateDraft.from}
+          dateTo={dateDraft.to}
+          onDateFromChange={(v) => {
+            if (tab === 'pagar') setPayPeriodPreset('custom');
+            setDateDraft((d) => ({ ...d, from: v }));
+          }}
+          onDateToChange={(v) => {
+            if (tab === 'pagar') setPayPeriodPreset('custom');
+            setDateDraft((d) => ({ ...d, to: v }));
+          }}
+          onFilterApply={applyDateFilters}
+          onRefresh={load}
+          periodPreset={tab === 'pagar' ? payPeriodPreset : undefined}
+          onPeriodPresetChange={
+            tab === 'pagar'
+              ? (preset) => {
+                  applyPayPeriodPreset(preset, preset !== 'custom');
                 }
-              />,
-            ])}
-            page={payPag.page}
-            totalPages={payPag.totalPages}
-            total={payPag.total}
-            onPage={payPag.setPage}
-            rowClassNames={payPag.slice.map((p) =>
-              dueRowClassForTitle(p.dueDate, payableHasPayment(p) || isTitleCancelledStatus(p.approvalStatus)),
-            )}
+              : undefined
+          }
+        />
+
+        {tab === 'pagar' ? (
+          <PayablesWorkspace
+            payables={payList.filtered}
+            ddaOpen={ddaModalOpen}
+            onDdaOpenChange={setDdaModalOpen}
+            onView={(p) => {
+              setViewPay(p as Payable);
+              setViewPayOpen(true);
+            }}
+            onEdit={(p) => {
+              setEditPay(p as Payable);
+              setError(null);
+            }}
+            onPay={(p) => {
+              setViewPay(p as Payable);
+              setSettlementOpen('pay');
+            }}
+            onApprove={(p) => void approvePayable(p.id, true)}
+            onCancel={async (p) => {
+              if (!window.confirm('Cancelar este registro de conta a pagar?')) return;
+              setError(null);
+              try {
+                await apiFetch(`/v1/finance/payables/${p.id}/cancel`, { method: 'PATCH' });
+                load();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Erro');
+              }
+            }}
+            canEdit={(p) => payableCanEdit(p as Payable)}
+            canPay={(p) =>
+              (p as Payable).approvalStatus === 'APPROVED' &&
+              !payableSettled(p as Payable) &&
+              !isTitleCancelledStatus((p as Payable).approvalStatus)
+            }
           />
-        </PageCard>
-      ) : (
-        <>
-          {concentration.length > 0 ? (
-            <PageCard title="Concentração — top clientes">
-              <ul className="space-y-1 text-sm">
-                {concentration.slice(0, 3).map((c) => (
-                  <li key={c.partnerName} className="flex justify-between">
-                    <span>{c.partnerName}</span>
-                    <span className="tabular-nums">
-                      {formatBrl(c.openBalance)} ({c.sharePct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%)
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </PageCard>
-          ) : null}
-          <PageCard title="Contas a receber">
-            <ListToolbar
-              list={recList}
-              onInclude={() => {
-                setFixedRecurring(false);
-                setFormOpen(true);
-                setError(null);
-              }}
-              onReports={() => setReportsOpen(true)}
-              showPrint={false}
-              searchPlaceholder="Controle, descrição, parceiro…"
-            />
-            <PaginatedTable
-              headers={['Descrição', 'Parceiro', 'Venc.', 'Atraso', 'Saldo', 'Ações']}
-              recordItems={recPag.slice}
-              rows={recPag.slice.map((r) => [
-                r.description,
-                r.partner.name,
-                formatCalendarDatePtBR(r.dueDate),
-                r.overdueDays && r.overdueDays > 0 ? `${r.overdueDays}d` : '—',
-                formatBrl(r.balance ?? Number(r.amount)),
-                <RowActions
-                  key={r.id}
-                  onView={() => {
-                    setViewRec(r);
-                    setViewRecOpen(true);
-                  }}
-                  onEdit={
-                    receivableCanEdit(r)
-                      ? () => {
-                          setEditRec(r);
-                          setError(null);
-                        }
-                      : undefined
-                  }
-                />,
-              ])}
-              page={recPag.page}
-              totalPages={recPag.totalPages}
-              total={recPag.total}
-              onPage={recPag.setPage}
-              rowClassNames={recPag.slice.map((r) =>
-                dueRowClassForTitle(r.dueDate, receivableHasPayment(r) || isTitleCancelledStatus(r.approvalStatus)),
-              )}
-            />
-          </PageCard>
-        </>
-      )}
+        ) : (
+          <ReceivablesClientWorkspace
+            receivables={recList.filtered}
+            onViewTitle={(r) => {
+              setViewRec(r as Receivable);
+              setViewRecOpen(true);
+            }}
+            onEditTitle={(r) => {
+              setEditRec(r as Receivable);
+              setError(null);
+            }}
+            onViewBoleto={(id) => void viewReceivableBoleto(id)}
+            canEditTitle={(r) => receivableCanEdit(r as Receivable)}
+            hasBoletoLink={(r) => !receivableHasPayment(r as Receivable)}
+          />
+        )}
+      </PageCard>
 
       <FormCadastroModal
         open={formOpen && tab === 'pagar'}
@@ -708,6 +852,7 @@ export function FinanceiroScreen({
             <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
           ) : null}
           <PartnerLookupField role="supplier" name="partnerId" required label="Fornecedor / parceiro" />
+          <ExpenseTypeField />
           <Field label="Conta contábil (despesa/custo)">
             <ChartAccountSelect flow="payable" required />
           </Field>
@@ -971,6 +1116,7 @@ export function FinanceiroScreen({
               label="Fornecedor / parceiro"
               defaultValue={editPay.partner.id}
             />
+            <ExpenseTypeField defaultValue={editPay.expenseType?.id} />
             <Field label="Conta contábil (despesa/custo)">
               <ChartAccountSelect flow="payable" required defaultValue={editPay.chartAccount.id} />
             </Field>
@@ -1085,6 +1231,7 @@ export function FinanceiroScreen({
             titleAmount={Number(viewPay.amount)}
             amountPaid={titlePaidAmount(viewPay.amount, viewPay.amountPaid)}
             defaultChartAccountId={viewPay.chartAccount.id}
+            defaultExpenseTypeId={viewPay.expenseType?.id}
             onSubmit={(p) => void submitPayableSettlement(p)}
           />
         ) : null}
@@ -1093,7 +1240,7 @@ export function FinanceiroScreen({
       <FormCadastroModal
         open={settlementOpen === 'rec' && viewRec != null}
         onClose={() => setSettlementOpen(null)}
-        title="Registrar recebimento (conta a receber)"
+        title="Receber pagamento"
         wide
         footer={
           <>
@@ -1114,6 +1261,9 @@ export function FinanceiroScreen({
             titleAmount={Number(viewRec.amount)}
             amountPaid={titlePaidAmount(viewRec.amount, viewRec.amountPaid)}
             defaultChartAccountId={viewRec.chartAccount.id}
+            partnerName={viewRec.partner.name}
+            reference={viewRec.description}
+            referenceDate={formatCalendarDatePtBR(viewRec.dueDate)}
             onSubmit={(p) => void submitReceivableSettlement(p)}
           />
         ) : null}

@@ -29,6 +29,7 @@ import { HrLeavesReportService } from './hr-leaves-report.service';
 import { HrVacationsReportService } from './hr-vacations-report.service';
 import { OperationProductionReportService } from './operation-production-report.service';
 import { ZootechnicalMetricsService } from './zootechnical-metrics.service';
+import { CollectionReportService } from './collection-report.service';
 
 @ApiTags('reports')
 @ApiBearerAuth()
@@ -53,7 +54,18 @@ export class ReportsController {
     private readonly hrLeavesReportSvc: HrLeavesReportService,
     private readonly hrVacationsReportSvc: HrVacationsReportService,
     private readonly operationProductionReport: OperationProductionReportService,
+    private readonly collectionReportSvc: CollectionReportService,
   ) {}
+
+  @Get('collection')
+  @RequirePermissions('reports.read', 'finance.write', '*')
+  collectionReport(@CurrentUser() user: JwtPayload, @Query('partnerIds') partnerIds?: string) {
+    const ids = (partnerIds ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return this.collectionReportSvc.report(user, ids);
+  }
 
   @Get('operation-barn-comparison')
   @RequirePermissions('reports.read', 'production.read', '*')

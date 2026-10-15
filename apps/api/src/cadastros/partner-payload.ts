@@ -20,6 +20,7 @@ export type PartnerPayload = {
   state?: string;
   isCustomer?: boolean;
   isSupplier?: boolean;
+  requisitionLimit?: number | null;
 };
 
 export function normalizePartnerPayload(data: PartnerPayload) {
@@ -52,5 +53,12 @@ export function normalizePartnerPayload(data: PartnerPayload) {
     state: data.state?.trim().toUpperCase().slice(0, 2) || undefined,
     isCustomer: data.isCustomer ?? false,
     isSupplier: data.isSupplier ?? true,
+    requisitionLimit: (() => {
+      if (data.requisitionLimit === null || data.requisitionLimit === undefined) {
+        return null;
+      }
+      const n = Math.round(Number(data.requisitionLimit) * 100) / 100;
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    })(),
   };
 }

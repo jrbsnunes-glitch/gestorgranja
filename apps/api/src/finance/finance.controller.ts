@@ -88,6 +88,12 @@ export class FinanceController {
     return this.finance.listReceivablesDetail(user);
   }
 
+  @Get('payables/detail')
+  @RequirePermissions('finance.write', '*')
+  payablesDetail(@CurrentUser() user: JwtPayload) {
+    return this.finance.listPayablesDetail(user);
+  }
+
   @Get('cash-flow')
   @RequirePermissions('finance.write', 'reports.read', '*')
   getCashFlow(
@@ -173,6 +179,21 @@ export class FinanceController {
     return this.banks.updateBalance(user, id, body.balance);
   }
 
+  @Get('expense-types')
+  @RequirePermissions('finance.write', '*')
+  expenseTypes(@CurrentUser() user: JwtPayload) {
+    return this.finance.listExpenseTypes(user);
+  }
+
+  @Post('expense-types')
+  @RequirePermissions('finance.write', '*')
+  createExpenseType(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { name: string; iconKey: string },
+  ) {
+    return this.finance.createExpenseType(user, body);
+  }
+
   @Post('payables')
   @RequirePermissions('finance.write', '*')
   @Audited('AccountPayable')
@@ -192,7 +213,13 @@ export class FinanceController {
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body()
-    body: { amount?: number; settlementDate?: string; notes?: string; chartAccountId?: string },
+    body: {
+      amount?: number;
+      settlementDate?: string;
+      notes?: string;
+      chartAccountId?: string;
+      expenseTypeId?: string;
+    },
   ) {
     return this.finance.markPayablePaid(user, id, body);
   }
@@ -210,6 +237,7 @@ export class FinanceController {
       description: string;
       amount: number;
       dueDate: string;
+      expenseTypeId?: string | null;
     },
   ) {
     return this.finance.updatePayable(user, id, body);

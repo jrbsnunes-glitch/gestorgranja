@@ -21,6 +21,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { JobsModule } from './jobs/jobs.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { OperationModule } from './operation/operation.module';
+import { PersonalAgendaModule } from './personal-agenda/personal-agenda.module';
 import { ProductionModule } from './production/production.module';
 import { LicensePortalModule } from './license-portal/license-portal.module';
 import { ProvisioningModule } from './provisioning/provisioning.module';
@@ -56,6 +57,7 @@ import { UsersModule } from './users/users.module';
     InventoryModule,
     PurchasingModule,
     FinanceModule,
+    PersonalAgendaModule,
     CommercialModule,
     ReportsModule,
     JobsModule,

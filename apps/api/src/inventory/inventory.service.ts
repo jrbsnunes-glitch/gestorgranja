@@ -8,6 +8,11 @@ import { CreateProductGroupDto } from './dto/create-product-group.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { StockMovementDto } from './dto/stock-movement.dto';
 import { averageCostByProduct } from './product-cost.util';
+import {
+  productSkuFromControlNumber,
+  resolveProductSkuInput,
+  temporaryProductSku,
+} from './product-sku.util';
 
 function dec(v: { toString(): string } | number | null | undefined): number {
   if (v == null) return 0;
@@ -190,9 +195,10 @@ export class InventoryService {
   async createProduct(user: JwtPayload, dto: CreateProductDto) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     return prisma.$transaction(async (tx) => {
-      const created = await tx.product.create({
+      const skuManual = resolveProductSkuInput(dto.sku);
+      let created = await tx.product.create({
         data: {
-          sku: dto.sku,
+          sku: skuManual ?? temporaryProductSku(),
           name: dto.name,
           description: dto.description?.trim() || undefined,
           type: dto.type as ProductType,
@@ -220,6 +226,27 @@ export class InventoryService {
           },
         },
       });
+      if (!skuManual) {
+        created = await tx.product.update({
+          where: { id: created.id },
+          data: { sku: productSkuFromControlNumber(created.controlNumber) },
+          include: {
+            group: { select: { id: true, code: true, name: true } },
+            fiscalSituation: {
+              select: {
+                id: true,
+                code: true,
+                description: true,
+                ncm: true,
+                cest: true,
+                fiscalCst: true,
+                ibsCst: true,
+                ibsClassTrib: true,
+              },
+            },
+          },
+        });
+      }
       if (dto.salePrice != null) {
         await this.recordSalePriceChange(tx, created.id, dto.salePrice, null, user.sub, 'create');
       }

@@ -22,7 +22,30 @@ export type TitleSettlementInput = {
   settlementDate?: string;
   notes?: string;
   chartAccountId?: string;
+  expenseTypeId?: string;
 };
+
+const EXPENSE_ICON_KEYS = new Set([
+  'LUZ',
+  'FACULDADE',
+  'CARRO',
+  'CARTAO',
+  'INTERNET',
+  'TELEFONE',
+  'SEGURO',
+  'OUTROS',
+]);
+
+const BUILTIN_EXPENSE_TYPES = [
+  { name: 'Conta de luz', iconKey: 'LUZ' },
+  { name: 'Internet', iconKey: 'INTERNET' },
+  { name: 'Telefone', iconKey: 'TELEFONE' },
+  { name: 'Veículo', iconKey: 'CARRO' },
+  { name: 'Cartão', iconKey: 'CARTAO' },
+  { name: 'Seguro', iconKey: 'SEGURO' },
+  { name: 'Faculdade', iconKey: 'FACULDADE' },
+  { name: 'Outros', iconKey: 'OUTROS' },
+];
 
 @Injectable()
 export class FinanceService {
@@ -50,6 +73,7 @@ export class FinanceService {
       amount: number;
       dueDate: string;
       installments?: number;
+      expenseTypeId?: string;
     },
   ) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
@@ -69,6 +93,7 @@ export class FinanceService {
           partnerId: data.partnerId,
           chartAccountId: data.chartAccountId,
           description: `${baseDesc}${suffix}`.slice(0, 200),
+          expenseTypeId: data.expenseTypeId || null,
           amount: inst.amount,
           controlNumber: controlNumber++,
           dueDate: prismaDateOnly(inst.dueDate),
@@ -125,6 +150,7 @@ export class FinanceService {
         approvalStatus: fullyPaid ? PaymentApprovalStatus.PAID : PaymentApprovalStatus.APPROVED,
         settlementNotes: input.notes?.trim() || row.settlementNotes,
         ...(input.chartAccountId ? { chartAccountId: input.chartAccountId } : {}),
+        ...(input.expenseTypeId ? { expenseTypeId: input.expenseTypeId } : {}),
       },
     });
 
@@ -202,8 +228,16 @@ export class FinanceService {
         partner: true,
         chartAccount: true,
         boletos: { orderBy: { createdAt: 'desc' }, take: 1 },
+        salesOrder: {
+          select: {
+            controlNumber: true,
+            orderDate: true,
+            paymentMethod: true,
+            paymentForm: { select: { kind: true, name: true } },
+          },
+        },
       },
-      orderBy: { dueDate: 'asc' },
+      orderBy: { dueDate: 'desc' },
     });
     const today = new Date();
     let totalOpen = 0;
@@ -252,6 +286,29 @@ export class FinanceService {
       .slice(0, 5);
 
     return { items, concentration, totalOpen };
+  }
+
+  async listPayablesDetail(user: JwtPayload) {
+    await this.recurring.ensureGenerated(user);
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const rows = await prisma.accountPayable.findMany({
+      where: { approvalStatus: { not: PaymentApprovalStatus.CANCELLED } },
+      include: { partner: true, chartAccount: true, expenseType: true },
+      orderBy: { dueDate: 'desc' },
+    });
+    const today = new Date();
+    const items = rows.map((p) => {
+      const settled = isPayableSettled(p);
+      const balance = settled ? 0 : titleBalance(p.amount, p.amountPaid);
+      const overdueDays = settled ? 0 : daysOverdue(p.dueDate, today);
+      return {
+        ...p,
+        balance,
+        overdueDays,
+        settled,
+      };
+    });
+    return { items };
   }
 
   async receiveReceivable(user: JwtPayload, id: string, input: TitleSettlementInput = {}) {
@@ -373,6 +430,7 @@ export class FinanceService {
       description: string;
       amount: number;
       dueDate: string;
+      expenseTypeId?: string | null;
     },
   ) {
     if (data.amount <= 0) throw new BadRequestException('Valor inválido');
@@ -396,8 +454,45 @@ export class FinanceService {
         description: desc.slice(0, 200),
         amount: data.amount,
         dueDate: prismaDateOnly(data.dueDate),
+        ...(data.expenseTypeId !== undefined ? { expenseTypeId: data.expenseTypeId || null } : {}),
       },
-      include: { partner: true, chartAccount: true },
+      include: { partner: true, chartAccount: true, expenseType: true },
+    });
+  }
+
+  async listExpenseTypes(user: JwtPayload) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    for (const row of BUILTIN_EXPENSE_TYPES) {
+      await prisma.financeExpenseType.upsert({
+        where: { name: row.name },
+        update: { iconKey: row.iconKey, isBuiltin: true, isActive: true },
+        create: { ...row, isBuiltin: true },
+      });
+    }
+    return prisma.financeExpenseType.findMany({
+      where: { isActive: true },
+      orderBy: [{ isBuiltin: 'desc' }, { name: 'asc' }],
+    });
+  }
+
+  async createExpenseType(user: JwtPayload, input: { name: string; iconKey: string }) {
+    const name = input.name?.trim();
+    if (!name) throw new BadRequestException('Informe o nome do tipo.');
+    const iconKey = (input.iconKey || 'OUTROS').trim().toUpperCase();
+    if (!EXPENSE_ICON_KEYS.has(iconKey)) throw new BadRequestException('Ícone inválido.');
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const existing = await prisma.financeExpenseType.findUnique({ where: { name } });
+    if (existing) {
+      if (!existing.isActive) {
+        return prisma.financeExpenseType.update({
+          where: { id: existing.id },
+          data: { isActive: true, iconKey },
+        });
+      }
+      throw new BadRequestException('Já existe um tipo com esse nome.');
+    }
+    return prisma.financeExpenseType.create({
+      data: { name: name.slice(0, 80), iconKey, isBuiltin: false },
     });
   }
 

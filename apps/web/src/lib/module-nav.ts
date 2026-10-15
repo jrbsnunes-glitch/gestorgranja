@@ -113,6 +113,13 @@ export const APP_MODULES: AppModule[] = [
     ],
   },
   {
+    id: 'agenda-pessoal',
+    label: 'Agenda Pessoal',
+    href: '/agenda-pessoal',
+    navIcon: MODULE_NAV_ICONS.agendaPessoal,
+    match: (p) => pathUnder(p, '/agenda-pessoal'),
+  },
+  {
     id: 'parceiros',
     label: 'Parceiros',
     href: '/parceiros',

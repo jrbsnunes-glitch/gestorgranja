@@ -39,6 +39,7 @@ const ENUM_LABELS: Record<string, string> = {
   CARD: 'Cartão',
   TRANSFER: 'Transferência',
   BOLETO: 'Boleto',
+  REQUISICAO: 'Requisição',
   REGISTERED: 'Registrado',
   FAILED: 'Falhou',
 

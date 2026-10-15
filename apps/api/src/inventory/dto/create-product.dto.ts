@@ -4,9 +4,10 @@ import { Type } from 'class-transformer';
 import { IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateProductDto {
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Opcional — se omitido, o sistema gera automaticamente (P000001).' })
   @IsString()
-  sku!: string;
+  @IsOptional()
+  sku?: string;
 
   @ApiProperty()
   @IsString()
