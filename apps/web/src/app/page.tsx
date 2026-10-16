@@ -2,7 +2,6 @@
 
 import { Button, Card } from '@gestor-granja/ui';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { inputClass } from '@/components/ui-parts';
@@ -90,13 +89,6 @@ export default function LoginPage() {
               </Button>
             </form>
           </Card>
-          <p className="mt-6 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            Gerencia <strong>várias granjas</strong> (licenças SaaS)? O portal de licenças usa só{' '}
-            <strong>usuário e senha</strong>, sem slug.{' '}
-            <Link href="/portal-licencas" className="font-medium text-emerald-800 underline">
-              Abrir portal de licenças
-            </Link>
-          </p>
         </div>
       </section>
     </main>
