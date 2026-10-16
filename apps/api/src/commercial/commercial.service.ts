@@ -15,6 +15,30 @@ function skipsCashInflow(kind?: string | null) {
   return isBoletoKind(kind) || isRequisicaoKind(kind);
 }
 
+function isCashKind(kind?: string | null) {
+  return (kind ?? '').toUpperCase() === 'CASH';
+}
+
+function cashDueForOrder(
+  total: number,
+  primaryKind: string | null | undefined,
+  secondaryKind: string | null | undefined,
+  primaryPaymentAmount: number | null,
+): { hasCash: boolean; cashDue: number } {
+  if (!secondaryKind) {
+    return isCashKind(primaryKind)
+      ? { hasCash: true, cashDue: total }
+      : { hasCash: false, cashDue: 0 };
+  }
+  const primaryAmt = primaryPaymentAmount ?? 0;
+  let cashDue = 0;
+  if (isCashKind(primaryKind)) cashDue += primaryAmt;
+  if (isCashKind(secondaryKind)) {
+    cashDue += Math.round((total - primaryAmt) * 100) / 100;
+  }
+  return { hasCash: cashDue > 0.004, cashDue: Math.round(cashDue * 100) / 100 };
+}
+
 type SalesStatsBucket = { noAto: number; requisicao: number; boleto: number };
 
 function isRequisicaoPayment(kind?: string | null, name?: string | null) {
@@ -178,6 +202,7 @@ export class CommercialService {
       primaryPaymentAmount?: number;
       secondaryPaymentFormId?: string;
       requisitionTerms?: unknown;
+      cashTendered?: number;
       items: { productId?: string; eggCategory?: string; quantity: number; unitPrice: number; discount?: number }[];
     },
   ) {
@@ -242,6 +267,25 @@ export class CommercialService {
       throw new BadRequestException('Parcelas de requisição só se aplicam à forma Requisição.');
     }
 
+    const { hasCash, cashDue } = cashDueForOrder(
+      total,
+      payKind,
+      secondaryKind,
+      primaryPaymentAmount,
+    );
+    let cashTenderedAmount: number | null = null;
+    let cashChangeAmount: number | null = null;
+    let cashDueAmount: number | null = null;
+    if (hasCash && data.cashTendered != null && Number.isFinite(Number(data.cashTendered))) {
+      const tendered = Math.round(Number(data.cashTendered) * 100) / 100;
+      if (tendered + 0.004 < cashDue) {
+        throw new BadRequestException('Valor recebido em dinheiro é menor que o devido.');
+      }
+      cashTenderedAmount = tendered;
+      cashDueAmount = cashDue;
+      cashChangeAmount = Math.max(0, Math.round((tendered - cashDue) * 100) / 100);
+    }
+
     return prisma.salesOrder.create({
       data: {
         partnerId: data.partnerId,
@@ -250,6 +294,9 @@ export class CommercialService {
         primaryPaymentAmount,
         secondaryPaymentFormId,
         requisitionTermsJson,
+        cashTenderedAmount,
+        cashChangeAmount,
+        cashDueAmount,
         totalAmount: total,
         items: {
           create: data.items.map((i) => ({
@@ -499,6 +546,10 @@ export class CommercialService {
         subtotal,
         discount,
         paymentLabel,
+        cashTendered:
+          order.cashTenderedAmount != null ? Number(order.cashTenderedAmount) : null,
+        cashChange: order.cashChangeAmount != null ? Number(order.cashChangeAmount) : null,
+        cashDue: order.cashDueAmount != null ? Number(order.cashDueAmount) : null,
         partnerName: order.partner.name,
         items: order.items.map((i) => ({
           sku: i.product?.sku ?? '—',

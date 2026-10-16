@@ -1,0 +1,25 @@
+{
+  "name": "Gestor Granja — Portal de licenças",
+  "short_name": "GG Licenças",
+  "description": "Provisionamento e gestão de licenças SaaS",
+  "lang": "pt-BR",
+  "start_url": "/portal-licencas",
+  "scope": "/portal-licencas",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#047857",
+  "icons": [
+    {
+      "src": "/branding/login-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/branding/login-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

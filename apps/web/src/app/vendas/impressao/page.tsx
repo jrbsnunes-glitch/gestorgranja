@@ -19,6 +19,9 @@ type ReceiptPayload = {
     subtotal: number;
     discount: number;
     paymentLabel: string;
+    cashTendered?: number | null;
+    cashChange?: number | null;
+    cashDue?: number | null;
     partnerName: string;
     items: {
       sku: string;
@@ -143,6 +146,18 @@ function PrintBody() {
             <span>Pagamento</span>
             <span className="text-right">{s.paymentLabel}</span>
           </div>
+          {s.cashTendered != null && s.cashTendered > 0 ? (
+            <div className="sale-receipt-row">
+              <span>Recebido (dinheiro)</span>
+              <span>{formatBrl(s.cashTendered)}</span>
+            </div>
+          ) : null}
+          {s.cashChange != null && s.cashChange > 0.004 ? (
+            <div className="sale-receipt-row">
+              <span>Troco</span>
+              <span>{formatBrl(s.cashChange)}</span>
+            </div>
+          ) : null}
           <div className="sale-receipt-divider" />
           <p className="sale-receipt-center sale-receipt-sub">Obrigado pela preferência!</p>
         </article>

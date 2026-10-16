@@ -1231,6 +1231,12 @@ model SalesOrder {
   cashSessionId String?
   cashSession   CashRegisterSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
   totalAmount Decimal         @default(0) @db.Decimal(14, 2)
+  /// Valor entregue em dinheiro no PDV (parte em cash ou total).
+  cashTenderedAmount Decimal? @db.Decimal(14, 2)
+  /// Troco devolvido ao cliente (dinheiro).
+  cashChangeAmount   Decimal? @db.Decimal(14, 2)
+  /// Base do troco (parcela ou total pago em dinheiro).
+  cashDueAmount      Decimal? @db.Decimal(14, 2)
   /// Parcelas da requisição: { installmentCount, firstDueDate, intervalDays[] }
   requisitionTermsJson Json?
   items      SalesOrderItem[]

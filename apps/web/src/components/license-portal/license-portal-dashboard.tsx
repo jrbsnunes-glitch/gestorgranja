@@ -159,7 +159,7 @@ export function LicensePortalDashboard() {
               alt="Gestor Granja"
               width={160}
               height={48}
-              className="hidden h-10 w-auto object-contain sm:block"
+              className="h-9 w-auto max-w-[140px] object-contain sm:h-10 sm:max-w-none"
             />
             <div>
               <h1 className="text-xl font-bold text-slate-900">Portal de licenças</h1>

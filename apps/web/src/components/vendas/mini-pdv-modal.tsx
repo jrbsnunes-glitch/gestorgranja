@@ -12,6 +12,7 @@ import { apiFetch } from '@/lib/api';
 import type { BankBoletoDto } from '@/lib/boleto';
 import { navigateToReportPrint } from '@/lib/report-print-nav';
 import { formatBrl } from '@/lib/money';
+import { parseSaleQuantityInput, SaleQtyDraftInput, SaleQtyInput } from '@/components/vendas/sale-qty-input';
 
 type PaymentForm = {
   id: string;
@@ -29,7 +30,7 @@ type CartLine = {
 };
 
 type SaleStep = 'sale' | 'success' | 'boleto';
-type PayPanel = 'methods' | 'requisition';
+type PayPanel = 'methods' | 'requisition' | 'cash';
 
 type RequisitionSuccess = {
   partnerName: string;
@@ -37,8 +38,6 @@ type RequisitionSuccess = {
   dueDate: string;
   days: number;
 };
-
-const PRAZOS = [7, 15, 30, 45, 60] as const;
 
 const KIND_RANK: Record<string, number> = {
   PIX: 0,
@@ -87,6 +86,15 @@ function daysFromToday(iso: string) {
   return Math.round((due.getTime() - today.getTime()) / 86400000);
 }
 
+function parseMoneyInput(raw: string) {
+  const n = Number(String(raw).trim().replace(',', '.'));
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function cashChange(tendered: number, due: number) {
+  return Math.round(Math.max(0, tendered - due) * 100) / 100;
+}
+
 function distributeDiscount(lines: CartLine[], discount: number) {
   const gross = lines.reduce((s, l) => s + lineGross(l), 0);
   if (discount <= 0 || gross <= 0) {
@@ -101,6 +109,52 @@ function distributeDiscount(lines: CartLine[], discount: number) {
     remaining = Math.round((remaining - share) * 100) / 100;
     return { ...l, discount: Math.min(Math.max(0, share), lineGross(l)) };
   });
+}
+
+function CashTenderFields({
+  due,
+  tendered,
+  onTenderedChange,
+  label = 'Valor que o cliente está pagando',
+}: {
+  due: number;
+  tendered: string;
+  onTenderedChange: (value: string) => void;
+  label?: string;
+}) {
+  const tenderedNum = parseMoneyInput(tendered);
+  const showTroco = Number.isFinite(tenderedNum) && tenderedNum + 0.004 >= due;
+  const troco = showTroco ? cashChange(tenderedNum, due) : 0;
+  const insufficient = Number.isFinite(tenderedNum) && tenderedNum + 0.004 < due;
+
+  return (
+    <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/90 p-3">
+      <p className="text-sm font-medium text-amber-950">Pagamento em dinheiro</p>
+      <p className="text-xs text-amber-900">
+        Total em dinheiro: <strong className="tabular-nums">{formatBrl(due)}</strong>
+      </p>
+      <Field label={label}>
+        <input
+          className={inputClass}
+          type="number"
+          min={0}
+          step="0.01"
+          value={tendered}
+          onChange={(e) => onTenderedChange(e.target.value)}
+          placeholder="0,00"
+          autoFocus
+        />
+      </Field>
+      {insufficient ? (
+        <p className="text-sm text-red-700">Valor recebido menor que o total em dinheiro.</p>
+      ) : null}
+      {showTroco ? (
+        <p className="rounded-lg bg-white px-3 py-2 text-lg font-semibold text-emerald-900">
+          Troco: <span className="tabular-nums">{formatBrl(troco)}</span>
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function PaymentKindIcon({ kind }: { kind: string }) {
@@ -204,9 +258,23 @@ export function MiniPdvModal({
     used: number;
     available: number | null;
   } | null>(null);
+  const [pendingCashFormId, setPendingCashFormId] = useState<string | null>(null);
+  const [cashTendered, setCashTendered] = useState('');
+  const [splitCashTenderedPrimary, setSplitCashTenderedPrimary] = useState('');
+  const [splitCashTenderedSecondary, setSplitCashTenderedSecondary] = useState('');
 
   function isRequisicaoForm(f: PaymentForm) {
     return f.kind === 'REQUISICAO';
+  }
+
+  function isCashForm(f: PaymentForm) {
+    return f.kind === 'CASH';
+  }
+
+  function isCashFormId(formId: string | null) {
+    if (!formId) return false;
+    const f = paymentForms.find((p) => p.id === formId);
+    return f?.kind === 'CASH';
   }
 
   const reset = useCallback(() => {
@@ -234,6 +302,10 @@ export function MiniPdvModal({
     setRequisitionDue('');
     setRequisitionNotes('');
     setRequisitionCredit(null);
+    setPendingCashFormId(null);
+    setCashTendered('');
+    setSplitCashTenderedPrimary('');
+    setSplitCashTenderedSecondary('');
     setEmitNfce(false);
     setError(null);
   }, []);
@@ -258,13 +330,13 @@ export function MiniPdvModal({
 
   function addLine() {
     setError(null);
-    const quantity = Number(draftQty);
+    const quantity = parseSaleQuantityInput(draftQty);
     const unitPrice = Number(draftPrice);
     if (!draftProductId || !partnerId) {
       setError('Informe cliente e produto.');
       return;
     }
-    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
+    if (quantity == null || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
       setError('Quantidade e preço inválidos.');
       return;
     }
@@ -320,6 +392,7 @@ export function MiniPdvModal({
     paymentFormId: string;
     primaryPaymentAmount?: number;
     secondaryPaymentFormId?: string;
+    cashTendered?: number;
     requisitionTerms?: {
       installmentCount: number;
       firstDueDate: string;
@@ -344,6 +417,7 @@ export function MiniPdvModal({
           primaryPaymentAmount: payload.primaryPaymentAmount,
           secondaryPaymentFormId: payload.secondaryPaymentFormId,
           requisitionTerms: payload.requisitionTerms,
+          cashTendered: payload.cashTendered,
           items: saleItems(),
         }),
       });
@@ -415,6 +489,7 @@ export function MiniPdvModal({
     if (splitPay) return;
     if (isRequisicaoForm(form)) {
       setPendingRequisicaoFormId(form.id);
+      setPendingCashFormId(null);
       setRequisitionDays('7');
       setRequisitionDue(addCalendarDays(7));
       setRequisitionNotes('');
@@ -423,7 +498,25 @@ export function MiniPdvModal({
       setError(null);
       return;
     }
+    if (isCashForm(form)) {
+      setPendingCashFormId(form.id);
+      setPendingRequisicaoFormId(null);
+      setCashTendered('');
+      setPayPanel('cash');
+      setError(null);
+      return;
+    }
     void finishSale({ paymentFormId: form.id });
+  }
+
+  function confirmCashPayment() {
+    if (!pendingCashFormId) return;
+    const tendered = parseMoneyInput(cashTendered);
+    if (!Number.isFinite(tendered) || tendered + 0.004 < subtotal) {
+      setError('Informe o valor que o cliente está pagando (maior ou igual ao total).');
+      return;
+    }
+    void finishSale({ paymentFormId: pendingCashFormId, cashTendered: tendered });
   }
 
   function confirmRequisitionPayment() {
@@ -462,6 +555,10 @@ export function MiniPdvModal({
     setSuccess(null);
     setStep('sale');
     setPendingRequisicaoFormId(null);
+    setPendingCashFormId(null);
+    setCashTendered('');
+    setSplitCashTenderedPrimary('');
+    setSplitCashTenderedSecondary('');
     setRequisitionNotes('');
     setSplitPay(false);
     setError(null);
@@ -476,10 +573,36 @@ export function MiniPdvModal({
       setError('Informe um valor válido na 1ª forma (menor que o total).');
       return;
     }
+    if (splitRemainder == null || splitRemainder < 0.01) {
+      setError('O restante na 2ª forma deve ser maior que zero.');
+      return;
+    }
+    if (isCashFormId(splitPrimaryFormId)) {
+      const tendered = parseMoneyInput(splitCashTenderedPrimary);
+      if (!Number.isFinite(tendered) || tendered + 0.004 < splitPrimaryNum) {
+        setError('Valor recebido em dinheiro insuficiente na 1ª forma.');
+        return;
+      }
+    }
+    if (isCashFormId(splitSecondaryFormId)) {
+      const tendered = parseMoneyInput(splitCashTenderedSecondary);
+      if (!Number.isFinite(tendered) || tendered + 0.004 < splitRemainder) {
+        setError('Valor recebido em dinheiro insuficiente na 2ª forma.');
+        return;
+      }
+    }
+    let cashTendered: number | undefined;
+    if (isCashFormId(splitPrimaryFormId)) {
+      cashTendered = (cashTendered ?? 0) + parseMoneyInput(splitCashTenderedPrimary);
+    }
+    if (isCashFormId(splitSecondaryFormId)) {
+      cashTendered = (cashTendered ?? 0) + parseMoneyInput(splitCashTenderedSecondary);
+    }
     void finishSale({
       paymentFormId: splitPrimaryFormId,
       primaryPaymentAmount: splitPrimaryNum,
       secondaryPaymentFormId: splitSecondaryFormId,
+      cashTendered,
     });
   }
 
@@ -555,13 +678,10 @@ export function MiniPdvModal({
         </div>
         <label className="block">
           <span className="mb-1 block text-sm text-slate-600">Qtd</span>
-          <input
+          <SaleQtyDraftInput
             className={`${inputClass} h-11`}
-            type="number"
-            min={0}
-            step="0.001"
             value={draftQty}
-            onChange={(e) => setDraftQty(e.target.value)}
+            onChange={setDraftQty}
           />
         </label>
         <Button type="button" className="h-11 px-4" onClick={addLine}>
@@ -592,13 +712,10 @@ export function MiniPdvModal({
                 <tr key={l.key} className="border-t border-slate-100">
                   <td className="px-3 py-2 font-medium text-slate-900">{l.label}</td>
                   <td className="px-3 py-2">
-                    <input
-                      className="w-16 rounded border border-slate-200 px-2 py-1 text-sm"
-                      type="number"
-                      min={0.001}
-                      step="0.001"
+                    <SaleQtyInput
+                      className="w-[4.5rem] rounded border border-slate-200 px-1 py-1 text-sm"
                       value={l.quantity}
-                      onChange={(e) => updateLine(l.key, { quantity: Number(e.target.value) })}
+                      onChange={(quantity) => updateLine(l.key, { quantity })}
                     />
                   </td>
                   <td className="px-3 py-2">
@@ -665,7 +782,11 @@ export function MiniPdvModal({
       <p className="mb-2 text-sm font-semibold text-slate-800">Forma de pagamento</p>
       <div className="mb-3 flex flex-wrap gap-1.5">
         {orderedForms.map((f) =>
-          paymentButton(f, payPanel === 'requisition' && isRequisicaoForm(f) && !splitPay, () => {
+          paymentButton(
+            f,
+            (payPanel === 'requisition' && isRequisicaoForm(f) && !splitPay) ||
+              (payPanel === 'cash' && pendingCashFormId === f.id && !splitPay),
+            () => {
             if (splitPay) {
               setError('No pagamento dividido, use as duas formas abaixo.');
               return;
@@ -692,7 +813,10 @@ export function MiniPdvModal({
               setSplitPrimaryFormId(null);
               setSplitSecondaryFormId(null);
               setSplitPrimaryAmount('');
+              setSplitCashTenderedPrimary('');
+              setSplitCashTenderedSecondary('');
               setPayPanel('methods');
+              setPendingCashFormId(null);
               setError(null);
             }}
           />
@@ -716,21 +840,23 @@ export function MiniPdvModal({
               <input className={`${inputClass} bg-white`} readOnly value={formatBrl(subtotal)} />
             </Field>
             <Field label="Prazo em dias">
-              <select
+              <input
                 className={inputClass}
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
                 value={requisitionDays}
                 onChange={(e) => {
                   const days = e.target.value;
                   setRequisitionDays(days);
-                  setRequisitionDue(addCalendarDays(Number(days)));
+                  const n = Number(days);
+                  if (days !== '' && Number.isFinite(n) && n >= 0) {
+                    setRequisitionDue(addCalendarDays(n));
+                  }
                 }}
-              >
-                {PRAZOS.map((d) => (
-                  <option key={d} value={d}>
-                    {d} dias
-                  </option>
-                ))}
-              </select>
+                placeholder="Ex.: 7"
+              />
             </Field>
           </div>
           <Field label="Data de vencimento">
@@ -738,7 +864,13 @@ export function MiniPdvModal({
               className={inputClass}
               type="date"
               value={requisitionDue}
-              onChange={(e) => setRequisitionDue(e.target.value)}
+              onChange={(e) => {
+                const iso = e.target.value;
+                setRequisitionDue(iso);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+                  setRequisitionDays(String(Math.max(0, daysFromToday(iso))));
+                }
+              }}
               required
             />
           </Field>
@@ -756,6 +888,14 @@ export function MiniPdvModal({
             />
           </Field>
         </div>
+      ) : null}
+
+      {payPanel === 'cash' && !splitPay ? (
+        <CashTenderFields
+          due={subtotal}
+          tendered={cashTendered}
+          onTenderedChange={setCashTendered}
+        />
       ) : null}
 
       {splitPay ? (
@@ -784,17 +924,39 @@ export function MiniPdvModal({
                 paymentButton(f, splitPrimaryFormId === f.id, () => {
                   setSplitPrimaryFormId(f.id);
                   if (splitSecondaryFormId === f.id) setSplitSecondaryFormId(null);
+                  setSplitCashTenderedPrimary('');
                 }),
               )}
           </div>
+          {isCashFormId(splitPrimaryFormId) &&
+          Number.isFinite(splitPrimaryNum) &&
+          splitPrimaryNum >= 0.01 ? (
+            <CashTenderFields
+              due={splitPrimaryNum}
+              tendered={splitCashTenderedPrimary}
+              onTenderedChange={setSplitCashTenderedPrimary}
+              label="Valor que o cliente paga em dinheiro (1ª forma)"
+            />
+          ) : null}
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">2ª forma</p>
           <div className="flex flex-wrap gap-1.5">
             {orderedForms
               .filter((f) => f.id !== splitPrimaryFormId && !isRequisicaoForm(f))
               .map((f) =>
-                paymentButton(f, splitSecondaryFormId === f.id, () => setSplitSecondaryFormId(f.id)),
+                paymentButton(f, splitSecondaryFormId === f.id, () => {
+                  setSplitSecondaryFormId(f.id);
+                  setSplitCashTenderedSecondary('');
+                }),
               )}
           </div>
+          {isCashFormId(splitSecondaryFormId) && splitRemainder != null && splitRemainder >= 0.01 ? (
+            <CashTenderFields
+              due={splitRemainder}
+              tendered={splitCashTenderedSecondary}
+              onTenderedChange={setSplitCashTenderedSecondary}
+              label="Valor que o cliente paga em dinheiro (2ª forma)"
+            />
+          ) : null}
           <Button
             type="button"
             disabled={busy || !splitPrimaryFormId || !splitSecondaryFormId}
@@ -922,6 +1084,23 @@ export function MiniPdvModal({
                     Finalizar venda
                   </Button>
                 </>
+              ) : showPayment && payPanel === 'cash' && !splitPay ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setPayPanel('methods');
+                      setPendingCashFormId(null);
+                      setCashTendered('');
+                    }}
+                  >
+                    Voltar
+                  </Button>
+                  <Button type="button" disabled={busy} onClick={confirmCashPayment}>
+                    Finalizar venda
+                  </Button>
+                </>
               ) : showPayment ? (
                 <Button
                   type="button"
@@ -929,6 +1108,8 @@ export function MiniPdvModal({
                   onClick={() => {
                     setShowPayment(false);
                     setPayPanel('methods');
+                    setPendingCashFormId(null);
+                    setCashTendered('');
                   }}
                 >
                   Voltar
