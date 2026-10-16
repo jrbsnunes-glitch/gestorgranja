@@ -19,6 +19,10 @@ export function PortalOperatorLoginForm({ error, onSubmit, showGranjaLink = true
         Credenciais do <strong>operador SaaS</strong> (não são login de uma granja). Um único acesso lista e
         gerencia <strong>todos os clientes</strong> — sem campo de slug.
       </p>
+      <p className="mb-4 text-xs text-slate-500">
+        Atalho no celular: com esta página aberta (<strong>/portal-licencas</strong>), use &quot;Adicionar à tela
+        inicial&quot;. Remova atalhos antigos que abrem só o site principal.
+      </p>
       <Card title="Acesso operador">
         <form className="flex flex-col gap-3" onSubmit={onSubmit}>
           <input

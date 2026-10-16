@@ -3,7 +3,8 @@ import { PortalLicencasSwRegister } from '@/components/portal-licencas/sw-regist
 import { productMetadataIcons } from '@/lib/product-branding';
 
 export const metadata: Metadata = {
-  title: 'Portal de licenças',
+  title: { absolute: 'Portal de licenças' },
+  applicationName: 'GG Licenças',
   description: 'Provisionamento e gestão de licenças SaaS',
   icons: productMetadataIcons,
   manifest: '/portal-licencas/manifest.webmanifest',
@@ -11,6 +12,9 @@ export const metadata: Metadata = {
     capable: true,
     title: 'GG Licenças',
     statusBarStyle: 'default',
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
   },
 };
 
