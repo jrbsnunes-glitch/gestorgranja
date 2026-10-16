@@ -20,7 +20,7 @@ function SyncPathTitle({ children }: { children: React.ReactNode }) {
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isPublic = isPublicAppRoute(pathname) || pathname.startsWith('/portal-licencas');
+  const isPublic = isPublicAppRoute(pathname);
 
   if (isPublic) {
     return <>{children}</>;

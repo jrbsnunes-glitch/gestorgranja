@@ -1,11 +1,10 @@
 'use client';
 
-import { Button, Card } from '@gestor-granja/ui';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { PRODUCT_LOGO_PATH } from '@/lib/product-branding';
 import { FormEvent, useEffect, useState } from 'react';
-import { inputClass } from '@/components/ui-parts';
+import { PortalOperatorLoginForm } from '@/components/license-portal/portal-operator-login-form';
+import { PRODUCT_LOGO_PATH } from '@/lib/product-branding';
 import { getPortalToken, portalLogin, setPortalToken } from '@/lib/license-portal-api';
 
 export default function PortalLicencasLoginPage() {
@@ -55,22 +54,9 @@ export default function PortalLicencasLoginPage() {
             className="h-auto w-full max-w-xs object-contain"
           />
         </div>
-        <h1 className="mb-6 text-xl font-bold text-slate-900">Portal de licenças</h1>
-        <Card title="Acesso operador">
-          <form className="flex flex-col gap-3" onSubmit={onSubmit}>
-            <input name="username" placeholder="Usuário" className={inputClass} required autoComplete="username" />
-            <input
-              name="password"
-              type="password"
-              placeholder="Senha"
-              className={inputClass}
-              required
-              autoComplete="current-password"
-            />
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-            <Button type="submit">Entrar</Button>
-          </form>
-        </Card>
+        <p className="mb-1 text-sm font-medium uppercase tracking-wide text-emerald-800">Operador SaaS</p>
+        <h1 className="mb-2 text-2xl font-bold text-slate-900">Portal de licenças</h1>
+        <PortalOperatorLoginForm error={error} onSubmit={onSubmit} />
       </div>
     </main>
   );
