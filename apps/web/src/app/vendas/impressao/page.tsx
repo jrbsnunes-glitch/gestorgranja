@@ -7,7 +7,6 @@ import { CompanyLogoImg } from '@/components/company-logo-img';
 import { apiFetch } from '@/lib/api';
 import { formatBrl } from '@/lib/money';
 import { closeReportPrintView } from '@/lib/report-print-nav';
-import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 import './sale-receipt-print.css';
 
 type ReceiptPayload = {
@@ -54,7 +53,6 @@ function fmtCnpj(raw: string) {
 function PrintBody() {
   const sp = useSearchParams();
   const id = sp.get('id') ?? '';
-  const autoprint = sp.get('autoprint') === '1';
   const rootRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<ReceiptPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,15 +67,6 @@ function PrintBody() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Erro'));
   }, [id]);
 
-  useReportAutoPrint(autoprint && !!data && !error, rootRef);
-
-  useEffect(() => {
-    if (!autoprint) return;
-    const onAfterPrint = () => closeReportPrintView();
-    window.addEventListener('afterprint', onAfterPrint);
-    return () => window.removeEventListener('afterprint', onAfterPrint);
-  }, [autoprint]);
-
   const c = data?.company;
   const s = data?.sale;
 
@@ -86,13 +75,13 @@ function PrintBody() {
       <div className="sale-receipt-toolbar no-print">
         <div className="sale-receipt-toolbar-actions">
           <Button type="button" onClick={() => window.print()}>
-            Imprimir (Ctrl+P)
+            Imprimir
           </Button>
           <Button type="button" variant="secondary" onClick={closeReportPrintView}>
             Voltar às vendas
           </Button>
         </div>
-        <span className="text-sm text-slate-600">Cupom não fiscal — bobina 80 mm</span>
+        <span className="text-sm text-slate-600">Pré-visualização do comprovante — bobina 80 mm</span>
       </div>
 
       {error ? (

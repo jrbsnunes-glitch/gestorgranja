@@ -387,7 +387,7 @@ export function MiniPdvModal({
       onClose();
       onCompleted?.();
       navigateToReportPrint(
-        `/vendas/impressao?id=${encodeURIComponent(created.id)}&autoprint=1`,
+        `/vendas/impressao?id=${encodeURIComponent(created.id)}`,
         '/vendas',
       );
     } catch (err) {
@@ -708,9 +708,7 @@ export function MiniPdvModal({
           </p>
           {requisitionCredit ? (
             <p className="text-xs text-emerald-950">
-              Limite: {requisitionCredit.limit != null ? formatBrl(requisitionCredit.limit) : '—'} · Em aberto:{' '}
-              {formatBrl(requisitionCredit.used)} · Disponível:{' '}
-              {requisitionCredit.available != null ? formatBrl(requisitionCredit.available) : '—'}
+              Requisição liberada. Em aberto: {formatBrl(requisitionCredit.used)}
             </p>
           ) : null}
           <div className="grid grid-cols-2 gap-2">
@@ -875,12 +873,12 @@ export function MiniPdvModal({
                     onClick={() => {
                       onClose();
                       navigateToReportPrint(
-                        `/vendas/impressao?id=${encodeURIComponent(lastSaleId)}&autoprint=1`,
+                        `/vendas/impressao?id=${encodeURIComponent(lastSaleId)}`,
                         '/vendas',
                       );
                     }}
                   >
-                    Imprimir comprovante
+                    Ver comprovante
                   </Button>
                 ) : null}
                 <Button

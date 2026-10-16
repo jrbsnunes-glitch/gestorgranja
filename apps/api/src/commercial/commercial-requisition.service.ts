@@ -28,30 +28,17 @@ export class CommercialRequisitionService {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const partner = await prisma.partner.findUnique({ where: { id: partnerId } });
     if (!partner) throw new BadRequestException('Cliente não encontrado');
-    const limit = partner.requisitionLimit != null ? dec(partner.requisitionLimit) : null;
     const used = await this.openRequisitionExposure(prisma, partnerId);
-    const available =
-      limit != null && limit > 0 ? Math.round(Math.max(0, limit - used) * 100) / 100 : null;
-    return { limit, used, available };
+    return { limit: null, used, available: null };
   }
 
+  /** Requisição fica liberada para o cliente, sem teto de compra. */
   async assertCanUseRequisition(
-    user: JwtPayload,
-    partnerId: string,
-    saleAmount: number,
+    _user: JwtPayload,
+    _partnerId: string,
+    _saleAmount: number,
   ) {
-    const { limit, used, available } = await this.getPartnerRequisitionCredit(user, partnerId);
-    if (limit == null || limit <= 0) {
-      throw new BadRequestException(
-        'Cliente sem limite de requisição cadastrado. Informe em Cadastros → Clientes.',
-      );
-    }
-    if (saleAmount > (available ?? 0) + 0.004) {
-      throw new BadRequestException(
-        `Limite de requisição excedido. Disponível: R$ ${(available ?? 0).toFixed(2)}; venda: R$ ${saleAmount.toFixed(2)}.`,
-      );
-    }
-    return { limit, used, available };
+    return { limit: null as number | null, used: 0, available: null as number | null };
   }
 
   private async openRequisitionExposure(

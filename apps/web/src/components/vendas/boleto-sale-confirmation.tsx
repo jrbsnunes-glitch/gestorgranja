@@ -164,12 +164,12 @@ export function BoletoSaleConfirmation({
           onClick={() => {
             onClose();
             navigateToReportPrint(
-              `/vendas/impressao?id=${encodeURIComponent(saleId)}&autoprint=1`,
+              `/vendas/impressao?id=${encodeURIComponent(saleId)}`,
               '/vendas',
             );
           }}
         >
-          Imprimir comprovante da venda
+          Ver comprovante da venda
         </Button>
       </div>
     </div>
