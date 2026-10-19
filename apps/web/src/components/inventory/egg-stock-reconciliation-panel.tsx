@@ -260,9 +260,9 @@ export function EggStockReconciliationPanel({
         <div className="rounded-lg bg-slate-50 px-3 py-2">
           <p className="font-medium text-slate-800">Produtos</p>
           <p>
-            Cartela: {data.config.cartonProduct?.sku ?? '—'}
+            Cartela: {data.config.cartonProduct?.name ?? '—'}
             <br />
-            Caixa: {data.config.boxProduct?.sku ?? '—'}
+            Caixa: {data.config.boxProduct?.name ?? '—'}
           </p>
           <p className="mt-1 text-xs">
             {data.config.eggsPerCarton} ovos/cartela · {data.config.cartonsPerBox} cartelas/caixa

@@ -276,9 +276,8 @@ export default function DashboardPage() {
               <ClickableKpi
                 key={row.productId}
                 href="/estoque/movimentos"
-                label={`Saídas 30d — ${row.product.sku}`}
+                label={`Saídas 30d — ${row.product.name}`}
                 value={row.quantity.toLocaleString('pt-BR')}
-                sub={row.product.name}
               />
             ))}
             <ClickableKpi href="/produtos" label="Cadastro de produtos" value="Abrir" sub="Consultar saldos e preços" />

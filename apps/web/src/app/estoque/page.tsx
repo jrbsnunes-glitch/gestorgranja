@@ -56,7 +56,7 @@ export default function EstoqueDashboardPage() {
 
   const chartData =
     data?.topOut30d.map((r) => ({
-      name: r.product.sku,
+      name: r.product.name,
       qty: r.quantity,
     })) ?? [];
 
@@ -116,9 +116,8 @@ export default function EstoqueDashboardPage() {
                   <ClickableKpi
                     key={r.productId}
                     href="/estoque/movimentos"
-                    label={r.product.sku}
+                    label={r.product.name}
                     value={r.quantity.toLocaleString('pt-BR')}
-                    sub={r.product.name}
                   />
                 ))
               )}
@@ -151,8 +150,7 @@ export default function EstoqueDashboardPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">SKU</th>
-                    <th className="px-3 py-2">Produto</th>
+                    <th className="px-3 py-2">Descrição</th>
                     <th className="px-3 py-2 text-right">Saldo</th>
                     <th className="px-3 py-2 text-right">Mínimo</th>
                   </tr>
@@ -160,7 +158,6 @@ export default function EstoqueDashboardPage() {
                 <tbody>
                   {data.criticalProducts.map((p) => (
                     <tr key={p.id} className="border-t border-slate-100">
-                      <td className="px-3 py-2">{p.sku}</td>
                       <td className="px-3 py-2">{p.name}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{p.stockQty}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{p.minStockQty}</td>

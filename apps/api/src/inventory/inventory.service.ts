@@ -395,6 +395,7 @@ export class InventoryService {
         data: {
           name: data.name?.trim(),
           description: data.description === null ? null : data.description?.trim(),
+          unit: data.unit?.trim() || undefined,
           groupId: data.groupId === null ? null : data.groupId,
           minStockQty: data.minStockQty,
           salePrice: data.salePrice === null ? null : data.salePrice,

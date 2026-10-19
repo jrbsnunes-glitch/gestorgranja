@@ -123,7 +123,7 @@ function PrintBody() {
             <div key={i} className="sale-receipt-item">
               <p>{it.name}</p>
               <p className="sale-receipt-sub">
-                {it.sku} · {it.quantity} {it.unit} × {formatBrl(it.unitPrice)}
+                {it.quantity} {it.unit} × {formatBrl(it.unitPrice)}
               </p>
               <div className="sale-receipt-row">
                 <span>Total linha</span>

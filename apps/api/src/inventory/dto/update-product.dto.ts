@@ -16,6 +16,11 @@ export class UpdateProductDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
+  unit?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
   groupId?: string | null;
 
   @ApiPropertyOptional()

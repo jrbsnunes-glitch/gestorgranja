@@ -61,7 +61,7 @@ export default function EstoquePage() {
 
   const movList = useCrudList({
     items: movements,
-    searchFields: (m) => [m.product.sku, m.product.name, m.type, m.chartAccount.code],
+    searchFields: (m) => [m.product.name, m.type, m.chartAccount.code],
   });
   const movPag = usePagination(movList.filtered);
   const packagedEggs = products.filter((p) => p.type === 'PACKAGED_EGG');
@@ -213,7 +213,7 @@ export default function EstoquePage() {
             recordItems={movPag.slice}
             rows={movPag.slice.map((m) => [
               new Date(m.movedAt).toLocaleString('pt-BR'),
-              `${m.product.sku} — ${m.product.name}`,
+              m.product.name,
               `${m.chartAccount.code}`,
               labelEnum(m.type),
               m.quantity,
@@ -276,7 +276,7 @@ export default function EstoquePage() {
                   <option value="">—</option>
                   {packagedEggs.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.sku} — {p.name}
+                      {p.name}
                     </option>
                   ))}
                 </select>
@@ -290,7 +290,7 @@ export default function EstoquePage() {
                   <option value="">—</option>
                   {packagedEggs.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.sku} — {p.name}
+                      {p.name}
                     </option>
                   ))}
                 </select>
@@ -396,7 +396,7 @@ export default function EstoquePage() {
                     { label: 'Data', value: new Date(selectedMove.movedAt).toLocaleString('pt-BR') },
                     {
                       label: 'Produto',
-                      value: `${selectedMove.product.sku} — ${selectedMove.product.name}`,
+                      value: selectedMove.product.name,
                     },
                     {
                       label: 'Conta contábil',
