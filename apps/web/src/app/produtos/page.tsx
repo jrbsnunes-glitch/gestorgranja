@@ -277,11 +277,11 @@ export default function ProdutosPage() {
           }
         />
         <PaginatedTable
-          headers={['Descrição', 'Nome', 'Grupo', 'Est. mín.', 'Preço venda', 'Custo médio', 'Lucro', 'Ações']}
+          headers={['Nome', 'Descrição', 'Grupo', 'Est. mín.', 'Preço venda', 'Custo médio', 'Lucro', 'Ações']}
           recordItems={slice}
           rows={slice.map((p) => [
-            p.description?.trim() || '—',
             p.name,
+            p.description?.trim() || '—',
             p.group?.name ?? '—',
             p.minStockQty.toLocaleString('pt-BR', { maximumFractionDigits: 3 }),
             formatBrl(p.salePrice),
@@ -459,8 +459,8 @@ export default function ProdutosPage() {
                   title: 'Identificação',
                   fields: [
                     { label: 'Controle', value: selected.controlNumber ?? '—' },
-                    { label: 'Descrição', value: selected.description ?? '—' },
                     { label: 'Nome', value: selected.name },
+                    { label: 'Descrição', value: selected.description ?? '—' },
                     { label: 'Grupo', value: selected.group?.name ?? '—' },
                     { label: 'Tipo', value: labelEnum(selected.type) },
                     { label: 'Unidade', value: selected.unit },

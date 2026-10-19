@@ -18,8 +18,13 @@ export type ProductRow = {
 };
 
 function productDescription(p: ProductRow) {
-  const text = p.description?.trim();
-  return text || p.name;
+  return p.description?.trim() ?? '';
+}
+
+function productDisplay(p: ProductRow) {
+  const desc = productDescription(p);
+  if (desc && desc !== p.name) return `${p.name} — ${desc}`;
+  return p.name;
 }
 
 export function ProductLookupField({
@@ -90,11 +95,9 @@ export function ProductLookupField({
     const q = query.trim().toLowerCase();
     const list = q
       ? products.filter((p) =>
-          `${productDescription(p)} ${p.name} ${p.unit ?? ''}`.toLowerCase().includes(q),
+          `${p.name} ${productDescription(p)} ${p.unit ?? ''}`.toLowerCase().includes(q),
         )
-      : [...products].sort((a, b) =>
-          productDescription(a).localeCompare(productDescription(b), 'pt-BR'),
-        );
+      : [...products].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     return list.slice(0, 40);
   }, [products, query]);
 
@@ -152,7 +155,7 @@ export function ProductLookupField({
     }
   }
 
-  const display = selected ? productDescription(selected) : '';
+  const display = selected ? productDisplay(selected) : '';
 
   const control = (
     <>
@@ -218,7 +221,7 @@ export function ProductLookupField({
             className={inputClass}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Descrição ou nome…"
+            placeholder="Nome ou descrição…"
             autoFocus
           />
         </Field>
@@ -240,9 +243,9 @@ export function ProductLookupField({
             matches.map((p) => (
               <li key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-emerald-50">
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => pick(p)}>
-                  <span className="block font-medium text-slate-900">{productDescription(p)}</span>
-                  {p.description?.trim() && p.description.trim() !== p.name ? (
-                    <span className="block truncate text-xs text-slate-500">{p.name}</span>
+                  <span className="block font-medium text-slate-900">{p.name}</span>
+                  {productDescription(p) && productDescription(p) !== p.name ? (
+                    <span className="block truncate text-xs text-slate-500">{productDescription(p)}</span>
                   ) : null}
                 </button>
                 <button

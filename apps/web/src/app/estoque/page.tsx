@@ -150,7 +150,7 @@ export default function EstoqueDashboardPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Descrição</th>
+                    <th className="px-3 py-2">Nome</th>
                     <th className="px-3 py-2 text-right">Saldo</th>
                     <th className="px-3 py-2 text-right">Mínimo</th>
                   </tr>
