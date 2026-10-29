@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as https from 'https';
+import * as forge from 'node-forge';
 import { URL } from 'url';
 import { SicoobEnvironment } from '../generated/tenant-client';
 import {
@@ -10,6 +11,30 @@ import {
 } from './sicoob-json.util';
 
 type TokenCache = { token: string; expiresAt: number };
+
+/** A1 ICP-Brasil costuma vir em PKCS#12 legado (RC2/3DES). O Node recusa esse .pfx no mTLS. */
+function pfxToPem(pfx: Buffer, passphrase: string | null | undefined): { key: string; cert: string } {
+  try {
+    const asn1 = forge.asn1.fromDer(pfx.toString('binary'));
+    const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, passphrase ?? '');
+    const shrouded = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[
+      forge.pki.oids.pkcs8ShroudedKeyBag
+    ];
+    const plain = p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag];
+    const key = shrouded?.[0]?.key ?? plain?.[0]?.key;
+    if (!key) throw new Error('chave privada ausente');
+    const bags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ?? [];
+    const certs = bags.map((b) => (b.cert ? forge.pki.certificateToPem(b.cert) : '')).filter(Boolean);
+    if (!certs.length) throw new Error('certificado ausente');
+    return { key: forge.pki.privateKeyToPem(key), cert: certs.join('\n') };
+  } catch (e) {
+    if (e instanceof BadRequestException) throw e;
+    const msg = e instanceof Error ? e.message : 'arquivo ilegível';
+    throw new BadRequestException(
+      `Não foi possível ler o certificado .pfx (${msg}). Confira se o arquivo é o A1 e se a senha está correta.`,
+    );
+  }
+}
 
 export type SicoobHttpAuth = {
   environment: SicoobEnvironment;
@@ -117,14 +142,15 @@ export class SicoobClientService {
     if (payload && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
     if (payload) headers['Content-Length'] = String(Buffer.byteLength(payload));
 
-    const agent =
-      auth.environment === SicoobEnvironment.production && auth.pfx?.length
-        ? new https.Agent({
-            pfx: auth.pfx,
-            passphrase: auth.passphrase ?? undefined,
-            keepAlive: false,
-          })
-        : undefined;
+    let agent: https.Agent | undefined;
+    if (auth.environment === SicoobEnvironment.production && auth.pfx?.length) {
+      const material = pfxToPem(auth.pfx, auth.passphrase);
+      agent = new https.Agent({
+        key: material.key,
+        cert: material.cert,
+        keepAlive: false,
+      });
+    }
 
     return new Promise((resolve, reject) => {
       const req = https.request(

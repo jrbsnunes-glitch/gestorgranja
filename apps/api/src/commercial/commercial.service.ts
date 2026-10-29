@@ -312,7 +312,20 @@ export class CommercialService {
     });
   }
 
-  async confirmOrder(user: JwtPayload, orderId: string) {
+  async confirmOrder(
+    user: JwtPayload,
+    orderId: string,
+    boletoTerms?: {
+      dueDate: string;
+      tipoMulta: number;
+      valorMulta?: number | null;
+      tipoJurosMora: number;
+      valorJurosMora?: number | null;
+      diasInicioMultaAposVencimento?: number;
+      diasInicioJurosAposVencimento?: number;
+      diasLimitePagamentoAposVencimento?: number | null;
+    },
+  ) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const order = await prisma.salesOrder.findUnique({ where: { id: orderId }, include: { items: true } });
     if (!order) throw new BadRequestException('Pedido não encontrado');
@@ -390,7 +403,7 @@ export class CommercialService {
       }
       return updated;
     });
-    const boleto = await this.sicoob.afterSaleConfirmed(user, orderId);
+    const boleto = await this.sicoob.afterSaleConfirmed(user, orderId, boletoTerms);
     const requisitionReceivables = await this.requisition.createReceivablesForOrder(user, orderId);
     return { ...updated, boleto, requisitionReceivables };
   }

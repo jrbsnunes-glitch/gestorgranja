@@ -30,7 +30,18 @@ type CartLine = {
 };
 
 type SaleStep = 'sale' | 'success' | 'boleto';
-type PayPanel = 'methods' | 'requisition' | 'cash';
+type PayPanel = 'methods' | 'requisition' | 'cash' | 'boleto';
+
+type BoletoSaleTerms = {
+  dueDate: string;
+  tipoMulta: number;
+  valorMulta: number | null;
+  tipoJurosMora: number;
+  valorJurosMora: number | null;
+  diasInicioMultaAposVencimento: number;
+  diasInicioJurosAposVencimento: number;
+  diasLimitePagamentoAposVencimento: number | null;
+};
 
 type RequisitionSuccess = {
   partnerName: string;
@@ -157,6 +168,150 @@ function CashTenderFields({
   );
 }
 
+function BoletoTermsFields({
+  days,
+  due,
+  tipoMulta,
+  valorMulta,
+  tipoJuros,
+  valorJuros,
+  diasMulta,
+  diasJuros,
+  diasLimite,
+  onDays,
+  onDue,
+  onTipoMulta,
+  onValorMulta,
+  onTipoJuros,
+  onValorJuros,
+  onDiasMulta,
+  onDiasJuros,
+  onDiasLimite,
+}: {
+  days: string;
+  due: string;
+  tipoMulta: string;
+  valorMulta: string;
+  tipoJuros: string;
+  valorJuros: string;
+  diasMulta: string;
+  diasJuros: string;
+  diasLimite: string;
+  onDays: (v: string) => void;
+  onDue: (v: string) => void;
+  onTipoMulta: (v: string) => void;
+  onValorMulta: (v: string) => void;
+  onTipoJuros: (v: string) => void;
+  onValorJuros: (v: string) => void;
+  onDiasMulta: (v: string) => void;
+  onDiasJuros: (v: string) => void;
+  onDiasLimite: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3">
+      <p className="text-sm font-semibold text-emerald-950">Boleto</p>
+      <p className="text-xs text-emerald-900">
+        Estes valores valem só para este boleto. O cadastro da empresa continua como padrão da próxima venda.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Prazo em dias">
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            value={days}
+            onChange={(e) => {
+              const next = e.target.value;
+              onDays(next);
+              const n = Number(next);
+              if (next !== '' && Number.isFinite(n) && n >= 0) onDue(addCalendarDays(n));
+            }}
+          />
+        </Field>
+        <Field label="Vencimento">
+          <input
+            className={inputClass}
+            type="date"
+            value={due}
+            onChange={(e) => {
+              const iso = e.target.value;
+              onDue(iso);
+              if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) onDays(String(Math.max(0, daysFromToday(iso))));
+            }}
+            required
+          />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Multa">
+          <select className={inputClass} value={tipoMulta} onChange={(e) => onTipoMulta(e.target.value)}>
+            <option value="0">Isenta</option>
+            <option value="1">Valor fixo (R$)</option>
+            <option value="2">Percentual (%)</option>
+          </select>
+        </Field>
+        <Field label="Valor da multa">
+          <input
+            className={inputClass}
+            inputMode="decimal"
+            value={valorMulta}
+            disabled={tipoMulta === '0'}
+            placeholder={tipoMulta === '2' ? 'Ex.: 2' : 'Ex.: 10,00'}
+            onChange={(e) => onValorMulta(e.target.value)}
+          />
+        </Field>
+        <Field label="Juros de mora">
+          <select className={inputClass} value={tipoJuros} onChange={(e) => onTipoJuros(e.target.value)}>
+            <option value="3">Isento</option>
+            <option value="1">Valor por dia (R$)</option>
+            <option value="2">Taxa mensal (%)</option>
+          </select>
+        </Field>
+        <Field label="Valor dos juros">
+          <input
+            className={inputClass}
+            inputMode="decimal"
+            value={valorJuros}
+            disabled={tipoJuros === '3'}
+            placeholder={tipoJuros === '2' ? 'Ex.: 1' : 'Ex.: 0,33'}
+            onChange={(e) => onValorJuros(e.target.value)}
+          />
+        </Field>
+        <Field label="Multa a partir de (dias após venc.)">
+          <input
+            className={inputClass}
+            type="number"
+            min={1}
+            value={diasMulta}
+            onChange={(e) => onDiasMulta(e.target.value)}
+          />
+        </Field>
+        <Field label="Juros a partir de (dias após venc.)">
+          <input
+            className={inputClass}
+            type="number"
+            min={1}
+            value={diasJuros}
+            onChange={(e) => onDiasJuros(e.target.value)}
+          />
+        </Field>
+        <Field label="Limite para pagamento (dias após venc.)">
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            value={diasLimite}
+            placeholder="Em branco = automático"
+            onChange={(e) => onDiasLimite(e.target.value)}
+          />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
 function PaymentKindIcon({ kind }: { kind: string }) {
   const common = 'h-5 w-5';
   if (kind === 'PIX') {
@@ -237,7 +392,7 @@ export function MiniPdvModal({
   const [partnerName, setPartnerName] = useState('');
   const [draftProductId, setDraftProductId] = useState('');
   const [draftLabel, setDraftLabel] = useState('');
-  const [draftQty, setDraftQty] = useState('1');
+  const [draftQty, setDraftQty] = useState('');
   const [draftPrice, setDraftPrice] = useState('');
   const [lines, setLines] = useState<CartLine[]>([]);
   const [saleDiscount, setSaleDiscount] = useState('0');
@@ -262,6 +417,16 @@ export function MiniPdvModal({
   const [cashTendered, setCashTendered] = useState('');
   const [splitCashTenderedPrimary, setSplitCashTenderedPrimary] = useState('');
   const [splitCashTenderedSecondary, setSplitCashTenderedSecondary] = useState('');
+  const [pendingBoletoFormId, setPendingBoletoFormId] = useState<string | null>(null);
+  const [boletoDays, setBoletoDays] = useState('7');
+  const [boletoDue, setBoletoDue] = useState('');
+  const [boletoTipoMulta, setBoletoTipoMulta] = useState('0');
+  const [boletoValorMulta, setBoletoValorMulta] = useState('');
+  const [boletoTipoJuros, setBoletoTipoJuros] = useState('3');
+  const [boletoValorJuros, setBoletoValorJuros] = useState('');
+  const [boletoDiasMulta, setBoletoDiasMulta] = useState('1');
+  const [boletoDiasJuros, setBoletoDiasJuros] = useState('1');
+  const [boletoDiasLimite, setBoletoDiasLimite] = useState('');
 
   function isRequisicaoForm(f: PaymentForm) {
     return f.kind === 'REQUISICAO';
@@ -277,6 +442,97 @@ export function MiniPdvModal({
     return f?.kind === 'CASH';
   }
 
+  function isBoletoForm(f: PaymentForm) {
+    return f.kind === 'BOLETO';
+  }
+
+  function isBoletoFormId(formId: string | null) {
+    if (!formId) return false;
+    return paymentForms.find((p) => p.id === formId)?.kind === 'BOLETO';
+  }
+
+  function applyBoletoDefaults(d: {
+    dueDaysDefault: number;
+    tipoMulta: number;
+    valorMulta: number | null;
+    tipoJurosMora: number;
+    valorJurosMora: number | null;
+    diasInicioMultaAposVencimento: number;
+    diasInicioJurosAposVencimento: number;
+    diasLimitePagamentoAposVencimento: number | null;
+  }) {
+    const days = String(d.dueDaysDefault ?? 7);
+    setBoletoDays(days);
+    setBoletoDue(addCalendarDays(Number(days) || 0));
+    setBoletoTipoMulta(String(d.tipoMulta ?? 0));
+    setBoletoValorMulta(d.valorMulta != null ? String(d.valorMulta) : '');
+    setBoletoTipoJuros(String(d.tipoJurosMora ?? 3));
+    setBoletoValorJuros(d.valorJurosMora != null ? String(d.valorJurosMora) : '');
+    setBoletoDiasMulta(String(d.diasInicioMultaAposVencimento ?? 1));
+    setBoletoDiasJuros(String(d.diasInicioJurosAposVencimento ?? 1));
+    setBoletoDiasLimite(
+      d.diasLimitePagamentoAposVencimento != null ? String(d.diasLimitePagamentoAposVencimento) : '',
+    );
+  }
+
+  function loadBoletoDefaults() {
+    void apiFetch<{
+      dueDaysDefault: number;
+      tipoMulta: number;
+      valorMulta: number | null;
+      tipoJurosMora: number;
+      valorJurosMora: number | null;
+      diasInicioMultaAposVencimento: number;
+      diasInicioJurosAposVencimento: number;
+      diasLimitePagamentoAposVencimento: number | null;
+    }>('/v1/finance/sicoob/sale-defaults')
+      .then(applyBoletoDefaults)
+      .catch(() => {
+        setBoletoDays('7');
+        setBoletoDue(addCalendarDays(7));
+      });
+  }
+
+  function openBoletoPanel() {
+    setPayPanel('boleto');
+    setError(null);
+    loadBoletoDefaults();
+  }
+
+  function buildBoletoTerms(): BoletoSaleTerms | null {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(boletoDue)) {
+      setError('Informe a data de vencimento do boleto.');
+      return null;
+    }
+    if (boletoDue < addCalendarDays(0)) {
+      setError('A data de vencimento do boleto não pode ser anterior a hoje.');
+      return null;
+    }
+    const tipoMulta = Number(boletoTipoMulta);
+    const tipoJurosMora = Number(boletoTipoJuros);
+    const valorMulta = boletoValorMulta.trim() === '' ? null : Number(boletoValorMulta.replace(',', '.'));
+    const valorJurosMora = boletoValorJuros.trim() === '' ? null : Number(boletoValorJuros.replace(',', '.'));
+    if (tipoMulta > 0 && (valorMulta == null || !Number.isFinite(valorMulta) || valorMulta <= 0)) {
+      setError('Informe o valor da multa.');
+      return null;
+    }
+    if (tipoJurosMora !== 3 && (valorJurosMora == null || !Number.isFinite(valorJurosMora) || valorJurosMora <= 0)) {
+      setError('Informe o valor dos juros.');
+      return null;
+    }
+    const limite = boletoDiasLimite.trim() === '' ? null : Number(boletoDiasLimite);
+    return {
+      dueDate: boletoDue,
+      tipoMulta,
+      valorMulta: tipoMulta === 0 ? null : valorMulta,
+      tipoJurosMora,
+      valorJurosMora: tipoJurosMora === 3 ? null : valorJurosMora,
+      diasInicioMultaAposVencimento: Math.max(1, Number(boletoDiasMulta) || 1),
+      diasInicioJurosAposVencimento: Math.max(1, Number(boletoDiasJuros) || 1),
+      diasLimitePagamentoAposVencimento: limite != null && Number.isFinite(limite) ? limite : null,
+    };
+  }
+
   const reset = useCallback(() => {
     setStep('sale');
     setShowPayment(false);
@@ -285,7 +541,7 @@ export function MiniPdvModal({
     setPartnerName('');
     setDraftProductId('');
     setDraftLabel('');
-    setDraftQty('1');
+    setDraftQty('');
     setDraftPrice('');
     setLines([]);
     setSaleDiscount('0');
@@ -303,6 +559,16 @@ export function MiniPdvModal({
     setRequisitionNotes('');
     setRequisitionCredit(null);
     setPendingCashFormId(null);
+    setPendingBoletoFormId(null);
+    setBoletoDays('7');
+    setBoletoDue('');
+    setBoletoTipoMulta('0');
+    setBoletoValorMulta('');
+    setBoletoTipoJuros('3');
+    setBoletoValorJuros('');
+    setBoletoDiasMulta('1');
+    setBoletoDiasJuros('1');
+    setBoletoDiasLimite('');
     setCashTendered('');
     setSplitCashTenderedPrimary('');
     setSplitCashTenderedSecondary('');
@@ -352,7 +618,7 @@ export function MiniPdvModal({
     ]);
     setDraftProductId('');
     setDraftLabel('');
-    setDraftQty('1');
+    setDraftQty('');
     setDraftPrice('');
   }
 
@@ -393,6 +659,7 @@ export function MiniPdvModal({
     primaryPaymentAmount?: number;
     secondaryPaymentFormId?: string;
     cashTendered?: number;
+    boletoTerms?: BoletoSaleTerms;
     requisitionTerms?: {
       installmentCount: number;
       firstDueDate: string;
@@ -423,7 +690,10 @@ export function MiniPdvModal({
       });
       const confirmed = await apiFetch<{ boleto?: BankBoletoDto }>(
         `/v1/commercial/orders/${created.id}/confirm`,
-        { method: 'POST', body: '{}' },
+        {
+          method: 'POST',
+          body: JSON.stringify(payload.boletoTerms ? { boletoTerms: payload.boletoTerms } : {}),
+        },
       );
       if (emitNfce) {
         try {
@@ -501,9 +771,17 @@ export function MiniPdvModal({
     if (isCashForm(form)) {
       setPendingCashFormId(form.id);
       setPendingRequisicaoFormId(null);
+      setPendingBoletoFormId(null);
       setCashTendered('');
       setPayPanel('cash');
       setError(null);
+      return;
+    }
+    if (isBoletoForm(form)) {
+      setPendingBoletoFormId(form.id);
+      setPendingCashFormId(null);
+      setPendingRequisicaoFormId(null);
+      openBoletoPanel();
       return;
     }
     void finishSale({ paymentFormId: form.id });
@@ -517,6 +795,17 @@ export function MiniPdvModal({
       return;
     }
     void finishSale({ paymentFormId: pendingCashFormId, cashTendered: tendered });
+  }
+
+  function confirmBoletoPayment() {
+    const terms = buildBoletoTerms();
+    if (!terms) return;
+    if (splitPay) {
+      confirmSplitPayment(terms);
+      return;
+    }
+    if (!pendingBoletoFormId) return;
+    void finishSale({ paymentFormId: pendingBoletoFormId, boletoTerms: terms });
   }
 
   function confirmRequisitionPayment() {
@@ -548,14 +837,24 @@ export function MiniPdvModal({
     setSaleDiscount('0');
     setDraftProductId('');
     setDraftLabel('');
-    setDraftQty('1');
+    setDraftQty('');
     setDraftPrice('');
+    setBoletoDays('7');
+    setBoletoDue('');
+    setBoletoTipoMulta('0');
+    setBoletoValorMulta('');
+    setBoletoTipoJuros('3');
+    setBoletoValorJuros('');
+    setBoletoDiasMulta('1');
+    setBoletoDiasJuros('1');
+    setBoletoDiasLimite('');
     setShowPayment(false);
     setPayPanel('methods');
     setSuccess(null);
     setStep('sale');
     setPendingRequisicaoFormId(null);
     setPendingCashFormId(null);
+    setPendingBoletoFormId(null);
     setCashTendered('');
     setSplitCashTenderedPrimary('');
     setSplitCashTenderedSecondary('');
@@ -564,7 +863,7 @@ export function MiniPdvModal({
     setError(null);
   }
 
-  function confirmSplitPayment() {
+  function confirmSplitPayment(boletoTerms?: BoletoSaleTerms) {
     if (!splitPrimaryFormId || !splitSecondaryFormId) {
       setError('Selecione as duas formas de pagamento.');
       return;
@@ -598,11 +897,19 @@ export function MiniPdvModal({
     if (isCashFormId(splitSecondaryFormId)) {
       cashTendered = (cashTendered ?? 0) + parseMoneyInput(splitCashTenderedSecondary);
     }
+    const usesBoleto = isBoletoFormId(splitPrimaryFormId) || isBoletoFormId(splitSecondaryFormId);
+    let terms = boletoTerms;
+    if (usesBoleto && !terms) {
+      const built = buildBoletoTerms();
+      if (!built) return;
+      terms = built;
+    }
     void finishSale({
       paymentFormId: splitPrimaryFormId,
       primaryPaymentAmount: splitPrimaryNum,
       secondaryPaymentFormId: splitSecondaryFormId,
       cashTendered,
+      boletoTerms: terms,
     });
   }
 
@@ -682,6 +989,7 @@ export function MiniPdvModal({
             className={`${inputClass} h-11`}
             value={draftQty}
             onChange={setDraftQty}
+            placeholder="Qtd"
           />
         </label>
         <Button type="button" className="h-11 px-4" onClick={addLine}>
@@ -785,7 +1093,8 @@ export function MiniPdvModal({
           paymentButton(
             f,
             (payPanel === 'requisition' && isRequisicaoForm(f) && !splitPay) ||
-              (payPanel === 'cash' && pendingCashFormId === f.id && !splitPay),
+              (payPanel === 'cash' && pendingCashFormId === f.id && !splitPay) ||
+              (payPanel === 'boleto' && pendingBoletoFormId === f.id && !splitPay),
             () => {
             if (splitPay) {
               setError('No pagamento dividido, use as duas formas abaixo.');
@@ -898,6 +1207,29 @@ export function MiniPdvModal({
         />
       ) : null}
 
+      {payPanel === 'boleto' && !splitPay ? (
+        <BoletoTermsFields
+          days={boletoDays}
+          due={boletoDue}
+          tipoMulta={boletoTipoMulta}
+          valorMulta={boletoValorMulta}
+          tipoJuros={boletoTipoJuros}
+          valorJuros={boletoValorJuros}
+          diasMulta={boletoDiasMulta}
+          diasJuros={boletoDiasJuros}
+          diasLimite={boletoDiasLimite}
+          onDays={setBoletoDays}
+          onDue={setBoletoDue}
+          onTipoMulta={setBoletoTipoMulta}
+          onValorMulta={setBoletoValorMulta}
+          onTipoJuros={setBoletoTipoJuros}
+          onValorJuros={setBoletoValorJuros}
+          onDiasMulta={setBoletoDiasMulta}
+          onDiasJuros={setBoletoDiasJuros}
+          onDiasLimite={setBoletoDiasLimite}
+        />
+      ) : null}
+
       {splitPay ? (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
           <Field label="Valor pago na 1ª forma (R$)">
@@ -925,6 +1257,7 @@ export function MiniPdvModal({
                   setSplitPrimaryFormId(f.id);
                   if (splitSecondaryFormId === f.id) setSplitSecondaryFormId(null);
                   setSplitCashTenderedPrimary('');
+                  if (isBoletoForm(f) && !boletoDue) loadBoletoDefaults();
                 }),
               )}
           </div>
@@ -946,9 +1279,32 @@ export function MiniPdvModal({
                 paymentButton(f, splitSecondaryFormId === f.id, () => {
                   setSplitSecondaryFormId(f.id);
                   setSplitCashTenderedSecondary('');
+                  if (isBoletoForm(f) && !boletoDue) loadBoletoDefaults();
                 }),
               )}
           </div>
+          {isBoletoFormId(splitPrimaryFormId) || isBoletoFormId(splitSecondaryFormId) ? (
+            <BoletoTermsFields
+              days={boletoDays}
+              due={boletoDue}
+              tipoMulta={boletoTipoMulta}
+              valorMulta={boletoValorMulta}
+              tipoJuros={boletoTipoJuros}
+              valorJuros={boletoValorJuros}
+              diasMulta={boletoDiasMulta}
+              diasJuros={boletoDiasJuros}
+              diasLimite={boletoDiasLimite}
+              onDays={setBoletoDays}
+              onDue={setBoletoDue}
+              onTipoMulta={setBoletoTipoMulta}
+              onValorMulta={setBoletoValorMulta}
+              onTipoJuros={setBoletoTipoJuros}
+              onValorJuros={setBoletoValorJuros}
+              onDiasMulta={setBoletoDiasMulta}
+              onDiasJuros={setBoletoDiasJuros}
+              onDiasLimite={setBoletoDiasLimite}
+            />
+          ) : null}
           {isCashFormId(splitSecondaryFormId) && splitRemainder != null && splitRemainder >= 0.01 ? (
             <CashTenderFields
               due={splitRemainder}
@@ -960,7 +1316,7 @@ export function MiniPdvModal({
           <Button
             type="button"
             disabled={busy || !splitPrimaryFormId || !splitSecondaryFormId}
-            onClick={confirmSplitPayment}
+            onClick={() => confirmSplitPayment()}
           >
             Finalizar venda
           </Button>
@@ -1081,6 +1437,22 @@ export function MiniPdvModal({
                     Voltar
                   </Button>
                   <Button type="button" disabled={busy} onClick={confirmRequisitionPayment}>
+                    Finalizar venda
+                  </Button>
+                </>
+              ) : showPayment && payPanel === 'boleto' && !splitPay ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setPayPanel('methods');
+                      setPendingBoletoFormId(null);
+                    }}
+                  >
+                    Voltar
+                  </Button>
+                  <Button type="button" disabled={busy} onClick={confirmBoletoPayment}>
                     Finalizar venda
                   </Button>
                 </>

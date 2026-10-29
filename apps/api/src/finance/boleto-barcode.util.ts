@@ -7,7 +7,7 @@ export async function pixEmvToQrDataUrl(emv: string): Promise<string | null> {
   const t = emv.trim();
   if (!t.startsWith('000201') || t.length < 30) return null;
   try {
-    return await QRCode.toDataURL(t, { width: 200, margin: 1, errorCorrectionLevel: 'M' });
+    return await QRCode.toDataURL(t, { width: 360, margin: 1, errorCorrectionLevel: 'M' });
   } catch {
     return null;
   }

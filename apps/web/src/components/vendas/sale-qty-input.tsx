@@ -1,16 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 /** Converte texto com vírgula ou ponto em número. */
 export function parseSaleQuantityInput(raw: string): number | null {
   const t = raw.trim().replace(/\s/g, '').replace(',', '.');
-  if (!t) return null;
+  if (!t || t === '.' || t === ',') return null;
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
-}
-
-function formatSaleQuantityDisplay(value: number): string {
-  const s = String(value);
-  return s.includes('.') ? s.replace('.', ',') : s;
 }
 
 /**
@@ -46,8 +43,15 @@ type SaleQtyInputProps = {
   id?: string;
 };
 
-/** Setas do mouse: +1 / −1 inteiro; frações só digitando (vírgula ou ponto). */
+/** Setas do mouse: +1 / −1 inteiro; frações só digitando. O campo pode ficar vazio para apagar o número atual. */
 export function SaleQtyInput({ value, onChange, className, id }: SaleQtyInputProps) {
+  const [text, setText] = useState(() => (Number.isFinite(value) ? String(value) : ''));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(Number.isFinite(value) ? String(value) : '');
+  }, [value, focused]);
+
   return (
     <input
       id={id}
@@ -56,9 +60,27 @@ export function SaleQtyInput({ value, onChange, className, id }: SaleQtyInputPro
       min={0}
       step={1}
       inputMode="decimal"
-      value={value}
+      value={text}
+      onFocus={(e) => {
+        setFocused(true);
+        e.currentTarget.select();
+      }}
+      onBlur={() => {
+        setFocused(false);
+        const n = parseSaleQuantityInput(text);
+        if (n == null || n < 0) {
+          setText(Number.isFinite(value) ? String(value) : '');
+          return;
+        }
+        const next = normalizeQtyAfterStep(value, n);
+        onChange(next);
+        setText(String(next));
+      }}
       onChange={(e) => {
-        const n = parseSaleQuantityInput(e.target.value);
+        const raw = e.target.value;
+        setText(raw);
+        if (raw === '') return;
+        const n = parseSaleQuantityInput(raw);
         if (n == null || n < 0) return;
         onChange(normalizeQtyAfterStep(value, n));
       }}
@@ -70,10 +92,11 @@ type SaleQtyDraftInputProps = {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  placeholder?: string;
 };
 
-/** Rascunho de quantidade: setas +1/−1 inteiro; frações digitando com vírgula. */
-export function SaleQtyDraftInput({ value, onChange, className }: SaleQtyDraftInputProps) {
+/** Rascunho de quantidade: setas +1/−1 inteiro; o texto pode ser apagado antes de digitar. */
+export function SaleQtyDraftInput({ value, onChange, className, placeholder }: SaleQtyDraftInputProps) {
   const parsed = parseSaleQuantityInput(value);
   const prev = parsed ?? 0;
 
@@ -84,7 +107,9 @@ export function SaleQtyDraftInput({ value, onChange, className }: SaleQtyDraftIn
       min={0}
       step={1}
       inputMode="decimal"
-      value={parsed != null ? parsed : ''}
+      placeholder={placeholder}
+      value={value}
+      onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => {
         const raw = e.target.value;
         if (raw === '') {
@@ -92,9 +117,15 @@ export function SaleQtyDraftInput({ value, onChange, className }: SaleQtyDraftIn
           return;
         }
         const n = parseSaleQuantityInput(raw);
-        if (n == null || n < 0) return;
-        const normalized = normalizeQtyAfterStep(prev, n);
-        onChange(formatSaleQuantityDisplay(normalized));
+        if (n == null || n < 0) {
+          onChange(raw);
+          return;
+        }
+        if (isSpinnerStep(prev, n)) {
+          onChange(String(normalizeQtyAfterStep(prev, n)));
+          return;
+        }
+        onChange(raw);
       }}
     />
   );

@@ -1,6 +1,33 @@
 import { clip, isoDateOnly } from './sicoob-json.util';
 
-/** Campos de encargos usados na emissão e no layout (subset de SicoobCobrancaSettings). */
+/** Condições informadas na venda, só para aquele boleto. */
+export type BoletoSaleTerms = {
+  dueDate: string;
+  tipoMulta: number;
+  valorMulta?: number | null;
+  tipoJurosMora: number;
+  valorJurosMora?: number | null;
+  diasInicioMultaAposVencimento?: number;
+  diasInicioJurosAposVencimento?: number;
+  diasLimitePagamentoAposVencimento?: number | null;
+};
+
+export function encargosFromSaleTerms(
+  terms: BoletoSaleTerms,
+  encargosNasInstrucoes: boolean,
+): SicoobEncargosConfig {
+  return {
+    tipoMulta: terms.tipoMulta,
+    tipoJurosMora: terms.tipoJurosMora,
+    valorMulta: terms.valorMulta ?? null,
+    valorJurosMora: terms.valorJurosMora ?? null,
+    diasInicioMultaAposVencimento: Math.max(1, terms.diasInicioMultaAposVencimento ?? 1),
+    diasInicioJurosAposVencimento: Math.max(1, terms.diasInicioJurosAposVencimento ?? 1),
+    diasLimitePagamentoAposVencimento: terms.diasLimitePagamentoAposVencimento ?? null,
+    encargosNasInstrucoes,
+  };
+}
+
 export type SicoobEncargosConfig = {
   tipoMulta: number;
   tipoJurosMora: number;

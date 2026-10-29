@@ -34,6 +34,12 @@ export class SicoobCobrancaController {
     return this.sicoob.getSettings(user);
   }
 
+  @Get('sicoob/sale-defaults')
+  @RequirePermissions('sales.write', 'finance.write', '*')
+  saleDefaults(@CurrentUser() user: JwtPayload) {
+    return this.sicoob.getSaleDefaults(user);
+  }
+
   @Patch('sicoob/settings')
   @RequirePermissions('finance.write', '*')
   @Audited('SicoobCobrancaSettings')

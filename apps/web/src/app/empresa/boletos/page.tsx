@@ -217,9 +217,10 @@ export default function EmpresaBoletosPage() {
               </Field>
             </div>
             <p className="text-sm text-slate-600">
-              Com <strong>Cliente emite</strong> e <strong>Cliente distribui</strong>, o GestorGranja imprime a{' '}
-              <strong>ficha de compensação</strong> no padrão FEBRABAN/Sicoob (756), com linha digitável, código de barras,
-              QR Pix quando houver, logo da empresa e recibo do pagador. Confirme no Sisbr se o contrato permite essa modalidade.
+              Com <strong>Cliente emite</strong> e <strong>Cliente distribui</strong>, a impressão segue o{' '}
+              <strong>boleto híbrido Sicoob</strong> (banco 756): recibo do pagador, linha digitável, código de barras e
+              QR Code Pix no canto inferior direito. Em <strong>Pix no boleto</strong>, use “Com Pix” para o Sicoob
+              devolver o QR. Confirme no Sisbr se o contrato permite essa modalidade.
             </p>
             <Field label="Pix no boleto">
               <select name="codigoCadastrarPIX" className={inputClass} defaultValue={s.codigoCadastrarPIX}>

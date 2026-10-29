@@ -24,8 +24,10 @@ import {
 } from './finance-title-utils';
 import { SicoobClientService, type SicoobHttpAuth } from './sicoob-client.service';
 import {
+  type BoletoSaleTerms,
   buildMensagensInstrucao,
   buildSicoobEncargosPayload,
+  encargosFromSaleTerms,
   type SicoobEncargosConfig,
   validateEncargosConfig,
 } from './sicoob-encargos.util';
@@ -61,6 +63,20 @@ export class SicoobCobrancaService {
     const row = await this.loadSettings(user.tenantSlug);
     if (!row) return this.emptySettingsDto();
     return this.toSettingsDto(row);
+  }
+
+  async getSaleDefaults(user: JwtPayload) {
+    const row = await this.loadSettings(user.tenantSlug);
+    return {
+      dueDaysDefault: row?.dueDaysDefault ?? 7,
+      tipoMulta: row?.tipoMulta ?? 0,
+      valorMulta: row?.valorMulta != null ? Number(row.valorMulta) : null,
+      tipoJurosMora: row?.tipoJurosMora ?? 3,
+      valorJurosMora: row?.valorJurosMora != null ? Number(row.valorJurosMora) : null,
+      diasInicioMultaAposVencimento: row?.diasInicioMultaAposVencimento ?? 1,
+      diasInicioJurosAposVencimento: row?.diasInicioJurosAposVencimento ?? 1,
+      diasLimitePagamentoAposVencimento: row?.diasLimitePagamentoAposVencimento ?? null,
+    };
   }
 
   async updateSettings(
@@ -208,7 +224,7 @@ export class SicoobCobrancaService {
     });
   }
 
-  async emitForSalesOrder(user: JwtPayload, salesOrderId: string) {
+  async emitForSalesOrder(user: JwtPayload, salesOrderId: string, terms?: BoletoSaleTerms) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const order = await prisma.salesOrder.findUnique({
       where: { id: salesOrderId },
@@ -228,10 +244,21 @@ export class SicoobCobrancaService {
     });
     if (existing) return this.toBoletoDto(existing);
 
-    const receivable = await this.ensureReceivableForOrder(user, order, boletoAmount);
     const settings = await this.requireSettings(user.tenantSlug);
-    const due = new Date();
-    due.setDate(due.getDate() + (settings.dueDaysDefault || 7));
+    const due = terms?.dueDate
+      ? new Date(`${terms.dueDate.slice(0, 10)}T12:00:00`)
+      : (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + (settings.dueDaysDefault || 7));
+          return d;
+        })();
+    if (Number.isNaN(due.getTime())) {
+      throw new BadRequestException('Data de vencimento do boleto inválida.');
+    }
+    const receivable = await this.ensureReceivableForOrder(user, order, boletoAmount, due);
+    const encargos = terms
+      ? encargosFromSaleTerms(terms, settings.encargosNasInstrucoes)
+      : undefined;
     return this.registerBoleto(user, {
       partner: order.partner,
       amount: boletoAmount,
@@ -240,10 +267,11 @@ export class SicoobCobrancaService {
       description: `Venda ${order.controlNumber}`,
       receivableId: receivable.id,
       salesOrderId: order.id,
+      encargos,
     });
   }
 
-  async afterSaleConfirmed(user: JwtPayload, salesOrderId: string) {
+  async afterSaleConfirmed(user: JwtPayload, salesOrderId: string, terms?: BoletoSaleTerms) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const order = await prisma.salesOrder.findUnique({
       where: { id: salesOrderId },
@@ -252,7 +280,7 @@ export class SicoobCobrancaService {
     if (!order) return null;
     if (this.boletoAmountFromOrder(order) <= 0.004) return null;
     try {
-      return await this.emitForSalesOrder(user, salesOrderId);
+      return await this.emitForSalesOrder(user, salesOrderId, terms);
     } catch (e) {
       return {
         error: e instanceof Error ? e.message : 'Falha ao registrar boleto Sicoob',
@@ -352,10 +380,6 @@ export class SicoobCobrancaService {
     const sicoobSettings = company
       ? await prisma.sicoobCobrancaSettings.findUnique({ where: { companyId: company.id } })
       : null;
-    const clienteEmiteLayout =
-      sicoobSettings?.identificacaoEmissaoBoleto === 2 &&
-      sicoobSettings?.identificacaoDistribuicaoBoleto === 2;
-
     const renderClienteHtml = async (note?: string) => {
       let layoutRow = row;
       if (!layoutRow.qrCode?.trim() && layoutRow.linhaDigitavel) {
@@ -384,8 +408,8 @@ export class SicoobCobrancaService {
           ? buildSicoobEncargosPayload(encargos, layoutRow.dataVencimento).dataLimitePagamento
           : null;
       const localPagamento = limiteTxt
-        ? `Pagável na rede bancária até ${limiteTxt.split('-').reverse().join('/')}`
-        : 'Pagável preferencialmente na rede Sicoob ou em qualquer banco até o vencimento';
+        ? `Pagável em qualquer banco até ${limiteTxt.split('-').reverse().join('/')}`
+        : 'Pagável preferencialmente nas cooperativas do Sistema Sicoob';
       const html = await buildGestorGranjaBoletoHtml({
         row: layoutRow,
         company,
@@ -407,37 +431,7 @@ export class SicoobCobrancaService {
       };
     };
 
-    if (clienteEmiteLayout) {
-      return renderClienteHtml(
-        'Emissão e distribuição pelo beneficiário — layout GestorGranja (registro Sicoob + linha digitável/código de barras).',
-      );
-    }
-
-    const path = row.pdfStorageKey ?? sicoobBoletoPdfPath(user.tenantSlug, id);
-    const cached = readSicoobBoletoPdf(path);
-    if (isValidPdfBuffer(cached)) {
-      return {
-        buffer: cached,
-        contentType: 'application/pdf',
-        filename: `boleto-${id}.pdf`,
-      };
-    }
-
-    try {
-      const pdf = await this.fetchPdfFromSicoob(user.tenantSlug, row);
-      const savedPath = writeSicoobBoletoPdf(user.tenantSlug, row.id, pdf);
-      await prisma.bankBoleto.update({
-        where: { id },
-        data: { pdfStorageKey: savedPath, nossoNumero: normalizeNossoNumero(row.nossoNumero) },
-      });
-      return {
-        buffer: pdf,
-        contentType: 'application/pdf',
-        filename: `boleto-${id}.pdf`,
-      };
-    } catch {
-      return renderClienteHtml('PDF do banco indisponível — exibindo layout GestorGranja com os dados registrados.');
-    }
+    return renderClienteHtml();
   }
 
   getStoredPdf(user: JwtPayload, id: string) {
@@ -585,6 +579,7 @@ export class SicoobCobrancaService {
       description: string;
       receivableId?: string | null;
       salesOrderId?: string | null;
+      encargos?: SicoobEncargosConfig;
     },
   ) {
     const settings = await this.requireSettings(user.tenantSlug);
@@ -593,7 +588,7 @@ export class SicoobCobrancaService {
     const venc = isoDateOnly(input.dueDate);
     const emissao = isoDateOnly(new Date());
     const conta = settings.numeroContaCorrente ? Number(settings.numeroContaCorrente) : undefined;
-    const encCfg = this.encargosFromRow(settings);
+    const encCfg = input.encargos ?? this.encargosFromRow(settings);
     try {
       validateEncargosConfig(encCfg);
     } catch (e) {
@@ -745,6 +740,7 @@ export class SicoobCobrancaService {
     user: JwtPayload,
     order: { id: string; partnerId: string; controlNumber: number; partner: Partner },
     amount: number,
+    dueDate?: Date,
   ) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const existing = await prisma.accountReceivable.findFirst({
@@ -766,8 +762,8 @@ export class SicoobCobrancaService {
     }
     const max = await prisma.accountReceivable.aggregate({ _max: { controlNumber: true } });
     const settings = await this.loadSettings(user.tenantSlug);
-    const due = new Date();
-    due.setDate(due.getDate() + (settings?.dueDaysDefault || 7));
+    const due = dueDate ?? new Date();
+    if (!dueDate) due.setDate(due.getDate() + (settings?.dueDaysDefault || 7));
     return prisma.accountReceivable.create({
       data: {
         controlNumber: (max._max.controlNumber ?? 0) + 1,

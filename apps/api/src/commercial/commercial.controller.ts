@@ -44,8 +44,12 @@ export class CommercialController {
 
   @Post('orders/:id/confirm')
   @RequirePermissions('sales.write', '*')
-  confirm(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.commercial.confirmOrder(user, id);
+  confirm(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() body: { boletoTerms?: Parameters<CommercialService['confirmOrder']>[2] },
+  ) {
+    return this.commercial.confirmOrder(user, id, body?.boletoTerms);
   }
 
   @Post('orders/:id/void')

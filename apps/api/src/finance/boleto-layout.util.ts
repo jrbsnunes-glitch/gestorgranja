@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import type { Partner } from '../generated/tenant-client';
 import { itfBarcodeToSvg, pixEmvToQrDataUrl } from './boleto-barcode.util';
 import {
@@ -87,15 +89,39 @@ function formatDateBr(d: Date | string | null | undefined): string {
 
 const DEFAULT_BANK: BoletoLayoutBank = {
   codigoBanco: '756-0',
-  localPagamento: 'Pagável preferencialmente na rede Sicoob ou em qualquer banco até o vencimento',
+  localPagamento: 'Pagável preferencialmente nas cooperativas do Sistema Sicoob',
   agenciaCodigoBeneficiario: '—',
   especieDocumento: 'DM',
   carteira: '1',
 };
 
+const SICOOB_MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect fill="#003641" x="2" y="4" width="12" height="24" rx="2"/><rect fill="#00AE9D" x="18" y="4" width="12" height="24" rx="2"/></svg>`;
+
+let systemLogoDataUrl: string | null | undefined;
+
+/** Logo do GestorGranja (login / painel), embutida na ficha. */
+export function readSystemLogoDataUrl(): string | null {
+  if (systemLogoDataUrl !== undefined) return systemLogoDataUrl;
+  const file = 'login-logo.png';
+  const candidates = [
+    join(process.cwd(), 'apps/web/public/branding', file),
+    join(process.cwd(), 'web/public/branding', file),
+    join(process.cwd(), '../web/public/branding', file),
+    join(__dirname, '../../../../apps/web/public/branding', file),
+    join(__dirname, '../../../web/public/branding', file),
+  ];
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    systemLogoDataUrl = `data:image/png;base64,${readFileSync(path).toString('base64')}`;
+    return systemLogoDataUrl;
+  }
+  systemLogoDataUrl = null;
+  return null;
+}
+
 /**
- * Layout FEBRABAN (ficha de compensação) inspirado no boleto Sicoob —
- * para emissão/distribuição pelo cliente (Cliente emite + Cliente distribui).
+ * Ficha de compensação no padrão do boleto híbrido Sicoob (756):
+ * recibo do pagador, linha digitável, código de barras ITF e QR Code Pix à direita.
  */
 export async function buildGestorGranjaBoletoHtml(input: {
   row: BoletoLayoutRow;
@@ -144,21 +170,38 @@ export async function buildGestorGranjaBoletoHtml(input: {
   const dataDoc = formatDateBr(row.registeredAt ?? new Date());
   const dataProc = dataDoc;
 
-  const companyLogo = logoDataUrl
-    ? `<img src="${logoDataUrl}" alt="" class="benef-logo" />`
+  const brandSrc = readSystemLogoDataUrl() || logoDataUrl;
+  const brandImg = brandSrc
+    ? `<img src="${brandSrc}" alt="Logo" class="system-logo" />`
     : '';
+  const benefEnd = formatAddressLine([
+    [company?.street, company?.addressNumber].filter(Boolean).join(', '),
+    company?.district,
+    formatCep(company?.zipCode),
+    [company?.city, company?.state].filter(Boolean).join('/'),
+  ]);
+  const benefLine = `${beneficiary} — ${beneficiaryDoc}`;
 
-  const qrBlock = pixQrDataUrl
-    ? `<div class="qr-box" title="Pix no boleto"><img class="qr-img" src="${pixQrDataUrl}" alt="QR Pix" /></div>`
+  const qrCell = pixQrDataUrl
+    ? `<td class="qr-col" rowspan="2">
+        <div class="pix-kicker">Pague com</div>
+        <div class="pix-word">PIX</div>
+        <img class="qr-img" src="${pixQrDataUrl}" alt="QR Code Pix" />
+      </td>`
     : pix
-      ? `<div class="qr-box"><span class="lbl">Pix copia e cola</span><span class="pix-fallback">${esc(pix)}</span></div>`
+      ? `<td class="qr-col" rowspan="2"><span class="lbl">Pix copia e cola</span><span class="pix-fallback">${esc(pix)}</span></td>`
       : '';
 
-  const instrCell = `<div class="instr-body">
-      <span class="lbl">Instruções (texto de responsabilidade do beneficiário)</span>
-      <div class="instr-text">${instrucoesHtml}</div>
-      ${qrBlock ? `<div class="instr-qr">${qrBlock}</div>` : ''}
-    </div>`;
+  const head = (compact: boolean) => `<table class="head">
+      <colgroup><col style="width:24%" /><col style="width:14%" /><col style="width:62%" /></colgroup>
+      <tr>
+        <td class="top-bank">${SICOOB_MARK}<span class="brand-name">Sicoob</span></td>
+        <td class="top-code">${esc(bank.codigoBanco)}</td>
+        <td class="${compact ? 'top-linha linha-sm' : 'top-linha'}">${esc(linhaFmt)}</td>
+      </tr>
+    </table>`;
+
+  const benefEndHtml = benefEnd !== '—' ? `<span class="val end">${esc(benefEnd)}</span>` : '';
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -168,86 +211,67 @@ export async function buildGestorGranjaBoletoHtml(input: {
   <title>Boleto ${esc(row.seuNumero)}</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; padding: 12px; background: #e2e8f0; font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #000; }
-    .note { max-width: 666px; margin: 0 auto 8px; font-size: 11px; color: #475569; }
-    .boleto { width: 666px; max-width: 100%; margin: 0 auto; background: #fff; border: 1px solid #000; }
+    body { margin: 0; padding: 12px; background: #e7e5e4; font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #000; }
+    .note, .cut, .toolbar, .boleto { width: 180mm; max-width: 100%; margin-left: auto; margin-right: auto; }
+    .note { margin-bottom: 8px; font-size: 11px; color: #44403c; }
+    .boleto { background: #fff; border: 1px solid #000; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     td { border: 1px solid #000; vertical-align: top; padding: 2px 4px; }
-    .lbl { font-size: 7px; text-transform: uppercase; display: block; line-height: 1.2; }
-    .val { font-size: 10px; font-weight: 600; min-height: 14px; word-break: break-word; }
+    .head td { height: 38px; }
+    .boleto-recibo .head td { height: 30px; }
+    .lbl { font-size: 6.5px; text-transform: uppercase; display: block; line-height: 1.15; color: #111; }
+    .val { font-size: 10px; font-weight: 600; min-height: 13px; word-break: break-word; }
+    .val.end { font-weight: 500; font-size: 9px; }
     .val-lg { font-size: 12px; font-weight: 700; }
-    .top-bank { width: 28%; border-right: 2px solid #000; text-align: center; vertical-align: middle; padding: 6px 4px; }
-    .top-code { width: 12%; border-right: 2px solid #000; text-align: center; vertical-align: middle; font-size: 16px; font-weight: 700; }
-    .top-linha { vertical-align: middle; padding: 4px 6px; font-family: "Courier New", monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
-    .sicoob-mark { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; color: #006b3f; letter-spacing: -0.5px; }
-    .sicoob-mark svg { width: 28px; height: 28px; }
-    .table-comp col.col-instr { width: 413px; }
-    .table-comp col.col-side { width: 126px; }
-    td.instr {
-      width: 413px;
-      max-width: 413px;
-      min-height: 96px;
-      vertical-align: top;
-      padding: 2px 4px;
-      overflow: hidden;
-    }
-    .instr-body { width: 100%; max-width: 405px; overflow: hidden; }
+    .top-bank { border-right: 2px solid #000; text-align: center; vertical-align: middle; white-space: nowrap; }
+    .brand-mark { width: 22px; height: 22px; vertical-align: middle; }
+    .brand-name { display: inline-block; margin-left: 6px; font-weight: 800; font-size: 16px; color: #003641; letter-spacing: -0.4px; vertical-align: middle; }
+    .top-code { border-right: 2px solid #000; text-align: center; vertical-align: middle; font-size: 15px; font-weight: 700; }
+    .top-linha { vertical-align: middle; text-align: right; padding-right: 6px; font-family: "Courier New", Courier, monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.2px; }
+    .linha-sm { font-size: 8.5px; letter-spacing: 0; }
+    .table-comp col.col-instr { width: 72%; }
+    .table-comp col.col-side { width: 28%; }
+    td.instr { min-height: 92px; vertical-align: top; }
     .instr-text { margin-top: 2px; }
-    .instr-line { font-size: 9px; font-weight: 600; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
-    .instr-line + .instr-line { margin-top: 3px; }
-    .instr-qr { margin-top: 6px; text-align: right; clear: both; width: 100%; max-width: 405px; }
-    .side-col .val { min-height: 12px; font-weight: 500; font-size: 9px; }
-    .qr-box {
-      width: 72px;
-      height: 72px;
-      margin-left: auto;
-      border: 1px solid #ccc;
-      display: inline-block;
-      vertical-align: top;
-      background: #fff;
-      padding: 2px;
-      line-height: 0;
-    }
-    .qr-box canvas, .qr-box img, .qr-img { width: 68px; height: 68px; max-width: 68px; max-height: 68px; display: block; margin: 0 auto; }
-    .pix-fallback { font-size: 6px; word-break: break-all; line-height: 1.2; max-height: 56px; overflow: hidden; display: block; }
-    .barcode-area { border-top: 1px solid #000; padding: 6px 8px 4px; }
-    .barcode-area svg { width: 100%; height: 52px; }
-    .auth { text-align: right; font-size: 8px; padding: 2px 4px 6px; border-top: 0; }
-    .recibo-title { font-size: 9px; font-weight: 700; padding: 4px 6px; border-bottom: 1px solid #000; background: #f8fafc; }
-    .benef-logo { max-height: 36px; max-width: 100px; object-fit: contain; display: block; margin-bottom: 2px; }
+    .instr-line { font-size: 9px; font-weight: 600; line-height: 1.35; word-break: break-word; }
+    .instr-line + .instr-line { margin-top: 2px; }
+    .side-col .val { min-height: 14px; }
+    .qr-col { width: 36mm; text-align: center; vertical-align: middle; padding: 3px 2px; background: #fff; }
+    .pix-kicker { font-size: 8px; font-weight: 700; color: #32BCAD; line-height: 1; }
+    .pix-word { font-size: 13px; font-weight: 800; letter-spacing: 1.2px; color: #32BCAD; line-height: 1.15; margin: 0 0 2px; }
+    .qr-img { width: 30mm; height: 30mm; display: block; margin: 0 auto; }
+    .pix-fallback { font-size: 6px; word-break: break-all; line-height: 1.2; display: block; }
+    .barcode-cell { padding: 3px 6px 2px; vertical-align: bottom; }
+    .barcode-cell svg { width: 100%; height: 13mm; display: block; }
+    .auth { text-align: right; font-size: 8px; font-weight: 700; padding: 2px 0 1px; }
+    .recibo-title { text-align: right; font-size: 8px; font-weight: 700; padding: 2px 6px 3px; }
+    .sign { display: block; margin-top: 12px; border-top: 1px solid #000; font-size: 7px; text-transform: uppercase; padding-top: 2px; font-weight: 500; }
+    .sacador { margin-top: 4px; }
+    table.benef-inner, table.benef-inner td { border: 0; padding: 0; vertical-align: middle; }
+    table.benef-inner { width: 100%; }
+    .logo-cell { width: 48mm; padding-right: 6px !important; }
+    .system-logo { height: 18mm; width: auto; max-width: 46mm; object-fit: contain; display: block; }
+    .boleto-recibo .system-logo { height: 14mm; max-width: 40mm; }
     .cut {
-      text-align: center;
+      text-align: right;
       font-size: 8px;
-      color: #64748b;
-      margin: 0 auto;
-      max-width: 666px;
-      padding: 6px 4px;
-      border-top: 1px dashed #64748b;
+      color: #44403c;
+      padding: 5px 4px 6px;
+      border-top: 1px dashed #000;
       background: #fff;
     }
-    .boleto-recibo { margin-bottom: 0; border-bottom: 0; }
-    .toolbar { max-width: 666px; margin: 10px auto 0; }
-    button { padding: 8px 14px; background: #006b3f; color: #fff; border: 0; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .boleto-recibo { border-bottom: 0; }
+    .toolbar { margin-top: 10px; }
+    button { padding: 8px 14px; background: #003641; color: #fff; border: 0; border-radius: 4px; cursor: pointer; font-size: 13px; }
     @page { size: A4; margin: 8mm; }
     @media print {
       body { background: #fff; padding: 0; }
       .note, .toolbar { display: none; }
-      .cut {
-        display: block;
-        color: #000;
-        border-top: 1px dashed #000;
-        padding: 4px 0;
-        margin: 0 auto;
-        background: #fff;
-      }
+      .cut { color: #000; background: #fff; }
       .boleto-recibo { page-break-after: avoid; }
       .boleto-ficha { page-break-before: avoid; }
-      .boleto { width: 666px; max-width: none; }
-      td.instr, .instr-body, .instr-qr { max-width: 413px; overflow: hidden; }
-      .table-comp { width: 666px; table-layout: fixed; }
-      .table-comp col.col-instr { width: 413px !important; }
-      .table-comp col.col-side { width: 126px !important; }
-      .qr-box, .qr-img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .boleto, .cut { width: 180mm; max-width: none; }
+      .qr-img, .brand-mark, .pix-word, .pix-kicker, .system-logo { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
@@ -255,110 +279,132 @@ export async function buildGestorGranjaBoletoHtml(input: {
   ${note ? `<p class="note">${esc(note)}</p>` : ''}
 
   <div class="boleto boleto-recibo">
-    <div class="recibo-title">Recibo do pagador</div>
+    ${head(true)}
     <table>
-      <colgroup><col style="width:70%" /><col style="width:30%" /></colgroup>
+      <colgroup><col style="width:58%" /><col style="width:20%" /><col style="width:22%" /></colgroup>
       <tr>
-        <td><span class="lbl">Beneficiário</span><span class="val">${esc(beneficiary)}</span></td>
+        <td>
+          <span class="lbl">Beneficiário</span>
+          <table class="benef-inner"><tr>
+            ${brandImg ? `<td class="logo-cell">${brandImg}</td>` : ''}
+            <td><span class="val">${esc(benefLine)}</span></td>
+          </tr></table>
+        </td>
+        <td><span class="lbl">Agência / Código beneficiário</span><span class="val">${esc(bank.agenciaCodigoBeneficiario)}</span></td>
         <td><span class="lbl">Vencimento</span><span class="val val-lg">${esc(venc)}</span></td>
       </tr>
       <tr>
-        <td><span class="lbl">Pagador</span><span class="val">${esc(pagador)}</span></td>
-        <td><span class="lbl">Valor do documento</span><span class="val val-lg">${esc(valor)}</span></td>
-      </tr>
-      <tr>
-        <td colspan="2"><span class="lbl">Endereço do pagador</span><span class="val">${esc(pagadorEnd)}</span></td>
+        <td>
+          <span class="lbl">Pagador</span>
+          <span class="val">${esc(pagador)} — ${esc(pagadorDoc)}</span>
+          <span class="val end">${esc(pagadorEnd)}</span>
+        </td>
+        <td><span class="lbl">Nosso número</span><span class="val">${esc(nn ?? '—')}</span></td>
+        <td>
+          <span class="lbl">Valor do documento</span>
+          <span class="val val-lg">${esc(valor)}</span>
+          <span class="sign">Assinatura do pagador</span>
+        </td>
       </tr>
     </table>
+    <div class="recibo-title">Recibo do pagador</div>
   </div>
 
   <div class="cut" role="presentation">Corte na linha pontilhada</div>
 
   <div class="boleto boleto-ficha">
-    <table>
-      <tr>
-        <td class="top-bank">
-          <div class="sicoob-mark">
-            <svg viewBox="0 0 32 32" aria-hidden="true"><rect fill="#006b3f" x="2" y="6" width="12" height="20" rx="1"/><rect fill="#7ab800" x="18" y="6" width="12" height="20" rx="1"/></svg>
-            SICOOB
-          </div>
-        </td>
-        <td class="top-code">${esc(bank.codigoBanco)}</td>
-        <td class="top-linha">${esc(linhaFmt)}</td>
-      </tr>
-    </table>
+    ${head(false)}
 
     <table>
-      <colgroup><col style="width:75%" /><col style="width:25%" /></colgroup>
+      <colgroup><col style="width:72%" /><col style="width:28%" /></colgroup>
       <tr>
         <td><span class="lbl">Local de pagamento</span><span class="val">${esc(bank.localPagamento)}</span></td>
         <td><span class="lbl">Vencimento</span><span class="val val-lg">${esc(venc)}</span></td>
       </tr>
       <tr>
-        <td><span class="lbl">Beneficiário</span><span class="val">${esc(beneficiary)}${companyLogo ? `<br/>${companyLogo}` : ''}</span></td>
+        <td>
+          <span class="lbl">Beneficiário</span>
+          <table class="benef-inner"><tr>
+            ${brandImg ? `<td class="logo-cell">${brandImg}</td>` : ''}
+            <td>
+              <span class="val">${esc(benefLine)}</span>
+              ${benefEndHtml}
+            </td>
+          </tr></table>
+        </td>
         <td><span class="lbl">Agência / Código do beneficiário</span><span class="val">${esc(bank.agenciaCodigoBeneficiario)}</span></td>
       </tr>
     </table>
 
     <table>
       <colgroup>
-        <col style="width:14%" /><col style="width:14%" /><col style="width:10%" /><col style="width:8%" />
-        <col style="width:14%" /><col style="width:14%" /><col style="width:10%" /><col style="width:16%" />
+        <col style="width:16%" /><col style="width:16%" /><col style="width:10%" /><col style="width:8%" /><col style="width:16%" /><col style="width:34%" />
       </colgroup>
       <tr>
         <td><span class="lbl">Data do documento</span><span class="val">${esc(dataDoc)}</span></td>
-        <td><span class="lbl">Número do documento</span><span class="val">${esc(row.seuNumero)}</span></td>
+        <td><span class="lbl">Nº do documento</span><span class="val">${esc(row.seuNumero)}</span></td>
         <td><span class="lbl">Espécie doc.</span><span class="val">${esc(bank.especieDocumento)}</span></td>
         <td><span class="lbl">Aceite</span><span class="val">N</span></td>
         <td><span class="lbl">Data processamento</span><span class="val">${esc(dataProc)}</span></td>
-        <td colspan="3"><span class="lbl">Nosso número</span><span class="val">${esc(nn ?? '—')}</span></td>
+        <td><span class="lbl">Nosso número</span><span class="val">${esc(nn ?? '—')}</span></td>
       </tr>
+    </table>
+
+    <table>
+      <colgroup>
+        <col style="width:16%" /><col style="width:12%" /><col style="width:12%" /><col style="width:16%" /><col style="width:16%" /><col style="width:28%" />
+      </colgroup>
       <tr>
-        <td colspan="2"><span class="lbl">Uso do banco</span><span class="val">&nbsp;</span></td>
+        <td><span class="lbl">Uso do banco</span><span class="val">&nbsp;</span></td>
         <td><span class="lbl">Carteira</span><span class="val">${esc(bank.carteira)}</span></td>
-        <td colspan="2"><span class="lbl">Espécie</span><span class="val">R$</span></td>
-        <td colspan="2"><span class="lbl">Quantidade</span><span class="val">&nbsp;</span></td>
+        <td><span class="lbl">Espécie</span><span class="val">R$</span></td>
+        <td><span class="lbl">Quantidade</span><span class="val">&nbsp;</span></td>
+        <td><span class="lbl">Valor</span><span class="val">&nbsp;</span></td>
         <td><span class="lbl">(=) Valor do documento</span><span class="val val-lg">${esc(valor)}</span></td>
       </tr>
     </table>
 
     <table class="table-comp">
-      <colgroup><col class="col-instr" /><col class="col-side" /><col class="col-side" /></colgroup>
+      <colgroup><col class="col-instr" /><col class="col-side" /></colgroup>
       <tr>
-        <td rowspan="5" class="instr">${instrCell}</td>
-        <td class="side-col"><span class="lbl">(-) Desconto / Abatimento</span><span class="val">&nbsp;</span></td>
-        <td class="side-col"><span class="lbl">&nbsp;</span><span class="val">&nbsp;</span></td>
-      </tr>
-      <tr>
-        <td class="side-col" colspan="2"><span class="lbl">(-) Outras deduções</span><span class="val">&nbsp;</span></td>
-      </tr>
-      <tr>
-        <td class="side-col" colspan="2"><span class="lbl">(+) Mora / Multa / Juros</span><span class="val">${moraMultaJuros}</span></td>
-      </tr>
-      <tr>
-        <td class="side-col" colspan="2"><span class="lbl">(+) Outros acréscimos</span><span class="val">&nbsp;</span></td>
-      </tr>
-      <tr>
-        <td class="side-col" colspan="2"><span class="lbl">(=) Valor cobrado</span><span class="val">&nbsp;</span></td>
-      </tr>
-      <tr>
-        <td colspan="3">
-          <span class="lbl">Pagador</span>
-          <span class="val">${esc(pagador)} — ${esc(pagadorDoc)}</span>
-          <span class="lbl" style="margin-top:4px">Endereço</span>
-          <span class="val">${esc(pagadorEnd)}</span>
+        <td rowspan="5" class="instr">
+          <span class="lbl">Instruções (texto de responsabilidade do beneficiário)</span>
+          <div class="instr-text">${instrucoesHtml}</div>
         </td>
+        <td class="side-col"><span class="lbl">(-) Desconto / Abatimento</span><span class="val">&nbsp;</span></td>
       </tr>
       <tr>
-        <td><span class="lbl">Beneficiário final</span><span class="val">${esc(beneficiary)} — ${esc(beneficiaryDoc)}</span></td>
-        <td colspan="2"><span class="lbl">Código de baixa</span><span class="val">&nbsp;</span></td>
+        <td class="side-col"><span class="lbl">(-) Outras deduções</span><span class="val">&nbsp;</span></td>
+      </tr>
+      <tr>
+        <td class="side-col"><span class="lbl">(+) Mora / Multa / Juros</span><span class="val">${moraMultaJuros}</span></td>
+      </tr>
+      <tr>
+        <td class="side-col"><span class="lbl">(+) Outros acréscimos</span><span class="val">&nbsp;</span></td>
+      </tr>
+      <tr>
+        <td class="side-col"><span class="lbl">(=) Valor cobrado</span><span class="val">&nbsp;</span></td>
       </tr>
     </table>
 
-    <div class="barcode-area">
-      ${barcodeSvg ?? '<p class="lbl">Código de barras indisponível — use a linha digitável.</p>'}
-    </div>
-    <div class="auth">Autenticação mecânica — Ficha de compensação</div>
+    <table class="bottom">
+      <tr>
+        <td class="pagador-cell">
+          <span class="lbl">Pagador</span>
+          <span class="val">${esc(pagador)} — CPF/CNPJ ${esc(pagadorDoc)}</span>
+          <span class="val end">${esc(pagadorEnd)}</span>
+          <span class="lbl sacador">Sacador / Avalista</span>
+          <span class="val">${esc(benefLine)}</span>
+        </td>
+        ${qrCell}
+      </tr>
+      <tr>
+        <td class="barcode-cell">
+          ${barcodeSvg ?? '<span class="lbl">Código de barras indisponível — use a linha digitável.</span>'}
+          <div class="auth">Autenticação mecânica — Ficha de compensação</div>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <div class="toolbar">
