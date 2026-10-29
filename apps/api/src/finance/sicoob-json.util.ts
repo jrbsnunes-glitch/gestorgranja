@@ -39,6 +39,21 @@ export function digitsOnly(s: string | null | undefined): string {
   return (s ?? '').replace(/\D/g, '');
 }
 
+/**
+ * Conta corrente Sicoob (inteiro, sem dígito).
+ * "123456-7" e "123.456-7" viram 123456. Só dígitos permanecem como estão.
+ */
+export function parseNumeroContaCorrente(raw: string | null | undefined): number | null {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  const withoutDv = /-\s*\d\s*$/.test(t) ? t.replace(/-\s*\d\s*$/, '') : t;
+  const digits = withoutDv.replace(/\D/g, '');
+  if (!digits || digits.length > 12) return null;
+  const n = Number(digits);
+  if (!Number.isSafeInteger(n) || n <= 0) return null;
+  return n;
+}
+
 /** Sandbox/mock do Sicoob pode devolver overflow de int32; não usar em consultas. */
 /** EMV Pix (copia e cola) retornado no registro/consulta do boleto híbrido. */
 export function extractQrCodeFromResultado(body: Record<string, unknown>): string | null {

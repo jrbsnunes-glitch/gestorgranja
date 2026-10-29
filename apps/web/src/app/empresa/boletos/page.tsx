@@ -184,9 +184,20 @@ export default function EmpresaBoletosPage() {
             <Field label="Número do cliente (Sisbr)">
               <input name="numeroCliente" type="number" className={inputClass} defaultValue={s.numeroCliente ?? ''} />
             </Field>
-            <Field label="Conta corrente de crédito">
-              <input name="numeroContaCorrente" className={inputClass} defaultValue={s.numeroContaCorrente ?? ''} />
+            <Field label="Conta corrente de crédito (sem dígito)">
+              <input
+                name="numeroContaCorrente"
+                className={inputClass}
+                inputMode="numeric"
+                required
+                placeholder="Ex.: 123456"
+                defaultValue={s.numeroContaCorrente ?? ''}
+              />
             </Field>
+            <p className="text-sm text-slate-600">
+              Número da conta no Sisbr onde o boleto é creditado, sem o dígito verificador. Se informar 123456-7, o
+              sistema envia 123456. O Sicoob recusa a inclusão sem esse campo.
+            </p>
             <Field label="Modalidade">
               <select name="codigoModalidade" className={inputClass} defaultValue={s.codigoModalidade}>
                 <option value={1}>1 — Simples com registro</option>

@@ -37,6 +37,7 @@ import {
   isBoletoLiquidated,
   isoDateOnly,
   omitEmpty,
+  parseNumeroContaCorrente,
   partnerDocumentId,
   unwrapSicoobResult,
   extractQrCodeFromResultado,
@@ -587,7 +588,12 @@ export class SicoobCobrancaService {
     const pagador = this.buildPagador(input.partner);
     const venc = isoDateOnly(input.dueDate);
     const emissao = isoDateOnly(new Date());
-    const conta = settings.numeroContaCorrente ? Number(settings.numeroContaCorrente) : undefined;
+    const conta = parseNumeroContaCorrente(settings.numeroContaCorrente);
+    if (conta == null) {
+      throw new BadRequestException(
+        'Informe a conta corrente de crédito em Empresa → Boletos Sicoob, sem o dígito verificador. O Sicoob exige esse campo para registrar o boleto.',
+      );
+    }
     const encCfg = input.encargos ?? this.encargosFromRow(settings);
     try {
       validateEncargosConfig(encCfg);
@@ -605,7 +611,7 @@ export class SicoobCobrancaService {
     const body = omitEmpty({
       numeroCliente: settings.numeroCliente,
       codigoModalidade: settings.codigoModalidade,
-      numeroContaCorrente: Number.isFinite(conta) ? conta : undefined,
+      numeroContaCorrente: conta,
       codigoEspecieDocumento: settings.codigoEspecieDocumento || 'DM',
       dataEmissao: emissao,
       seuNumero: input.seuNumero.slice(0, 18),
@@ -805,6 +811,11 @@ export class SicoobCobrancaService {
     if (!settings.clientId?.trim()) throw new BadRequestException('Informe o client_id do aplicativo Sicoob');
     if (settings.numeroCliente == null) {
       throw new BadRequestException('Informe o número do cliente (Sisbr) nas configurações de boleto');
+    }
+    if (parseNumeroContaCorrente(settings.numeroContaCorrente) == null) {
+      throw new BadRequestException(
+        'Informe a conta corrente de crédito em Empresa → Boletos Sicoob, sem o dígito verificador. O Sicoob exige esse campo para registrar o boleto.',
+      );
     }
     if (settings.environment === SicoobEnvironment.sandbox && !settings.sandboxAccessTokenEnc) {
       throw new BadRequestException('Informe o token sandbox do Portal Developers');

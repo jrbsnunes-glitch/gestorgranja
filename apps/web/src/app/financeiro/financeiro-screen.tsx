@@ -690,6 +690,30 @@ export function FinanceiroScreen({
     }
   }
 
+  async function cancelReceivableBoleto(boletoId: string) {
+    if (!viewRec) return;
+    if (
+      !window.confirm(
+        'Cancelar este boleto no Sicoob? Ele deixa de poder ser pago. A conta a receber continua em aberto.',
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      const boleto = await apiFetch<BankBoletoDto>(`/v1/finance/boletos/${boletoId}/baixa`, {
+        method: 'POST',
+      });
+      setViewRec({
+        ...viewRec,
+        boletos: (viewRec.boletos ?? []).map((b) => (b.id === boleto.id ? { ...b, ...boleto } : b)),
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao cancelar boleto');
+    }
+  }
+
   async function cancelReceivableTitle() {
     if (!viewRec) return;
     if (!window.confirm('Cancelar este registro de conta a receber?')) return;
@@ -1028,6 +1052,9 @@ export function FinanceiroScreen({
       >
         {viewRec ? (
           <div className="mt-4 flex flex-wrap gap-2">
+            {error ? (
+              <p className="w-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+            ) : null}
             {!viewRec.settled && !isTitleCancelledStatus(viewRec.approvalStatus) ? (
               <Button type="button" onClick={() => setSettlementOpen('rec')}>
                 Registrar recebimento
@@ -1050,9 +1077,18 @@ export function FinanceiroScreen({
             {!isTitleCancelledStatus(viewRec.approvalStatus) && !receivableHasPayment(viewRec) ? (
               <>
                 {viewRec.boletos?.[0]?.status === 'REGISTERED' && viewRec.boletos[0].id ? (
-                  <Button type="button" onClick={() => void viewReceivableBoleto(viewRec.boletos![0].id)}>
-                    Ver boleto Sicoob
-                  </Button>
+                  <>
+                    <Button type="button" onClick={() => void viewReceivableBoleto(viewRec.boletos![0].id)}>
+                      Ver boleto Sicoob
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void cancelReceivableBoleto(viewRec.boletos![0].id)}
+                    >
+                      Cancelar boleto
+                    </Button>
+                  </>
                 ) : (
                   <Button type="button" onClick={() => void emitReceivableBoleto()}>
                     Gerar boleto Sicoob
