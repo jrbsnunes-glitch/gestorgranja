@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CashSessionStatus } from '../generated/tenant-client';
+import type { BoletoSaleTerms } from '../finance/sicoob-encargos.util';
 import { SicoobCobrancaService } from '../finance/sicoob-cobranca.service';
 import { calendarDayKeyInTz, monthDayKeysInTz, prismaDateOnly } from '../common/calendar-date.util';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -315,16 +316,7 @@ export class CommercialService {
   async confirmOrder(
     user: JwtPayload,
     orderId: string,
-    boletoTerms?: {
-      dueDate: string;
-      tipoMulta: number;
-      valorMulta?: number | null;
-      tipoJurosMora: number;
-      valorJurosMora?: number | null;
-      diasInicioMultaAposVencimento?: number;
-      diasInicioJurosAposVencimento?: number;
-      diasLimitePagamentoAposVencimento?: number | null;
-    },
+    boletoTerms?: BoletoSaleTerms,
   ) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const order = await prisma.salesOrder.findUnique({ where: { id: orderId }, include: { items: true } });

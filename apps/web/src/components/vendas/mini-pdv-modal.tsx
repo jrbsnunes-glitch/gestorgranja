@@ -41,6 +41,8 @@ type BoletoSaleTerms = {
   diasInicioMultaAposVencimento: number;
   diasInicioJurosAposVencimento: number;
   diasLimitePagamentoAposVencimento: number | null;
+  codigoProtesto: number;
+  numeroDiasProtesto: number | null;
 };
 
 type RequisitionSuccess = {
@@ -178,6 +180,8 @@ function BoletoTermsFields({
   diasMulta,
   diasJuros,
   diasLimite,
+  codigoProtesto,
+  diasProtesto,
   onDays,
   onDue,
   onTipoMulta,
@@ -187,6 +191,8 @@ function BoletoTermsFields({
   onDiasMulta,
   onDiasJuros,
   onDiasLimite,
+  onCodigoProtesto,
+  onDiasProtesto,
 }: {
   days: string;
   due: string;
@@ -197,6 +203,8 @@ function BoletoTermsFields({
   diasMulta: string;
   diasJuros: string;
   diasLimite: string;
+  codigoProtesto: string;
+  diasProtesto: string;
   onDays: (v: string) => void;
   onDue: (v: string) => void;
   onTipoMulta: (v: string) => void;
@@ -206,6 +214,8 @@ function BoletoTermsFields({
   onDiasMulta: (v: string) => void;
   onDiasJuros: (v: string) => void;
   onDiasLimite: (v: string) => void;
+  onCodigoProtesto: (v: string) => void;
+  onDiasProtesto: (v: string) => void;
 }) {
   return (
     <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3">
@@ -305,6 +315,27 @@ function BoletoTermsFields({
             value={diasLimite}
             placeholder="Em branco = automático"
             onChange={(e) => onDiasLimite(e.target.value)}
+          />
+        </Field>
+        <Field label="Protesto">
+          <select className={inputClass} value={codigoProtesto} onChange={(e) => onCodigoProtesto(e.target.value)}>
+            <option value="3">Não protestar</option>
+            <option value="1">Protestar em dias corridos</option>
+            <option value="2">Protestar em dias úteis</option>
+          </select>
+        </Field>
+        <Field label="Dias para protesto">
+          <input
+            className={inputClass}
+            type="number"
+            min={1}
+            max={99}
+            step={1}
+            inputMode="numeric"
+            value={diasProtesto}
+            disabled={codigoProtesto === '3'}
+            placeholder={codigoProtesto === '3' ? '—' : 'Ex.: 5'}
+            onChange={(e) => onDiasProtesto(e.target.value)}
           />
         </Field>
       </div>
@@ -427,6 +458,8 @@ export function MiniPdvModal({
   const [boletoDiasMulta, setBoletoDiasMulta] = useState('1');
   const [boletoDiasJuros, setBoletoDiasJuros] = useState('1');
   const [boletoDiasLimite, setBoletoDiasLimite] = useState('');
+  const [boletoCodigoProtesto, setBoletoCodigoProtesto] = useState('3');
+  const [boletoDiasProtesto, setBoletoDiasProtesto] = useState('');
 
   function isRequisicaoForm(f: PaymentForm) {
     return f.kind === 'REQUISICAO';
@@ -460,6 +493,7 @@ export function MiniPdvModal({
     diasInicioMultaAposVencimento: number;
     diasInicioJurosAposVencimento: number;
     diasLimitePagamentoAposVencimento: number | null;
+    codigoProtesto?: number;
   }) {
     const days = String(d.dueDaysDefault ?? 7);
     setBoletoDays(days);
@@ -473,6 +507,9 @@ export function MiniPdvModal({
     setBoletoDiasLimite(
       d.diasLimitePagamentoAposVencimento != null ? String(d.diasLimitePagamentoAposVencimento) : '',
     );
+    const protesto = d.codigoProtesto === 1 || d.codigoProtesto === 2 ? String(d.codigoProtesto) : '3';
+    setBoletoCodigoProtesto(protesto);
+    if (protesto === '3') setBoletoDiasProtesto('');
   }
 
   function loadBoletoDefaults() {
@@ -485,6 +522,7 @@ export function MiniPdvModal({
       diasInicioMultaAposVencimento: number;
       diasInicioJurosAposVencimento: number;
       diasLimitePagamentoAposVencimento: number | null;
+      codigoProtesto?: number;
     }>('/v1/finance/sicoob/sale-defaults')
       .then(applyBoletoDefaults)
       .catch(() => {
@@ -521,6 +559,19 @@ export function MiniPdvModal({
       return null;
     }
     const limite = boletoDiasLimite.trim() === '' ? null : Number(boletoDiasLimite);
+    const codigoProtesto = Number(boletoCodigoProtesto);
+    let numeroDiasProtesto: number | null = null;
+    if (codigoProtesto === 1 || codigoProtesto === 2) {
+      const dias = Number(boletoDiasProtesto);
+      if (!Number.isInteger(dias) || dias < 1 || dias > 99) {
+        setError('Informe os dias para protesto, de 1 a 99.');
+        return null;
+      }
+      numeroDiasProtesto = dias;
+    } else if (codigoProtesto !== 3) {
+      setError('Opção de protesto inválida.');
+      return null;
+    }
     return {
       dueDate: boletoDue,
       tipoMulta,
@@ -530,6 +581,8 @@ export function MiniPdvModal({
       diasInicioMultaAposVencimento: Math.max(1, Number(boletoDiasMulta) || 1),
       diasInicioJurosAposVencimento: Math.max(1, Number(boletoDiasJuros) || 1),
       diasLimitePagamentoAposVencimento: limite != null && Number.isFinite(limite) ? limite : null,
+      codigoProtesto: codigoProtesto === 1 || codigoProtesto === 2 ? codigoProtesto : 3,
+      numeroDiasProtesto,
     };
   }
 
@@ -569,6 +622,8 @@ export function MiniPdvModal({
     setBoletoDiasMulta('1');
     setBoletoDiasJuros('1');
     setBoletoDiasLimite('');
+    setBoletoCodigoProtesto('3');
+    setBoletoDiasProtesto('');
     setCashTendered('');
     setSplitCashTenderedPrimary('');
     setSplitCashTenderedSecondary('');
@@ -848,6 +903,8 @@ export function MiniPdvModal({
     setBoletoDiasMulta('1');
     setBoletoDiasJuros('1');
     setBoletoDiasLimite('');
+    setBoletoCodigoProtesto('3');
+    setBoletoDiasProtesto('');
     setShowPayment(false);
     setPayPanel('methods');
     setSuccess(null);
@@ -1227,6 +1284,10 @@ export function MiniPdvModal({
           onDiasMulta={setBoletoDiasMulta}
           onDiasJuros={setBoletoDiasJuros}
           onDiasLimite={setBoletoDiasLimite}
+          codigoProtesto={boletoCodigoProtesto}
+          diasProtesto={boletoDiasProtesto}
+          onCodigoProtesto={setBoletoCodigoProtesto}
+          onDiasProtesto={setBoletoDiasProtesto}
         />
       ) : null}
 
@@ -1303,6 +1364,10 @@ export function MiniPdvModal({
               onDiasMulta={setBoletoDiasMulta}
               onDiasJuros={setBoletoDiasJuros}
               onDiasLimite={setBoletoDiasLimite}
+              codigoProtesto={boletoCodigoProtesto}
+              diasProtesto={boletoDiasProtesto}
+              onCodigoProtesto={setBoletoCodigoProtesto}
+              onDiasProtesto={setBoletoDiasProtesto}
             />
           ) : null}
           {isCashFormId(splitSecondaryFormId) && splitRemainder != null && splitRemainder >= 0.01 ? (

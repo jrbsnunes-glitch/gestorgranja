@@ -877,7 +877,7 @@ export function FinanceiroScreen({
           ) : null}
           <PartnerLookupField role="supplier" name="partnerId" required label="Fornecedor / parceiro" />
           <ExpenseTypeField />
-          <Field label="Conta contábil (despesa/custo)">
+          <Field label="Centro de custo">
             <ChartAccountSelect flow="payable" required />
           </Field>
           <Field label="Descrição">
@@ -1153,7 +1153,7 @@ export function FinanceiroScreen({
               defaultValue={editPay.partner.id}
             />
             <ExpenseTypeField defaultValue={editPay.expenseType?.id} />
-            <Field label="Conta contábil (despesa/custo)">
+            <Field label="Centro de custo">
               <ChartAccountSelect flow="payable" required defaultValue={editPay.chartAccount.id} />
             </Field>
             <Field label="Descrição">

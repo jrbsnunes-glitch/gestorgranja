@@ -10,7 +10,26 @@ export type BoletoSaleTerms = {
   diasInicioMultaAposVencimento?: number;
   diasInicioJurosAposVencimento?: number;
   diasLimitePagamentoAposVencimento?: number | null;
+  /** 1 dias corridos, 2 dias úteis, 3 não protestar. */
+  codigoProtesto?: number;
+  numeroDiasProtesto?: number | null;
 };
+
+export function protestFromSaleTerms(terms: BoletoSaleTerms): {
+  codigoProtesto: number;
+  numeroDiasProtesto: number | null;
+} {
+  const code = terms.codigoProtesto ?? 3;
+  if (code !== 1 && code !== 2 && code !== 3) {
+    throw new Error('Protesto inválido. Use não protestar, dias corridos ou dias úteis.');
+  }
+  if (code === 3) return { codigoProtesto: 3, numeroDiasProtesto: null };
+  const days = terms.numeroDiasProtesto;
+  if (days == null || !Number.isInteger(days) || days < 1 || days > 99) {
+    throw new Error('Informe os dias para protesto, de 1 a 99.');
+  }
+  return { codigoProtesto: code, numeroDiasProtesto: days };
+}
 
 export function encargosFromSaleTerms(
   terms: BoletoSaleTerms,

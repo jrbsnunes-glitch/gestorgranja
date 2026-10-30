@@ -28,6 +28,7 @@ import {
   buildMensagensInstrucao,
   buildSicoobEncargosPayload,
   encargosFromSaleTerms,
+  protestFromSaleTerms,
   type SicoobEncargosConfig,
   validateEncargosConfig,
 } from './sicoob-encargos.util';
@@ -77,6 +78,7 @@ export class SicoobCobrancaService {
       diasInicioMultaAposVencimento: row?.diasInicioMultaAposVencimento ?? 1,
       diasInicioJurosAposVencimento: row?.diasInicioJurosAposVencimento ?? 1,
       diasLimitePagamentoAposVencimento: row?.diasLimitePagamentoAposVencimento ?? null,
+      codigoProtesto: row?.codigoProtesto ?? 3,
     };
   }
 
@@ -260,6 +262,14 @@ export class SicoobCobrancaService {
     const encargos = terms
       ? encargosFromSaleTerms(terms, settings.encargosNasInstrucoes)
       : undefined;
+    let protesto: { codigoProtesto: number; numeroDiasProtesto: number | null } | undefined;
+    if (terms) {
+      try {
+        protesto = protestFromSaleTerms(terms);
+      } catch (e) {
+        throw new BadRequestException(e instanceof Error ? e.message : 'Protesto inválido');
+      }
+    }
     return this.registerBoleto(user, {
       partner: order.partner,
       amount: boletoAmount,
@@ -269,6 +279,7 @@ export class SicoobCobrancaService {
       receivableId: receivable.id,
       salesOrderId: order.id,
       encargos,
+      protesto,
     });
   }
 
@@ -581,6 +592,7 @@ export class SicoobCobrancaService {
       receivableId?: string | null;
       salesOrderId?: string | null;
       encargos?: SicoobEncargosConfig;
+      protesto?: { codigoProtesto: number; numeroDiasProtesto: number | null };
     },
   ) {
     const settings = await this.requireSettings(user.tenantSlug);
@@ -606,7 +618,29 @@ export class SicoobCobrancaService {
     } catch (e) {
       throw new BadRequestException(e instanceof Error ? e.message : 'Encargos inválidos');
     }
+    const codigoProtesto = input.protesto?.codigoProtesto ?? settings.codigoProtesto;
+    let numeroDiasProtesto: number | null = null;
+    if (codigoProtesto === 1 || codigoProtesto === 2) {
+      numeroDiasProtesto = input.protesto?.numeroDiasProtesto ?? null;
+      if (
+        numeroDiasProtesto == null ||
+        !Number.isInteger(numeroDiasProtesto) ||
+        numeroDiasProtesto < 1 ||
+        numeroDiasProtesto > 99
+      ) {
+        throw new BadRequestException('Informe os dias para protesto, de 1 a 99.');
+      }
+    }
     const instrucoes = buildMensagensInstrucao(input.description, encCfg, input.dueDate);
+    if (numeroDiasProtesto != null && instrucoes.length < 5) {
+      const protestoLinha = clip(
+        codigoProtesto === 2
+          ? `Protesto após ${numeroDiasProtesto} dias úteis`
+          : `Protesto após ${numeroDiasProtesto} dias corridos`,
+        40,
+      );
+      if (protestoLinha) instrucoes.push(protestoLinha);
+    }
 
     const body = omitEmpty({
       numeroCliente: settings.numeroCliente,
@@ -630,7 +664,8 @@ export class SicoobCobrancaService {
       numeroParcela: 1,
       aceite: true,
       codigoNegativacao: settings.codigoNegativacao,
-      codigoProtesto: settings.codigoProtesto,
+      codigoProtesto,
+      numeroDiasProtesto,
       pagador,
       mensagensInstrucao: instrucoes.length ? instrucoes : undefined,
       gerarPdf: true,
