@@ -95,7 +95,8 @@ const DEFAULT_BANK: BoletoLayoutBank = {
   carteira: '1',
 };
 
-const SICOOB_MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect fill="#003641" x="2" y="4" width="12" height="24" rx="2"/><rect fill="#00AE9D" x="18" y="4" width="12" height="24" rx="2"/></svg>`;
+/** Marca positiva publicada em sicoob.com.br (símbolo + wordmark). */
+const SICOOB_LOGO = `<svg class="bank-logo" viewBox="0 0 142.2 32.8" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sicoob"><path fill="#111111" d="M90.8,5.8h0c-6.4,0-10.3,4.9-10.3,10.9s3.6,10.6,10,10.6h.2c6.3-.1,10.2-4.3,10.2-11,0-5.5-3.4-10.5-10.1-10.5ZM90.7,22.9h0c-2.8,0-4.4-2.6-4.4-6.3s1.6-6.3,4.3-6.3h0c2.7,0,4.3,2.7,4.3,6.3,0,3.7-1.5,6.3-4.2,6.3ZM113.1,5.8h0c-6.4,0-10.3,4.9-10.3,10.9s3.6,10.6,10,10.6h.2c6.3-.1,10.2-4.3,10.2-11,0-5.5-3.4-10.5-10.1-10.5ZM113,22.9h0c-2.7,0-4.4-2.6-4.3-6.3s1.6-6.3,4.3-6.3,4.3,2.7,4.3,6.3-1.6,6.3-4.3,6.3ZM137.2,15.8h0c2.4-1,3.4-2.7,3.4-4.4s-1.1-3.6-2.8-4.3c-1.6-.7-3.3-1.1-5.1-1h-1.3c-2.2,0-4.4,0-6.6.5v20.4c1.8.3,3.7.4,5.5.4s1.6,0,2.4-.1c3.1-.2,5-.8,6.2-1.8,1.5-1.1,2.4-2.8,2.4-4.6,0-2.5-1.7-4.6-4.1-5.1h0ZM130.4,10.2c.6-.1,1.2-.1,1.8-.1h.5c1.6.1,2.3.9,2.3,2s-.8,1.8-2.3,2.1c-.4.1-.8.1-1.2.1h-1.1v-4.1ZM132.7,23.2h-.7c-.5,0-1.1,0-1.6-.1v-5h2.3c1.6.2,2.7.9,2.7,2.4s-1.2,2.5-2.7,2.7h0ZM54.9,6.2v20.8h5.6V9.6c0-2.6-1.4-3.4-5.6-3.4ZM46.8,14.4c-2.7-1-3.8-1.4-3.8-2.4s.9-1.5,2.6-1.5,3.1.4,4.5,1c.9-2.2,1.3-5.6-4.4-5.6s-8.4,2.8-8.4,6.5,2.3,5,5.9,6.3c2.3.8,3.3,1.4,3.3,2.4s-.9,1.7-2.8,1.7-3.7-.5-5.4-1.3l-1.1,4.6c1.9.9,4,1.3,6.1,1.3,6.1,0,8.9-3.1,8.9-6.6,0-3-1.7-5-5.4-6.4ZM75.1,22.7c-3.8,0-6.1-2.4-6.1-6.1s2.8-6.1,6-6.1,2.6.3,3.9.7c1-2.2.7-5.3-4.1-5.3s-11.6,3.7-11.6,11.1,3.4,10.4,11.2,10.4c1.8.1,3.6-.2,5.2-.9l-.8-4.4c-1.1.4-2.4.6-3.7.6Z"/><path fill="#7DB61C" d="M2.6.8c-.3,0-.5.2-.8.3-.6.3-1,1-1,1.7s.1.6.2.9l9.5,16.3,3.1-5.3h0l5-8.6L15.6.8H2.6Z"/><path fill="#00ae9d" d="M15.5.8l8,13.9h6.1l6.4-11.1c0-.3.2-.5.2-.8,0-1-.8-1.9-1.8-1.9H15.5Z"/><path fill="#C9D200" d="M29.2,14.7h-15.6l-3.1,5.3,6.5,11.2.6.6c.9.5,2,.2,2.6-.6l9.5-16.4h-.5Z"/></svg>`;
 
 let systemLogoDataUrl: string | null | undefined;
 
@@ -195,7 +196,7 @@ export async function buildGestorGranjaBoletoHtml(input: {
   const head = (compact: boolean) => `<table class="head">
       <colgroup><col style="width:24%" /><col style="width:14%" /><col style="width:62%" /></colgroup>
       <tr>
-        <td class="top-bank">${SICOOB_MARK}<span class="brand-name">Sicoob</span></td>
+        <td class="top-bank">${SICOOB_LOGO}</td>
         <td class="top-code">${esc(bank.codigoBanco)}</td>
         <td class="${compact ? 'top-linha linha-sm' : 'top-linha'}">${esc(linhaFmt)}</td>
       </tr>
@@ -224,8 +225,8 @@ export async function buildGestorGranjaBoletoHtml(input: {
     .val.end { font-weight: 500; font-size: 9px; }
     .val-lg { font-size: 12px; font-weight: 700; }
     .top-bank { border-right: 2px solid #000; text-align: center; vertical-align: middle; white-space: nowrap; }
-    .brand-mark { width: 22px; height: 22px; vertical-align: middle; }
-    .brand-name { display: inline-block; margin-left: 6px; font-weight: 800; font-size: 16px; color: #003641; letter-spacing: -0.4px; vertical-align: middle; }
+    .bank-logo { height: 8.5mm; width: auto; max-width: 40mm; display: block; margin: 0 auto; }
+    .boleto-recibo .bank-logo { height: 6.5mm; max-width: 34mm; }
     .top-code { border-right: 2px solid #000; text-align: center; vertical-align: middle; font-size: 15px; font-weight: 700; }
     .top-linha { vertical-align: middle; text-align: right; padding-right: 6px; font-family: "Courier New", Courier, monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.2px; }
     .linha-sm { font-size: 8.5px; letter-spacing: 0; }
@@ -271,7 +272,7 @@ export async function buildGestorGranjaBoletoHtml(input: {
       .boleto-recibo { page-break-after: avoid; }
       .boleto-ficha { page-break-before: avoid; }
       .boleto, .cut { width: 180mm; max-width: none; }
-      .qr-img, .brand-mark, .pix-word, .pix-kicker, .system-logo { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .qr-img, .bank-logo, .pix-word, .pix-kicker, .system-logo { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
