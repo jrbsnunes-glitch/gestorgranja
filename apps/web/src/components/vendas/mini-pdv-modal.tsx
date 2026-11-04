@@ -43,6 +43,8 @@ type BoletoSaleTerms = {
   diasLimitePagamentoAposVencimento: number | null;
   codigoProtesto: number;
   numeroDiasProtesto: number | null;
+  installmentCount: number;
+  intervalDays?: number;
 };
 
 type RequisitionSuccess = {
@@ -97,6 +99,22 @@ function daysFromToday(iso: string) {
   today.setHours(12, 0, 0, 0);
   const due = new Date(`${iso}T12:00:00`);
   return Math.round((due.getTime() - today.getTime()) / 86400000);
+}
+
+function addDaysToIso(iso: string, days: number) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function splitBoletoAmounts(total: number, count: number) {
+  const part = Math.round((total / count) * 100) / 100;
+  return Array.from({ length: count }, (_, i) =>
+    i === count - 1 ? Math.round((total - part * (count - 1)) * 100) / 100 : part,
+  );
 }
 
 function parseMoneyInput(raw: string) {
@@ -182,6 +200,8 @@ function BoletoTermsFields({
   diasLimite,
   codigoProtesto,
   diasProtesto,
+  parcelas,
+  amount,
   onDays,
   onDue,
   onTipoMulta,
@@ -193,6 +213,7 @@ function BoletoTermsFields({
   onDiasLimite,
   onCodigoProtesto,
   onDiasProtesto,
+  onParcelas,
 }: {
   days: string;
   due: string;
@@ -205,6 +226,8 @@ function BoletoTermsFields({
   diasLimite: string;
   codigoProtesto: string;
   diasProtesto: string;
+  parcelas: string;
+  amount: number | null;
   onDays: (v: string) => void;
   onDue: (v: string) => void;
   onTipoMulta: (v: string) => void;
@@ -216,15 +239,42 @@ function BoletoTermsFields({
   onDiasLimite: (v: string) => void;
   onCodigoProtesto: (v: string) => void;
   onDiasProtesto: (v: string) => void;
+  onParcelas: (v: string) => void;
 }) {
+  const parcelaCount = Math.floor(Number(parcelas));
+  const interval = Math.floor(Number(days));
+  const preview =
+    parcelaCount > 1 &&
+    Number.isInteger(parcelaCount) &&
+    parcelaCount <= 36 &&
+    Number.isInteger(interval) &&
+    interval >= 1 &&
+    /^\d{4}-\d{2}-\d{2}$/.test(due)
+      ? splitBoletoAmounts(amount != null && amount > 0 ? amount : 0, parcelaCount).map((value, i) => ({
+          due: addDaysToIso(due, i * interval),
+          value,
+        }))
+      : [];
   return (
     <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3">
       <p className="text-sm font-semibold text-emerald-950">Boleto</p>
       <p className="text-xs text-emerald-900">
-        Estes valores valem só para este boleto. O cadastro da empresa continua como padrão da próxima venda.
+        Estes valores valem só para esta venda. Com mais de uma parcela, cada boleto é gerado à parte.
       </p>
+      <Field label="Quantidade de parcelas">
+        <input
+          className={inputClass}
+          type="number"
+          min={1}
+          max={36}
+          step={1}
+          inputMode="numeric"
+          value={parcelas}
+          onChange={(e) => onParcelas(e.target.value)}
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Prazo em dias">
+        <Field label="Dias de vencimento">
           <input
             className={inputClass}
             type="number"
@@ -254,6 +304,12 @@ function BoletoTermsFields({
           />
         </Field>
       </div>
+      {parcelaCount > 1 ? (
+        <p className="text-xs text-emerald-900">
+          O primeiro boleto vence na data escolhida. Os seguintes vencem a cada{' '}
+          {Number.isInteger(interval) && interval >= 1 ? interval : 'N'} dias.
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-2">
         <Field label="Multa">
           <select className={inputClass} value={tipoMulta} onChange={(e) => onTipoMulta(e.target.value)}>
@@ -339,6 +395,23 @@ function BoletoTermsFields({
           />
         </Field>
       </div>
+      {preview.length > 0 ? (
+        <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2">
+          <p className="text-xs font-semibold text-emerald-950">
+            {preview.length} boletos, um a cada {interval} dias
+          </p>
+          <ul className="mt-1 space-y-1">
+            {preview.map((item, i) => (
+              <li key={item.due} className="flex justify-between gap-3 text-xs text-slate-700">
+                <span>
+                  Parcela {i + 1}/{preview.length} · {formatIsoPt(item.due)}
+                </span>
+                {item.value > 0 ? <span className="tabular-nums font-medium">{formatBrl(item.value)}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -415,7 +488,7 @@ export function MiniPdvModal({
   const [step, setStep] = useState<SaleStep>('sale');
   const [showPayment, setShowPayment] = useState(false);
   const [payPanel, setPayPanel] = useState<PayPanel>('methods');
-  const [boletoResult, setBoletoResult] = useState<BankBoletoDto | null>(null);
+  const [boletoResult, setBoletoResult] = useState<BankBoletoDto[] | null>(null);
   const [boletoSaleTotal, setBoletoSaleTotal] = useState(0);
   const [lastSaleId, setLastSaleId] = useState<string | null>(null);
   const [success, setSuccess] = useState<RequisitionSuccess | null>(null);
@@ -460,6 +533,7 @@ export function MiniPdvModal({
   const [boletoDiasLimite, setBoletoDiasLimite] = useState('');
   const [boletoCodigoProtesto, setBoletoCodigoProtesto] = useState('3');
   const [boletoDiasProtesto, setBoletoDiasProtesto] = useState('');
+  const [boletoParcelas, setBoletoParcelas] = useState('1');
 
   function isRequisicaoForm(f: PaymentForm) {
     return f.kind === 'REQUISICAO';
@@ -572,6 +646,16 @@ export function MiniPdvModal({
       setError('Opção de protesto inválida.');
       return null;
     }
+    const installmentCount = Math.floor(Number(boletoParcelas));
+    const intervalDays = Math.floor(Number(boletoDays));
+    if (!Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 36) {
+      setError('Informe a quantidade de parcelas, de 1 a 36.');
+      return null;
+    }
+    if (installmentCount > 1 && (!Number.isInteger(intervalDays) || intervalDays < 1)) {
+      setError('Para mais de um boleto, informe os dias de vencimento (1 ou mais).');
+      return null;
+    }
     return {
       dueDate: boletoDue,
       tipoMulta,
@@ -583,6 +667,8 @@ export function MiniPdvModal({
       diasLimitePagamentoAposVencimento: limite != null && Number.isFinite(limite) ? limite : null,
       codigoProtesto: codigoProtesto === 1 || codigoProtesto === 2 ? codigoProtesto : 3,
       numeroDiasProtesto,
+      installmentCount,
+      ...(installmentCount > 1 ? { intervalDays } : {}),
     };
   }
 
@@ -624,6 +710,7 @@ export function MiniPdvModal({
     setBoletoDiasLimite('');
     setBoletoCodigoProtesto('3');
     setBoletoDiasProtesto('');
+    setBoletoParcelas('1');
     setCashTendered('');
     setSplitCashTenderedPrimary('');
     setSplitCashTenderedSecondary('');
@@ -686,6 +773,17 @@ export function MiniPdvModal({
     splitPay && Number.isFinite(splitPrimaryNum)
       ? Math.round((subtotal - splitPrimaryNum) * 100) / 100
       : null;
+  const primaryIsBoleto = isBoletoFormId(splitPrimaryFormId);
+  const secondaryIsBoleto = isBoletoFormId(splitSecondaryFormId);
+  const boletoPortion = !splitPay
+    ? subtotal
+    : primaryIsBoleto && secondaryIsBoleto
+      ? subtotal
+      : primaryIsBoleto && Number.isFinite(splitPrimaryNum)
+        ? splitPrimaryNum
+        : secondaryIsBoleto && splitRemainder != null
+          ? splitRemainder
+          : null;
 
   async function loadRequisitionCredit() {
     if (!partnerId) return;
@@ -743,13 +841,14 @@ export function MiniPdvModal({
           items: saleItems(),
         }),
       });
-      const confirmed = await apiFetch<{ boleto?: BankBoletoDto }>(
-        `/v1/commercial/orders/${created.id}/confirm`,
-        {
-          method: 'POST',
-          body: JSON.stringify(payload.boletoTerms ? { boletoTerms: payload.boletoTerms } : {}),
-        },
-      );
+      const confirmed = await apiFetch<{
+        boleto?: BankBoletoDto & { error?: string };
+        boletos?: BankBoletoDto[];
+        error?: string;
+      }>(`/v1/commercial/orders/${created.id}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify(payload.boletoTerms ? { boletoTerms: payload.boletoTerms } : {}),
+      });
       if (emitNfce) {
         try {
           await apiFetch(`/v1/fiscal/emit/${created.id}?type=NFCE`, { method: 'POST', body: '{}' });
@@ -763,16 +862,19 @@ export function MiniPdvModal({
           return;
         }
       }
-      if (confirmed.boleto && !confirmed.boleto.error && confirmed.boleto.id) {
+      const issued = (confirmed.boletos ?? []).filter((b) => b?.id);
+      const boletoError = confirmed.error || confirmed.boleto?.error;
+      if (issued.length > 0) {
         setLastSaleId(created.id);
         setBoletoSaleTotal(subtotal);
-        setBoletoResult(confirmed.boleto);
+        setBoletoResult(issued);
         setStep('boleto');
+        if (boletoError) setError(boletoError);
         onCompleted?.();
         return;
       }
-      if (confirmed.boleto?.error) {
-        setError(`Venda confirmada, mas o boleto falhou: ${confirmed.boleto.error}`);
+      if (boletoError) {
+        setError(`Venda confirmada, mas o boleto falhou: ${boletoError}`);
         onCompleted?.();
         return;
       }
@@ -905,6 +1007,7 @@ export function MiniPdvModal({
     setBoletoDiasLimite('');
     setBoletoCodigoProtesto('3');
     setBoletoDiasProtesto('');
+    setBoletoParcelas('1');
     setShowPayment(false);
     setPayPanel('methods');
     setSuccess(null);
@@ -1286,8 +1389,11 @@ export function MiniPdvModal({
           onDiasLimite={setBoletoDiasLimite}
           codigoProtesto={boletoCodigoProtesto}
           diasProtesto={boletoDiasProtesto}
+          parcelas={boletoParcelas}
+          amount={boletoPortion}
           onCodigoProtesto={setBoletoCodigoProtesto}
           onDiasProtesto={setBoletoDiasProtesto}
+          onParcelas={setBoletoParcelas}
         />
       ) : null}
 
@@ -1366,8 +1472,11 @@ export function MiniPdvModal({
               onDiasLimite={setBoletoDiasLimite}
               codigoProtesto={boletoCodigoProtesto}
               diasProtesto={boletoDiasProtesto}
+              parcelas={boletoParcelas}
+              amount={boletoPortion}
               onCodigoProtesto={setBoletoCodigoProtesto}
               onDiasProtesto={setBoletoDiasProtesto}
+              onParcelas={setBoletoParcelas}
             />
           ) : null}
           {isCashFormId(splitSecondaryFormId) && splitRemainder != null && splitRemainder >= 0.01 ? (
@@ -1406,7 +1515,7 @@ export function MiniPdvModal({
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {step === 'boleto' && boletoResult && lastSaleId ? (
             <BoletoSaleConfirmation
-              boleto={boletoResult}
+              boletos={boletoResult}
               saleId={lastSaleId}
               partnerName={partnerName || 'Cliente'}
               saleTotal={boletoSaleTotal}

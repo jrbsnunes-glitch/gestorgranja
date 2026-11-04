@@ -25,6 +25,7 @@ import {
 import { SicoobClientService, type SicoobHttpAuth } from './sicoob-client.service';
 import {
   type BoletoSaleTerms,
+  boletoInstallmentSchedule,
   buildMensagensInstrucao,
   buildSicoobEncargosPayload,
   encargosFromSaleTerms,
@@ -241,24 +242,23 @@ export class SicoobCobrancaService {
     if (boletoAmount <= 0.004) {
       throw new BadRequestException('Este pedido não tem parcela em boleto');
     }
-    const existing = await prisma.bankBoleto.findFirst({
-      where: { salesOrderId, status: { in: [BankBoletoStatus.REGISTERED, BankBoletoStatus.PAID] } },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (existing) return this.toBoletoDto(existing);
-
     const settings = await this.requireSettings(user.tenantSlug);
-    const due = terms?.dueDate
-      ? new Date(`${terms.dueDate.slice(0, 10)}T12:00:00`)
-      : (() => {
-          const d = new Date();
-          d.setDate(d.getDate() + (settings.dueDaysDefault || 7));
-          return d;
-        })();
-    if (Number.isNaN(due.getTime())) {
-      throw new BadRequestException('Data de vencimento do boleto inválida.');
+    const fallbackDue = new Date();
+    fallbackDue.setDate(fallbackDue.getDate() + (settings.dueDaysDefault || 7));
+    let schedule;
+    try {
+      schedule = boletoInstallmentSchedule(boletoAmount, terms, fallbackDue);
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : 'Parcelas do boleto inválidas');
     }
-    const receivable = await this.ensureReceivableForOrder(user, order, boletoAmount, due);
+    const existing = await prisma.bankBoleto.findMany({
+      where: { salesOrderId, status: { in: [BankBoletoStatus.REGISTERED, BankBoletoStatus.PAID] } },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (existing.length >= schedule.length) {
+      return { boletos: existing.map((row) => this.toBoletoDto(row)) };
+    }
+
     const encargos = terms
       ? encargosFromSaleTerms(terms, settings.encargosNasInstrucoes)
       : undefined;
@@ -270,17 +270,45 @@ export class SicoobCobrancaService {
         throw new BadRequestException(e instanceof Error ? e.message : 'Protesto inválido');
       }
     }
-    return this.registerBoleto(user, {
-      partner: order.partner,
-      amount: boletoAmount,
-      dueDate: due,
-      seuNumero: this.seuNumero('VD', order.controlNumber),
-      description: `Venda ${order.controlNumber}`,
-      receivableId: receivable.id,
-      salesOrderId: order.id,
-      encargos,
-      protesto,
-    });
+
+    const created = existing.map((row) => this.toBoletoDto(row));
+    for (let i = existing.length; i < schedule.length; i++) {
+      const parcel = schedule[i]!;
+      const description =
+        schedule.length > 1
+          ? `Venda ${order.controlNumber} (${parcel.index}/${parcel.count})`
+          : `Boleto venda ${order.controlNumber}`;
+      try {
+        const receivable = await this.receivableForSaleParcel(
+          user,
+          order,
+          parcel.amount,
+          parcel.dueDate,
+          description,
+        );
+        const boleto = await this.registerBoleto(user, {
+          partner: order.partner,
+          amount: parcel.amount,
+          dueDate: parcel.dueDate,
+          seuNumero: this.seuNumeroParcela(order.controlNumber, parcel.index),
+          description: schedule.length > 1 ? description : `Venda ${order.controlNumber}`,
+          receivableId: receivable.id,
+          salesOrderId: order.id,
+          encargos,
+          protesto,
+          numeroParcela: parcel.index,
+        });
+        created.push(boleto);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Falha ao registrar boleto Sicoob';
+        if (created.length === 0) throw new BadRequestException(msg);
+        return {
+          boletos: created,
+          error: `A parcela ${parcel.index}/${parcel.count} não foi registrada: ${msg}. As parcelas anteriores foram emitidas.`,
+        };
+      }
+    }
+    return { boletos: created };
   }
 
   async afterSaleConfirmed(user: JwtPayload, salesOrderId: string, terms?: BoletoSaleTerms) {
@@ -292,7 +320,12 @@ export class SicoobCobrancaService {
     if (!order) return null;
     if (this.boletoAmountFromOrder(order) <= 0.004) return null;
     try {
-      return await this.emitForSalesOrder(user, salesOrderId, terms);
+      const result = await this.emitForSalesOrder(user, salesOrderId, terms);
+      return {
+        boleto: result.boletos[0],
+        boletos: result.boletos,
+        ...(result.error ? { error: result.error } : {}),
+      };
     } catch (e) {
       return {
         error: e instanceof Error ? e.message : 'Falha ao registrar boleto Sicoob',
@@ -593,6 +626,7 @@ export class SicoobCobrancaService {
       salesOrderId?: string | null;
       encargos?: SicoobEncargosConfig;
       protesto?: { codigoProtesto: number; numeroDiasProtesto: number | null };
+      numeroParcela?: number;
     },
   ) {
     const settings = await this.requireSettings(user.tenantSlug);
@@ -661,7 +695,10 @@ export class SicoobCobrancaService {
       dataJurosMora: encPayload.dataJurosMora,
       valorJurosMora: encPayload.valorJurosMora,
       dataLimitePagamento: encPayload.dataLimitePagamento,
-      numeroParcela: 1,
+      numeroParcela:
+        input.numeroParcela != null && input.numeroParcela >= 1
+          ? Math.floor(input.numeroParcela)
+          : 1,
       aceite: true,
       codigoNegativacao: settings.codigoNegativacao,
       codigoProtesto,
@@ -777,48 +814,6 @@ export class SicoobCobrancaService {
     return isPrimary ? total : 0;
   }
 
-  private async ensureReceivableForOrder(
-    user: JwtPayload,
-    order: { id: string; partnerId: string; controlNumber: number; partner: Partner },
-    amount: number,
-    dueDate?: Date,
-  ) {
-    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
-    const existing = await prisma.accountReceivable.findFirst({
-      where: { salesOrderId: order.id },
-    });
-    if (existing) return existing;
-    const chart = await prisma.chartAccount.findFirst({
-      where: { isActive: true, isPosting: true },
-      orderBy: { code: 'asc' },
-    });
-    const accounts = await prisma.chartAccount.findMany({
-      where: { isActive: true, isPosting: true },
-      orderBy: { code: 'asc' },
-    });
-    const revenue = accounts.find((a) => chartAccountAllowedForReceivable(a.code, a.type));
-    const chartAccountId = revenue?.id ?? chart?.id;
-    if (!chartAccountId) {
-      throw new BadRequestException('Cadastre uma conta contábil de receita para gerar o título do boleto');
-    }
-    const max = await prisma.accountReceivable.aggregate({ _max: { controlNumber: true } });
-    const settings = await this.loadSettings(user.tenantSlug);
-    const due = dueDate ?? new Date();
-    if (!dueDate) due.setDate(due.getDate() + (settings?.dueDaysDefault || 7));
-    return prisma.accountReceivable.create({
-      data: {
-        controlNumber: (max._max.controlNumber ?? 0) + 1,
-        partnerId: order.partnerId,
-        chartAccountId,
-        description: `Boleto venda ${order.controlNumber}`.slice(0, 200),
-        amount,
-        dueDate: due,
-        approvalStatus: PaymentApprovalStatus.APPROVED,
-        salesOrderId: order.id,
-      },
-    });
-  }
-
   private async markReceivablePaidFromBoleto(user: JwtPayload, receivableId: string, amount: number) {
     await this.markReceivablePaidBySlug(user.tenantSlug, receivableId, amount);
   }
@@ -840,6 +835,62 @@ export class SicoobCobrancaService {
 
   private seuNumero(prefix: string, n: number) {
     return `${prefix}${String(n).padStart(10, '0')}`.slice(0, 18);
+  }
+
+  private seuNumeroParcela(control: number, parcela: number) {
+    return `VD${String(control).padStart(8, '0')}-${String(parcela).padStart(2, '0')}`.slice(0, 18);
+  }
+
+  /** Reaproveita o título em aberto da mesma parcela se um registro anterior falhou. */
+  private async receivableForSaleParcel(
+    user: JwtPayload,
+    order: { id: string; partnerId: string; controlNumber: number },
+    amount: number,
+    dueDate: Date,
+    description: string,
+  ) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const label = description.slice(0, 200);
+    const existing = await prisma.accountReceivable.findFirst({
+      where: {
+        salesOrderId: order.id,
+        description: label,
+        boletos: { none: { status: { in: [BankBoletoStatus.REGISTERED, BankBoletoStatus.PAID] } } },
+      },
+      orderBy: { controlNumber: 'asc' },
+    });
+    if (existing && !isReceivableSettled(existing) && !hasTitlePayment(existing.amountPaid)) {
+      return prisma.accountReceivable.update({
+        where: { id: existing.id },
+        data: { amount, dueDate, description: label },
+      });
+    }
+    const chart = await prisma.chartAccount.findFirst({
+      where: { isActive: true, isPosting: true },
+      orderBy: { code: 'asc' },
+    });
+    const accounts = await prisma.chartAccount.findMany({
+      where: { isActive: true, isPosting: true },
+      orderBy: { code: 'asc' },
+    });
+    const revenue = accounts.find((a) => chartAccountAllowedForReceivable(a.code, a.type));
+    const chartAccountId = revenue?.id ?? chart?.id;
+    if (!chartAccountId) {
+      throw new BadRequestException('Cadastre uma conta contábil de receita para gerar o título do boleto');
+    }
+    const max = await prisma.accountReceivable.aggregate({ _max: { controlNumber: true } });
+    return prisma.accountReceivable.create({
+      data: {
+        controlNumber: (max._max.controlNumber ?? 0) + 1,
+        partnerId: order.partnerId,
+        chartAccountId,
+        description: label,
+        amount,
+        dueDate,
+        approvalStatus: PaymentApprovalStatus.APPROVED,
+        salesOrderId: order.id,
+      },
+    });
   }
 
   private assertReadyToEmit(settings: SicoobCobrancaSettings) {

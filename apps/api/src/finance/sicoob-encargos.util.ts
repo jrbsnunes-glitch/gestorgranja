@@ -1,3 +1,4 @@
+import { prismaDateOnly } from '../common/calendar-date.util';
 import { clip, isoDateOnly } from './sicoob-json.util';
 
 /** Condições informadas na venda, só para aquele boleto. */
@@ -13,7 +14,52 @@ export type BoletoSaleTerms = {
   /** 1 dias corridos, 2 dias úteis, 3 não protestar. */
   codigoProtesto?: number;
   numeroDiasProtesto?: number | null;
+  /** Quantidade de boletos. 1 mantém a venda com um único título. */
+  installmentCount?: number;
+  /** Dias entre um vencimento e o próximo. Obrigatório quando há mais de um boleto. */
+  intervalDays?: number;
 };
+
+export const MAX_BOLETO_INSTALLMENTS = 36;
+
+export type BoletoInstallment = {
+  index: number;
+  count: number;
+  amount: number;
+  dueDate: Date;
+};
+
+/** Divide o valor do boleto. A primeira parcela usa a data informada; as seguintes somam o intervalo em dias. */
+export function boletoInstallmentSchedule(
+  total: number,
+  terms: BoletoSaleTerms | undefined,
+  fallbackDue: Date,
+): BoletoInstallment[] {
+  const count = Math.floor(Number(terms?.installmentCount ?? 1));
+  if (!Number.isInteger(count) || count < 1 || count > MAX_BOLETO_INSTALLMENTS) {
+    throw new Error(`Quantidade de parcelas inválida (1 a ${MAX_BOLETO_INSTALLMENTS}).`);
+  }
+  const interval = Math.floor(Number(terms?.intervalDays ?? 0));
+  if (count > 1 && (!Number.isInteger(interval) || interval < 1 || interval > 3650)) {
+    throw new Error('Informe os dias de vencimento entre as parcelas (1 ou mais).');
+  }
+  const dayKey = terms?.dueDate?.slice(0, 10) ?? '';
+  const first = /^\d{4}-\d{2}-\d{2}$/.test(dayKey) ? prismaDateOnly(dayKey) : fallbackDue;
+  if (Number.isNaN(first.getTime())) {
+    throw new Error('Data de vencimento do boleto inválida.');
+  }
+  const part = Math.round((total / count) * 100) / 100;
+  return Array.from({ length: count }, (_, i) => {
+    const dueDate = new Date(first);
+    if (i > 0) dueDate.setUTCDate(dueDate.getUTCDate() + i * interval);
+    const amount =
+      i === count - 1 ? Math.round((total - part * (count - 1)) * 100) / 100 : part;
+    if (!(amount > 0)) {
+      throw new Error('O valor de cada boleto precisa ser maior que zero.');
+    }
+    return { index: i + 1, count, amount, dueDate };
+  });
+}
 
 export function protestFromSaleTerms(terms: BoletoSaleTerms): {
   codigoProtesto: number;

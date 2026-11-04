@@ -43,14 +43,14 @@ function dueDateLabel(iso: string) {
 }
 
 export function BoletoSaleConfirmation({
-  boleto,
+  boletos,
   saleId,
   partnerName,
   saleTotal,
   saleDateIso,
   onClose,
 }: {
-  boleto: BankBoletoDto;
+  boletos: BankBoletoDto[];
   saleId: string;
   partnerName: string;
   saleTotal: number;
@@ -58,9 +58,11 @@ export function BoletoSaleConfirmation({
   onClose: () => void;
 }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const linhaFmt = formatBoletoLinhaDigitavel(boleto.linhaDigitavel);
-  const barcodeDigits = boletoBarcodeDigits(boleto);
-  const total = boleto.valor > 0 ? boleto.valor : saleTotal;
+  const boleto = boletos[0];
+  const several = boletos.length > 1;
+  const linhaFmt = boleto ? formatBoletoLinhaDigitavel(boleto.linhaDigitavel) : '';
+  const barcodeDigits = boleto ? boletoBarcodeDigits(boleto) : '';
+  const total = !several && boleto && boleto.valor > 0 ? boleto.valor : saleTotal;
 
   useEffect(() => {
     void apiFetch<{ company: { logoUrl: string | null } | null }>(
@@ -69,6 +71,8 @@ export function BoletoSaleConfirmation({
       .then((r) => setLogoUrl(r.company?.logoUrl ?? null))
       .catch(() => setLogoUrl(null));
   }, [saleId]);
+
+  if (!boleto) return null;
 
   return (
     <div className="space-y-5">
@@ -88,7 +92,9 @@ export function BoletoSaleConfirmation({
         <div>
           <p className="font-semibold text-emerald-950">Venda registrada com sucesso!</p>
           <p className="mt-0.5 text-sm text-emerald-900">
-            O boleto foi emitido pela integração bancária e a conta a receber foi criada no sistema.
+            {several
+              ? `Os ${boletos.length} boletos foram emitidos e cada parcela virou uma conta a receber.`
+              : 'O boleto foi emitido pela integração bancária e a conta a receber foi criada no sistema.'}
           </p>
         </div>
       </div>
@@ -111,12 +117,14 @@ export function BoletoSaleConfirmation({
             </div>
             <div className="flex justify-between gap-4 border-b border-slate-200/80 py-2">
               <dt className="text-slate-500">Forma de pagamento</dt>
-              <dd className="text-slate-900">Boleto</dd>
+              <dd className="text-slate-900">{several ? `Boleto em ${boletos.length} parcelas` : 'Boleto'}</dd>
             </div>
-            <div className="flex justify-between gap-4 border-b border-slate-200/80 py-2">
-              <dt className="text-slate-500">Vencimento</dt>
-              <dd className="tabular-nums text-slate-900">{dueDateLabel(boleto.dataVencimento)}</dd>
-            </div>
+            {several ? null : (
+              <div className="flex justify-between gap-4 border-b border-slate-200/80 py-2">
+                <dt className="text-slate-500">Vencimento</dt>
+                <dd className="tabular-nums text-slate-900">{dueDateLabel(boleto.dataVencimento)}</dd>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-4 py-2">
               <dt className="text-slate-500">Situação</dt>
               <dd>
@@ -131,33 +139,75 @@ export function BoletoSaleConfirmation({
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <CompanyLogoImg logoRegistered={logoUrl} variant="shell" className="max-h-10" />
-            <span className="text-lg font-bold tracking-wide text-slate-800">BOLETO</span>
+            <span className="text-lg font-bold tracking-wide text-slate-800">
+              {several ? 'BOLETOS' : 'BOLETO'}
+            </span>
           </div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Número do boleto</p>
-          <p className="mt-1 break-all font-mono text-sm leading-relaxed text-slate-900">{linhaFmt}</p>
-          {boleto.nossoNumero ? (
-            <p className="mt-2 text-xs text-slate-500">
-              Nosso número: <span className="font-mono text-slate-700">{boleto.nossoNumero}</span>
-            </p>
-          ) : null}
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <BoletoBarcode digits={barcodeDigits} />
-            <p className="max-w-md break-all text-center font-mono text-[10px] leading-snug text-slate-600">
-              {barcodeDigits || linhaFmt.replace(/\s/g, '')}
-            </p>
-          </div>
+          {several ? (
+            <ul className="space-y-3">
+              {boletos.map((item, index) => (
+                <li key={item.id} className="rounded-lg border border-slate-200 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Parcela {index + 1}/{boletos.length}
+                    </p>
+                    <p className="text-sm font-semibold tabular-nums text-slate-900">{formatBrl(item.valor)}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Vencimento <span className="tabular-nums text-slate-800">{dueDateLabel(item.dataVencimento)}</span>
+                    {item.nossoNumero ? (
+                      <>
+                        {' '}
+                        · Nosso número <span className="font-mono text-slate-700">{item.nossoNumero}</span>
+                      </>
+                    ) : null}
+                  </p>
+                  <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-slate-700">
+                    {formatBoletoLinhaDigitavel(item.linhaDigitavel)}
+                  </p>
+                  <Button
+                    type="button"
+                    className="mt-2"
+                    onClick={() =>
+                      void downloadAuthFile(`/v1/finance/boletos/${item.id}/pdf`, `boleto-${item.id}.pdf`)
+                    }
+                  >
+                    Baixar PDF
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Número do boleto</p>
+              <p className="mt-1 break-all font-mono text-sm leading-relaxed text-slate-900">{linhaFmt}</p>
+              {boleto.nossoNumero ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Nosso número: <span className="font-mono text-slate-700">{boleto.nossoNumero}</span>
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <BoletoBarcode digits={barcodeDigits} />
+                <p className="max-w-md break-all text-center font-mono text-[10px] leading-snug text-slate-600">
+                  {barcodeDigits || linhaFmt.replace(/\s/g, '')}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       <div className="flex flex-wrap justify-center gap-2 border-t border-slate-100 pt-4">
-        <Button
-          type="button"
-          onClick={() =>
-            void downloadAuthFile(`/v1/finance/boletos/${boleto.id}/pdf`, `boleto-${boleto.id}.pdf`)
-          }
-        >
-          Baixar boleto (PDF)
-        </Button>
+        {several ? null : (
+          <Button
+            type="button"
+            onClick={() =>
+              void downloadAuthFile(`/v1/finance/boletos/${boleto.id}/pdf`, `boleto-${boleto.id}.pdf`)
+            }
+          >
+            Baixar boleto (PDF)
+          </Button>
+        )}
         <Button
           type="button"
           variant="secondary"
