@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
@@ -14,6 +15,7 @@ import {
 import { readCompanyLogoDataUrl } from '../cadastros/company-logo.util';
 import { FiscalCryptoService } from '../fiscal/fiscal-crypto.service';
 import { buildGestorGranjaBoletoHtml } from './boleto-layout.util';
+import { renderBoletoHtmlToPdf } from './boleto-pdf.util';
 import { readFiscalCert } from '../fiscal/fiscal-storage.util';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { chartAccountAllowedForReceivable } from './chart-account-flow';
@@ -56,6 +58,8 @@ import {
 
 @Injectable()
 export class SicoobCobrancaService {
+  private readonly logger = new Logger(SicoobCobrancaService.name);
+
   constructor(
     private readonly tenantPrisma: TenantPrismaService,
     private readonly crypto: FiscalCryptoService,
@@ -479,8 +483,36 @@ export class SicoobCobrancaService {
     return renderClienteHtml();
   }
 
+  /** PDF da ficha de compensação. Se o Chrome não estiver disponível, usa o PDF do Sicoob. */
+  async getBoletoPdf(user: JwtPayload, id: string) {
+    const htmlDoc = await this.getBoletoDocument(user, id);
+    try {
+      const buffer = await renderBoletoHtmlToPdf(htmlDoc.buffer.toString('utf8'));
+      return {
+        buffer,
+        contentType: 'application/pdf',
+        filename: htmlDoc.filename.replace(/\.html$/i, '.pdf'),
+      };
+    } catch (err) {
+      this.logger.warn(
+        `Ficha HTML não virou PDF (${err instanceof Error ? err.message : 'erro'}); tentando PDF do Sicoob.`,
+      );
+    }
+    try {
+      const buffer = await this.segundaViaPdf(user, id);
+      return {
+        buffer,
+        contentType: 'application/pdf',
+        filename: `boleto-${id}.pdf`,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível gerar o PDF do boleto';
+      throw new BadRequestException(msg);
+    }
+  }
+
   getStoredPdf(user: JwtPayload, id: string) {
-    return this.getBoletoDocument(user, id).then((d) => d.buffer);
+    return this.getBoletoPdf(user, id).then((d) => d.buffer);
   }
 
   private extractPdfBase64(resultado: Record<string, unknown>): string | null {

@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -100,8 +101,16 @@ export class SicoobCobrancaController {
 
   @Get('boletos/:id/pdf')
   @RequirePermissions('finance.write', 'sales.read', 'sales.write', '*')
-  async pdf(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Res() res: Response) {
-    const doc = await this.sicoob.getBoletoDocument(user, id);
+  async pdf(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Query('format') format: string | undefined,
+    @Res() res: Response,
+  ) {
+    const doc =
+      format === 'html'
+        ? await this.sicoob.getBoletoDocument(user, id)
+        : await this.sicoob.getBoletoPdf(user, id);
     res.setHeader('Content-Type', doc.contentType);
     res.setHeader('Content-Disposition', `inline; filename="${doc.filename}"`);
     res.send(doc.buffer);

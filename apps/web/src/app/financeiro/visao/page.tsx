@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { FormCadastroModal, PageIntro } from '@/components/crud';
-import { ClickableKpi } from '@/components/dashboard/kpi-card';
+import { ClickableKpi, DashboardColumn } from '@/components/dashboard/kpi-card';
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { humanizeUserText } from '@/lib/humanize-user-text';
@@ -54,6 +54,11 @@ type Dashboard = {
 function formatChartDate(iso: string) {
   const [, m, d] = iso.split('-');
   return `${d}/${m}`;
+}
+
+/** Janelas de vencimento da API incluem o que já está atrasado. Aqui fica só o que ainda vai vencer. */
+function upcomingAmount(windowAmount: number, overdue: number) {
+  return Math.max(0, Math.round((windowAmount - overdue) * 100) / 100);
 }
 
 type AlertSettings = {
@@ -121,15 +126,87 @@ export default function FinanceiroVisaoPage() {
       </div>
       {data ? (
         <>
-          <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <ClickableKpi href="/financeiro/pagar?dueDays=3" label="Contas a pagar vencem em 3 dias" value={formatBrl(data.payables.dueNext3)} tone="warn" />
-            <ClickableKpi href="/financeiro/pagar?overdue=1" label="Contas a pagar vencidas" value={formatBrl(data.payables.overdue)} tone={data.payables.overdue > 0 ? 'bad' : 'default'} />
-            <ClickableKpi href="/financeiro/receber?dueDays=3" label="Contas a receber vencem em 3 dias" value={formatBrl(data.receivables.dueNext3)} />
-            <ClickableKpi href="/financeiro/receber?overdue=1" label="Contas a receber vencidas" value={formatBrl(data.receivables.overdue)} tone={data.receivables.overdue > 0 ? 'bad' : 'default'} />
-            <ClickableKpi href="/financeiro/pagar" label="Contas a pagar em aberto" value={formatBrl(data.payables.open)} />
-            <ClickableKpi href="/financeiro/receber" label="Contas a receber em aberto" value={formatBrl(data.receivables.open)} />
-            <ClickableKpi href="/financeiro/fluxo" label="Fluxo (7 dias — a pagar)" value={formatBrl(data.payables.dueNext7)} sub={`Contas a receber: ${formatBrl(data.receivables.dueNext7)}`} />
-            <ClickableKpi href="/alertas" label="Alertas abertos" value={String(data.openAlertsCount ?? data.alerts.length)} tone={(data.openAlertsCount ?? data.alerts.length) > 0 ? 'warn' : 'default'} />
+          <div className="mb-6 grid gap-4 lg:grid-cols-2">
+            <DashboardColumn
+              title="Contas a pagar"
+              accent="pay"
+              footerHref="/financeiro/pagar"
+              footerLabel="Abrir contas a pagar"
+            >
+              <ClickableKpi
+                href="/financeiro/pagar"
+                label="Em aberto"
+                value={formatBrl(data.payables.open)}
+              />
+              <ClickableKpi
+                href="/financeiro/pagar?overdue=1"
+                label="Em atraso"
+                value={formatBrl(data.payables.overdue)}
+                tone={data.payables.overdue > 0 ? 'bad' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/pagar?dueDays=3"
+                label="Vencem em 3 dias"
+                value={formatBrl(upcomingAmount(data.payables.dueNext3, data.payables.overdue))}
+                tone={upcomingAmount(data.payables.dueNext3, data.payables.overdue) > 0 ? 'warn' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/pagar?dueDays=7"
+                label="Vencem em 7 dias"
+                value={formatBrl(upcomingAmount(data.payables.dueNext7, data.payables.overdue))}
+                tone={upcomingAmount(data.payables.dueNext7, data.payables.overdue) > 0 ? 'warn' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/pagar?dueDays=30"
+                label="Vencem em 30 dias"
+                value={formatBrl(upcomingAmount(data.payables.dueNext30, data.payables.overdue))}
+              />
+            </DashboardColumn>
+            <DashboardColumn
+              title="Contas a receber"
+              accent="receive"
+              footerHref="/financeiro/receber"
+              footerLabel="Abrir contas a receber"
+            >
+              <ClickableKpi
+                href="/financeiro/receber"
+                label="A receber"
+                value={formatBrl(data.receivables.open)}
+                tone={data.receivables.open > 0 ? 'good' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/receber?overdue=1"
+                label="Em atraso"
+                value={formatBrl(data.receivables.overdue)}
+                tone={data.receivables.overdue > 0 ? 'bad' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/receber?dueDays=3"
+                label="A receber em 3 dias"
+                value={formatBrl(upcomingAmount(data.receivables.dueNext3, data.receivables.overdue))}
+                tone={upcomingAmount(data.receivables.dueNext3, data.receivables.overdue) > 0 ? 'good' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/receber?dueDays=7"
+                label="A receber em 7 dias"
+                value={formatBrl(upcomingAmount(data.receivables.dueNext7, data.receivables.overdue))}
+                tone={upcomingAmount(data.receivables.dueNext7, data.receivables.overdue) > 0 ? 'good' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/receber?dueDays=30"
+                label="A receber em 30 dias"
+                value={formatBrl(upcomingAmount(data.receivables.dueNext30, data.receivables.overdue))}
+                tone={upcomingAmount(data.receivables.dueNext30, data.receivables.overdue) > 0 ? 'good' : 'default'}
+              />
+            </DashboardColumn>
+          </div>
+          <div className="mb-6">
+            <ClickableKpi
+              href="/alertas"
+              label="Alertas abertos"
+              value={String(data.openAlertsCount ?? data.alerts.length)}
+              tone={(data.openAlertsCount ?? data.alerts.length) > 0 ? 'warn' : 'default'}
+            />
           </div>
           {data.budgetProgress && data.budgetProgress.length > 0 ? (
             <PageCard title={`Orçamento vs realizado — ${data.budgetYearMonth ?? ''}`}>

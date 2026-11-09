@@ -294,16 +294,21 @@ export function FinanceiroScreen({
   }, [load]);
 
   useEffect(() => {
-    setStatusFilter('aberto');
-    if (tab === 'pagar') {
-      const range = rangeForFinancePeriodPreset('month');
-      if (range) {
-        setPayDateDraft(range);
-        setPayDateApplied(range);
-        setPayPeriodPreset('month');
-      }
+    setStatusFilter(listFilter?.overdueOnly ? 'vencidos' : 'aberto');
+    if (tab !== 'pagar') return;
+    if (listFilter?.overdueOnly) {
+      setPayDateDraft(EMPTY_DATE_RANGE);
+      setPayDateApplied(EMPTY_DATE_RANGE);
+      setPayPeriodPreset('custom');
+      return;
     }
-  }, [tab]);
+    const range = rangeForFinancePeriodPreset('month');
+    if (range) {
+      setPayDateDraft(range);
+      setPayDateApplied(range);
+      setPayPeriodPreset('month');
+    }
+  }, [tab, listFilter?.overdueOnly]);
 
   const applyPayPeriodPreset = useCallback((preset: FinancePeriodPreset, applyDates = true) => {
     setPayPeriodPreset(preset);
@@ -684,7 +689,7 @@ export function FinanceiroScreen({
   async function viewReceivableBoleto(boletoId: string) {
     setError(null);
     try {
-      await openAuthFileInNewTab(`/v1/finance/boletos/${boletoId}/pdf`);
+      await openAuthFileInNewTab(`/v1/finance/boletos/${boletoId}/pdf?format=html`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao abrir boleto');
     }

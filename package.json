@@ -26,6 +26,7 @@
       "bcrypt",
       "esbuild",
       "prisma",
+      "puppeteer",
       "sharp"
     ]
   }

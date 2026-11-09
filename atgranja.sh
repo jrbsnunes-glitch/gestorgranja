@@ -37,6 +37,20 @@ done
 # --- Root: ownership + reexecutar como deploy (pnpm/pm2/git write) ---
 if [ "$(id -u)" -eq 0 ] && [ "$AS_DEPLOY_INTERNAL" -eq 0 ] && id "$DEPLOY_USER" >/dev/null 2>&1; then
   echo "==> Root detectado: preparando $ROOT para usuário $DEPLOY_USER..."
+  if ! ldconfig -p 2>/dev/null | grep -q 'libnss3.so'; then
+    echo "==> Instalando bibliotecas do Chrome para gerar o PDF do boleto..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq || true
+    apt-get install -y -qq \
+      ca-certificates fonts-liberation \
+      libatk-bridge2.0-0 libatk1.0-0 libcups2 libdrm2 libgbm1 \
+      libnspr4 libnss3 libx11-xcb1 libxcomposite1 libxdamage1 \
+      libxfixes3 libxrandr2 libxshmfence1 libpango-1.0-0 libcairo2 \
+      libxkbcommon0 libatspi2.0-0 || true
+    apt-get install -y -qq libgtk-3-0 libasound2 2>/dev/null \
+      || apt-get install -y -qq libgtk-3-0t64 libasound2t64 2>/dev/null \
+      || true
+  fi
   if [ ! -d "$ROOT" ]; then
     echo "Diretório não existe: $ROOT" >&2
     exit 1

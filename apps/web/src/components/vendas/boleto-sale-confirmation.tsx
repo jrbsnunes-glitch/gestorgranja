@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@gestor-granja/ui';
 import { CompanyLogoImg } from '@/components/company-logo-img';
-import { apiFetch, downloadAuthFile } from '@/lib/api';
+import { apiFetch, downloadAuthFile, openAuthFileInNewTab } from '@/lib/api';
 import {
   type BankBoletoDto,
   boletoBarcodeDigits,
@@ -58,6 +58,7 @@ export function BoletoSaleConfirmation({
   onClose: () => void;
 }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [viewError, setViewError] = useState<string | null>(null);
   const boleto = boletos[0];
   const several = boletos.length > 1;
   const linhaFmt = boleto ? formatBoletoLinhaDigitavel(boleto.linhaDigitavel) : '';
@@ -71,6 +72,15 @@ export function BoletoSaleConfirmation({
       .then((r) => setLogoUrl(r.company?.logoUrl ?? null))
       .catch(() => setLogoUrl(null));
   }, [saleId]);
+
+  async function viewBoletoForPrint(id: string) {
+    setViewError(null);
+    try {
+      await openAuthFileInNewTab(`/v1/finance/boletos/${id}/pdf?format=html`);
+    } catch (e) {
+      setViewError(e instanceof Error ? e.message : 'Não foi possível abrir o boleto para impressão.');
+    }
+  }
 
   if (!boleto) return null;
 
@@ -165,15 +175,20 @@ export function BoletoSaleConfirmation({
                   <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-slate-700">
                     {formatBoletoLinhaDigitavel(item.linhaDigitavel)}
                   </p>
-                  <Button
-                    type="button"
-                    className="mt-2"
-                    onClick={() =>
-                      void downloadAuthFile(`/v1/finance/boletos/${item.id}/pdf`, `boleto-${item.id}.pdf`)
-                    }
-                  >
-                    Baixar PDF
-                  </Button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => void viewBoletoForPrint(item.id)}>
+                      Ver para impressão
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() =>
+                        void downloadAuthFile(`/v1/finance/boletos/${item.id}/pdf`, `boleto-${item.id}.pdf`)
+                      }
+                    >
+                      Baixar
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -197,16 +212,24 @@ export function BoletoSaleConfirmation({
         </div>
       </div>
 
+      {viewError ? <p className="text-center text-sm text-red-700">{viewError}</p> : null}
+
       <div className="flex flex-wrap justify-center gap-2 border-t border-slate-100 pt-4">
         {several ? null : (
-          <Button
-            type="button"
-            onClick={() =>
-              void downloadAuthFile(`/v1/finance/boletos/${boleto.id}/pdf`, `boleto-${boleto.id}.pdf`)
-            }
-          >
-            Baixar boleto (PDF)
-          </Button>
+          <>
+            <Button type="button" onClick={() => void viewBoletoForPrint(boleto.id)}>
+              Ver boleto para impressão
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                void downloadAuthFile(`/v1/finance/boletos/${boleto.id}/pdf`, `boleto-${boleto.id}.pdf`)
+              }
+            >
+              Baixar boleto
+            </Button>
+          </>
         )}
         <Button
           type="button"
