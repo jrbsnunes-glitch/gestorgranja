@@ -16,7 +16,12 @@ export type BoletoSaleTerms = {
   numeroDiasProtesto?: number | null;
   /** Quantidade de boletos. 1 mantém a venda com um único título. */
   installmentCount?: number;
-  /** Dias entre um vencimento e o próximo. Obrigatório quando há mais de um boleto. */
+  /**
+   * Vencimento de cada parcela, da primeira à última (YYYY-MM-DD).
+   * Quando informado, substitui o intervalo fixo.
+   */
+  dueDates?: string[];
+  /** Dias entre um vencimento e o próximo. Usado só se dueDates não vier completo. */
   intervalDays?: number;
 };
 
@@ -29,7 +34,19 @@ export type BoletoInstallment = {
   dueDate: Date;
 };
 
-/** Divide o valor do boleto. A primeira parcela usa a data informada; as seguintes somam o intervalo em dias. */
+function dueDateFromKey(raw: string): Date {
+  const dayKey = raw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
+    throw new Error('Data de vencimento do boleto inválida.');
+  }
+  const due = prismaDateOnly(dayKey);
+  if (Number.isNaN(due.getTime())) {
+    throw new Error('Data de vencimento do boleto inválida.');
+  }
+  return due;
+}
+
+/** Divide o valor do boleto. Com várias parcelas, usa as datas escolhidas ou o intervalo em dias. */
 export function boletoInstallmentSchedule(
   total: number,
   terms: BoletoSaleTerms | undefined,
@@ -39,19 +56,36 @@ export function boletoInstallmentSchedule(
   if (!Number.isInteger(count) || count < 1 || count > MAX_BOLETO_INSTALLMENTS) {
     throw new Error(`Quantidade de parcelas inválida (1 a ${MAX_BOLETO_INSTALLMENTS}).`);
   }
-  const interval = Math.floor(Number(terms?.intervalDays ?? 0));
-  if (count > 1 && (!Number.isInteger(interval) || interval < 1 || interval > 3650)) {
-    throw new Error('Informe os dias de vencimento entre as parcelas (1 ou mais).');
-  }
-  const dayKey = terms?.dueDate?.slice(0, 10) ?? '';
-  const first = /^\d{4}-\d{2}-\d{2}$/.test(dayKey) ? prismaDateOnly(dayKey) : fallbackDue;
-  if (Number.isNaN(first.getTime())) {
-    throw new Error('Data de vencimento do boleto inválida.');
+  const chosen = Array.isArray(terms?.dueDates) ? terms.dueDates.map((d) => String(d)) : [];
+  let dueDates: Date[];
+  if (count > 1 && chosen.length > 0) {
+    if (chosen.length !== count) {
+      throw new Error('Informe a data de vencimento de cada parcela.');
+    }
+    dueDates = chosen.map(dueDateFromKey);
+    for (let i = 1; i < dueDates.length; i++) {
+      if (dueDates[i]!.getTime() <= dueDates[i - 1]!.getTime()) {
+        throw new Error('Cada vencimento precisa ser depois do anterior.');
+      }
+    }
+  } else {
+    const interval = Math.floor(Number(terms?.intervalDays ?? 0));
+    if (count > 1 && (!Number.isInteger(interval) || interval < 1 || interval > 3650)) {
+      throw new Error('Informe o vencimento de cada parcela.');
+    }
+    const dayKey = terms?.dueDate?.slice(0, 10) ?? '';
+    const first = /^\d{4}-\d{2}-\d{2}$/.test(dayKey) ? prismaDateOnly(dayKey) : fallbackDue;
+    if (Number.isNaN(first.getTime())) {
+      throw new Error('Data de vencimento do boleto inválida.');
+    }
+    dueDates = Array.from({ length: count }, (_, i) => {
+      const dueDate = new Date(first);
+      if (i > 0) dueDate.setUTCDate(dueDate.getUTCDate() + i * interval);
+      return dueDate;
+    });
   }
   const part = Math.round((total / count) * 100) / 100;
-  return Array.from({ length: count }, (_, i) => {
-    const dueDate = new Date(first);
-    if (i > 0) dueDate.setUTCDate(dueDate.getUTCDate() + i * interval);
+  return dueDates.map((dueDate, i) => {
     const amount =
       i === count - 1 ? Math.round((total - part * (count - 1)) * 100) / 100 : part;
     if (!(amount > 0)) {

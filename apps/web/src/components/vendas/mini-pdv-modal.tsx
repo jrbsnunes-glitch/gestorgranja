@@ -44,6 +44,8 @@ type BoletoSaleTerms = {
   codigoProtesto: number;
   numeroDiasProtesto: number | null;
   installmentCount: number;
+  /** Vencimento de cada parcela, inclusive a primeira. */
+  dueDates?: string[];
   intervalDays?: number;
 };
 
@@ -108,6 +110,40 @@ function addDaysToIso(iso: string, days: number) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function daysBetweenIso(from: string, to: string) {
+  const a = new Date(`${from}T12:00:00`);
+  const b = new Date(`${to}T12:00:00`);
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+/** Mantém as datas que o usuário já alterou e sugere as demais a partir da parcela anterior. */
+function alignExtraDues(
+  count: number,
+  firstDue: string,
+  interval: number,
+  current: string[],
+  touched: boolean[] = [],
+) {
+  const needed = Math.max(0, count - 1);
+  if (!Number.isInteger(count) || count < 2 || count > 36) return [];
+  const step = Number.isInteger(interval) && interval >= 1 ? interval : 30;
+  const next: string[] = [];
+  let prev = firstDue;
+  for (let i = 0; i < needed; i++) {
+    const kept = current[i];
+    if (touched[i] && kept && /^\d{4}-\d{2}-\d{2}$/.test(kept)) {
+      next.push(kept);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(prev)) {
+      next.push(addDaysToIso(prev, step));
+    } else {
+      next.push('');
+    }
+    const chosen = next[i] ?? '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(chosen)) prev = chosen;
+  }
+  return next;
 }
 
 function splitBoletoAmounts(total: number, count: number) {
@@ -201,6 +237,8 @@ function BoletoTermsFields({
   codigoProtesto,
   diasProtesto,
   parcelas,
+  extraDues,
+  extraTouched,
   amount,
   onDays,
   onDue,
@@ -214,6 +252,8 @@ function BoletoTermsFields({
   onCodigoProtesto,
   onDiasProtesto,
   onParcelas,
+  onExtraDues,
+  onExtraTouched,
 }: {
   days: string;
   due: string;
@@ -227,6 +267,8 @@ function BoletoTermsFields({
   codigoProtesto: string;
   diasProtesto: string;
   parcelas: string;
+  extraDues: string[];
+  extraTouched: boolean[];
   amount: number | null;
   onDays: (v: string) => void;
   onDue: (v: string) => void;
@@ -240,21 +282,33 @@ function BoletoTermsFields({
   onCodigoProtesto: (v: string) => void;
   onDiasProtesto: (v: string) => void;
   onParcelas: (v: string) => void;
+  onExtraDues: (v: string[]) => void;
+  onExtraTouched: (v: boolean[]) => void;
 }) {
   const parcelaCount = Math.floor(Number(parcelas));
   const interval = Math.floor(Number(days));
-  const preview =
-    parcelaCount > 1 &&
-    Number.isInteger(parcelaCount) &&
-    parcelaCount <= 36 &&
-    Number.isInteger(interval) &&
-    interval >= 1 &&
-    /^\d{4}-\d{2}-\d{2}$/.test(due)
-      ? splitBoletoAmounts(amount != null && amount > 0 ? amount : 0, parcelaCount).map((value, i) => ({
-          due: addDaysToIso(due, i * interval),
-          value,
-        }))
+  const several =
+    Number.isInteger(parcelaCount) && parcelaCount > 1 && parcelaCount <= 36;
+  const amounts =
+    several || (Number.isInteger(parcelaCount) && parcelaCount === 1)
+      ? splitBoletoAmounts(amount != null && amount > 0 ? amount : 0, Math.max(1, parcelaCount))
       : [];
+  function syncExtras(count: number, firstDue: string, step: number, current = extraDues) {
+    onExtraDues(alignExtraDues(count, firstDue, step, current, extraTouched));
+    if (extraTouched.length > Math.max(0, count - 1)) {
+      onExtraTouched(extraTouched.slice(0, Math.max(0, count - 1)));
+    }
+  }
+  function commitExtra(index: number, iso: string) {
+    const touched = extraTouched.slice(0, parcelaCount - 1);
+    while (touched.length < parcelaCount - 1) touched.push(false);
+    touched[index] = true;
+    const copy = extraDues.slice(0, parcelaCount - 1);
+    while (copy.length < parcelaCount - 1) copy.push('');
+    copy[index] = iso;
+    onExtraTouched(touched);
+    onExtraDues(alignExtraDues(parcelaCount, due, interval, copy, touched));
+  }
   return (
     <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3">
       <p className="text-sm font-semibold text-emerald-950">Boleto</p>
@@ -270,7 +324,11 @@ function BoletoTermsFields({
           step={1}
           inputMode="numeric"
           value={parcelas}
-          onChange={(e) => onParcelas(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            onParcelas(next);
+            syncExtras(Math.floor(Number(next)), due, interval);
+          }}
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
@@ -286,11 +344,15 @@ function BoletoTermsFields({
               const next = e.target.value;
               onDays(next);
               const n = Number(next);
-              if (next !== '' && Number.isFinite(n) && n >= 0) onDue(addCalendarDays(n));
+              if (next !== '' && Number.isFinite(n) && n >= 0) {
+                const iso = addCalendarDays(n);
+                onDue(iso);
+                if (several) syncExtras(parcelaCount, iso, Math.floor(n));
+              }
             }}
           />
         </Field>
-        <Field label="Vencimento">
+        <Field label={several ? '1º vencimento' : 'Vencimento'}>
           <input
             className={inputClass}
             type="date"
@@ -298,17 +360,71 @@ function BoletoTermsFields({
             onChange={(e) => {
               const iso = e.target.value;
               onDue(iso);
-              if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) onDays(String(Math.max(0, daysFromToday(iso))));
+              if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+                const step = Math.max(0, daysFromToday(iso));
+                onDays(String(step));
+                if (several) syncExtras(parcelaCount, iso, step >= 1 ? step : interval);
+              } else if (several) {
+                syncExtras(parcelaCount, iso, interval);
+              }
             }}
             required
           />
         </Field>
       </div>
-      {parcelaCount > 1 ? (
-        <p className="text-xs text-emerald-900">
-          O primeiro boleto vence na data escolhida. Os seguintes vencem a cada{' '}
-          {Number.isInteger(interval) && interval >= 1 ? interval : 'N'} dias.
-        </p>
+      {several ? (
+        <div className="space-y-2">
+          <p className="text-xs text-emerald-900">
+            O primeiro boleto usa a data acima. Escolha o prazo de cada parcela seguinte.
+          </p>
+          {Array.from({ length: parcelaCount - 1 }, (_, i) => {
+            const parcelDue = extraDues[i] ?? '';
+            const prev = i === 0 ? due : extraDues[i - 1] ?? '';
+            const gap =
+              /^\d{4}-\d{2}-\d{2}$/.test(prev) && /^\d{4}-\d{2}-\d{2}$/.test(parcelDue)
+                ? String(daysBetweenIso(prev, parcelDue))
+                : '';
+            const value = amounts[i + 1] ?? 0;
+            return (
+              <div key={i} className="rounded-lg border border-emerald-200 bg-white px-3 py-2">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-emerald-950">
+                    Parcela {i + 2}/{parcelaCount}
+                  </p>
+                  {value > 0 ? (
+                    <p className="text-xs font-medium tabular-nums text-slate-700">{formatBrl(value)}</p>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Dias após a anterior">
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min={1}
+                      step={1}
+                      inputMode="numeric"
+                      value={gap}
+                      onChange={(e) => {
+                        const n = Math.floor(Number(e.target.value));
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(prev) || !Number.isInteger(n) || n < 1) return;
+                        commitExtra(i, addDaysToIso(prev, n));
+                      }}
+                    />
+                  </Field>
+                  <Field label="Vencimento">
+                    <input
+                      className={inputClass}
+                      type="date"
+                      value={parcelDue}
+                      onChange={(e) => commitExtra(i, e.target.value)}
+                      required
+                    />
+                  </Field>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : null}
       <div className="grid grid-cols-2 gap-2">
         <Field label="Multa">
@@ -395,23 +511,6 @@ function BoletoTermsFields({
           />
         </Field>
       </div>
-      {preview.length > 0 ? (
-        <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2">
-          <p className="text-xs font-semibold text-emerald-950">
-            {preview.length} boletos, um a cada {interval} dias
-          </p>
-          <ul className="mt-1 space-y-1">
-            {preview.map((item, i) => (
-              <li key={item.due} className="flex justify-between gap-3 text-xs text-slate-700">
-                <span>
-                  Parcela {i + 1}/{preview.length} · {formatIsoPt(item.due)}
-                </span>
-                {item.value > 0 ? <span className="tabular-nums font-medium">{formatBrl(item.value)}</span> : null}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -534,6 +633,8 @@ export function MiniPdvModal({
   const [boletoCodigoProtesto, setBoletoCodigoProtesto] = useState('3');
   const [boletoDiasProtesto, setBoletoDiasProtesto] = useState('');
   const [boletoParcelas, setBoletoParcelas] = useState('1');
+  const [boletoExtraDues, setBoletoExtraDues] = useState<string[]>([]);
+  const [boletoExtraTouched, setBoletoExtraTouched] = useState<boolean[]>([]);
 
   function isRequisicaoForm(f: PaymentForm) {
     return f.kind === 'REQUISICAO';
@@ -647,14 +748,32 @@ export function MiniPdvModal({
       return null;
     }
     const installmentCount = Math.floor(Number(boletoParcelas));
-    const intervalDays = Math.floor(Number(boletoDays));
     if (!Number.isInteger(installmentCount) || installmentCount < 1 || installmentCount > 36) {
       setError('Informe a quantidade de parcelas, de 1 a 36.');
       return null;
     }
-    if (installmentCount > 1 && (!Number.isInteger(intervalDays) || intervalDays < 1)) {
-      setError('Para mais de um boleto, informe os dias de vencimento (1 ou mais).');
-      return null;
+    const today = addCalendarDays(0);
+    const dueDates = [boletoDue, ...boletoExtraDues.slice(0, Math.max(0, installmentCount - 1))];
+    if (installmentCount > 1) {
+      if (dueDates.length !== installmentCount) {
+        setError('Informe o vencimento de cada parcela.');
+        return null;
+      }
+      for (let i = 0; i < dueDates.length; i++) {
+        const iso = dueDates[i] ?? '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+          setError(`Informe o vencimento da parcela ${i + 1}.`);
+          return null;
+        }
+        if (iso < today) {
+          setError(`O vencimento da parcela ${i + 1} não pode ser anterior a hoje.`);
+          return null;
+        }
+        if (i > 0 && iso <= dueDates[i - 1]!) {
+          setError(`O vencimento da parcela ${i + 1} precisa ser depois da parcela anterior.`);
+          return null;
+        }
+      }
     }
     return {
       dueDate: boletoDue,
@@ -668,7 +787,7 @@ export function MiniPdvModal({
       codigoProtesto: codigoProtesto === 1 || codigoProtesto === 2 ? codigoProtesto : 3,
       numeroDiasProtesto,
       installmentCount,
-      ...(installmentCount > 1 ? { intervalDays } : {}),
+      ...(installmentCount > 1 ? { dueDates } : {}),
     };
   }
 
@@ -711,6 +830,8 @@ export function MiniPdvModal({
     setBoletoCodigoProtesto('3');
     setBoletoDiasProtesto('');
     setBoletoParcelas('1');
+    setBoletoExtraDues([]);
+    setBoletoExtraTouched([]);
     setCashTendered('');
     setSplitCashTenderedPrimary('');
     setSplitCashTenderedSecondary('');
@@ -1008,6 +1129,8 @@ export function MiniPdvModal({
     setBoletoCodigoProtesto('3');
     setBoletoDiasProtesto('');
     setBoletoParcelas('1');
+    setBoletoExtraDues([]);
+    setBoletoExtraTouched([]);
     setShowPayment(false);
     setPayPanel('methods');
     setSuccess(null);
@@ -1390,10 +1513,14 @@ export function MiniPdvModal({
           codigoProtesto={boletoCodigoProtesto}
           diasProtesto={boletoDiasProtesto}
           parcelas={boletoParcelas}
+          extraDues={boletoExtraDues}
+          extraTouched={boletoExtraTouched}
           amount={boletoPortion}
           onCodigoProtesto={setBoletoCodigoProtesto}
           onDiasProtesto={setBoletoDiasProtesto}
           onParcelas={setBoletoParcelas}
+          onExtraDues={setBoletoExtraDues}
+          onExtraTouched={setBoletoExtraTouched}
         />
       ) : null}
 
@@ -1473,10 +1600,14 @@ export function MiniPdvModal({
               codigoProtesto={boletoCodigoProtesto}
               diasProtesto={boletoDiasProtesto}
               parcelas={boletoParcelas}
+              extraDues={boletoExtraDues}
+              extraTouched={boletoExtraTouched}
               amount={boletoPortion}
               onCodigoProtesto={setBoletoCodigoProtesto}
               onDiasProtesto={setBoletoDiasProtesto}
               onParcelas={setBoletoParcelas}
+              onExtraDues={setBoletoExtraDues}
+              onExtraTouched={setBoletoExtraTouched}
             />
           ) : null}
           {isCashFormId(splitSecondaryFormId) && splitRemainder != null && splitRemainder >= 0.01 ? (
