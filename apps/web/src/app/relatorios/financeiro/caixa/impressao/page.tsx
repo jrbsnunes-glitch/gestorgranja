@@ -14,6 +14,7 @@ import { ReportPrintActions } from '@/components/report-print-actions';
 import { splitMovementsBySection, type CashReportMovement } from '@/lib/cash-report-sections';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
 import { labelEnum } from '@/lib/labels';
+import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { formatBrl } from '@/lib/money';
 import {
   buildCashReportApiPath,
@@ -39,6 +40,14 @@ type SessionBlock = {
 
 type ProductGroup = { label: string; quantity: number; total: number };
 
+type NfDivergence = {
+  controlNumber: number;
+  partnerName: string;
+  amount: number;
+  cashDate: string;
+  authorizationDate: string;
+};
+
 type ControlePayload = {
   variant: 'controle';
   controlRange: { min: number; max: number };
@@ -46,6 +55,7 @@ type ControlePayload = {
   summaryOnly?: boolean;
   detailProducts?: boolean;
   productGroups?: ProductGroup[] | null;
+  nfDivergences?: NfDivergence[];
   company: ReportCompanyBranding;
 };
 
@@ -64,6 +74,7 @@ type PeriodPayload = {
   summaryOnly?: boolean;
   detailProducts?: boolean;
   productGroups?: ProductGroup[] | null;
+  nfDivergences?: NfDivergence[];
   company: ReportCompanyBranding;
 };
 
@@ -382,6 +393,38 @@ function PrintBody() {
                 <SessionReport key={s.controlNumber} session={s} summaryOnly={summaryOnly} />
               ))
             )}
+
+            {data.nfDivergences && data.nfDivergences.length > 0 ? (
+              <section className="corp-section">
+                <h3 className="corp-section-title">À vista — caixa e autorização da nota</h3>
+                <p className="corp-footnote">
+                  Valor recebido à vista no caixa em um dia e nota autorizada em outro. Boleto e requisição não entram
+                  nesta comparação.
+                </p>
+                <table className="corp-table">
+                  <thead>
+                    <tr>
+                      <th>Venda</th>
+                      <th>Cliente</th>
+                      <th className="num">Valor à vista</th>
+                      <th>Data no caixa</th>
+                      <th>Autorização da nota</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.nfDivergences.map((row) => (
+                      <tr key={`${row.controlNumber}-${row.cashDate}-${row.authorizationDate}`}>
+                        <td>{row.controlNumber}</td>
+                        <td>{row.partnerName}</td>
+                        <td className="num">{formatBrl(row.amount)}</td>
+                        <td>{formatCalendarDatePtBR(row.cashDate)}</td>
+                        <td>{formatCalendarDatePtBR(row.authorizationDate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+            ) : null}
 
             {data.detailProducts && productGroups && productGroups.length > 0 ? (
               <section className="corp-section">

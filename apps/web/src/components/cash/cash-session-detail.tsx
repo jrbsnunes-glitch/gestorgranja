@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@gestor-granja/ui';
+import { CashDirectSaleModal } from '@/components/cash/cash-direct-sale-modal';
 import { ChartAccountSelect } from '@/components/chart-account-select';
 import { FormCadastroModal } from '@/components/crud';
 import { ResponsiveTableWrap } from '@/components/responsive-table-wrap';
@@ -84,6 +85,7 @@ export function CashSessionDetail({
   const [success, setSuccess] = useState<string | null>(null);
   const [reconciliationNotes, setReconciliationNotes] = useState('');
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [saleOpen, setSaleOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [presentedByMethod, setPresentedByMethod] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -342,6 +344,11 @@ export function CashSessionDetail({
             Conferir caixa
           </Button>
         ) : null}
+        {canClose ? (
+          <Button type="button" variant="secondary" onClick={() => setSaleOpen(true)}>
+            Lançar venda
+          </Button>
+        ) : null}
         {canExpense ? (
           <Button type="button" variant="secondary" onClick={() => setExpenseOpen(true)}>
             Adicionar despesa
@@ -439,6 +446,16 @@ export function CashSessionDetail({
           </table>
         </ResponsiveTableWrap>
       </PageCard>
+
+      <CashDirectSaleModal
+        open={saleOpen}
+        sessionId={session.id}
+        onClose={() => setSaleOpen(false)}
+        onCompleted={() => {
+          reload();
+          notifyList();
+        }}
+      />
 
       <FormCadastroModal
         open={expenseOpen}

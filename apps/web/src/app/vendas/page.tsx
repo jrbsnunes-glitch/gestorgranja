@@ -12,6 +12,7 @@ import { apiFetch } from '@/lib/api';
 import { formatBrl } from '@/lib/money';
 import { useRouter } from 'next/navigation';
 import { cashSessionListHref } from '@/lib/cash-session-nav';
+import { BUSINESS_TZ, businessTodayDayKey, formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { formatRecordControl } from '@/lib/record-control';
 import { summarizeCashSession } from '@/lib/cash-session-summary';
 
@@ -43,6 +44,10 @@ type RecentMove = {
   inflow: boolean;
   counterparty: string;
 };
+
+function sessionDayKey(iso: string) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TZ }).format(new Date(iso));
+}
 
 type OpenSessionListItem = {
   id: string;
@@ -188,6 +193,9 @@ export default function VendasPage() {
   const [myOpenCash, setMyOpenCash] = useState<MyOpenCash | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [pickChoice, setPickChoice] = useState('');
+  const [saleSessionId, setSaleSessionId] = useState<string | null>(null);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [expenseBusy, setExpenseBusy] = useState(false);
   const [openCashModalOpen, setOpenCashModalOpen] = useState(false);
@@ -210,6 +218,15 @@ export default function VendasPage() {
     () => openSessions.filter((s) => s.isMine),
     [openSessions],
   );
+  const todayKey = businessTodayDayKey();
+  const priorOpens = useMemo(
+    () => openSessions.filter((s) => sessionDayKey(s.openedAt) < todayKey),
+    [openSessions, todayKey],
+  );
+  const saleSession =
+    openSessions.find((s) => s.id === saleSessionId) ??
+    (myOpenCash ? openSessions.find((s) => s.id === myOpenCash.id) : undefined) ??
+    null;
 
   const load = useCallback(() => {
     void apiFetch<MyOpenCash | null>('/v1/cash/sessions/open/me').then(setMyOpenCash);
@@ -245,12 +262,28 @@ export default function VendasPage() {
   }
 
   function openSaleForm() {
-    if (!myOpenRowToday) {
+    if (!myOpenRowToday && priorOpens.length === 0) {
       setError('Abra o caixa antes de registrar vendas.');
       openOpenCashModal();
       return;
     }
     setError(null);
+    const mineToday =
+      myOpenCash && sessionDayKey(myOpenCash.openedAt) === todayKey ? myOpenCash.id : '';
+    if (priorOpens.length > 0) {
+      const minePrior = priorOpens.find((s) => s.isMine)?.id;
+      setPickChoice(mineToday || minePrior || priorOpens[0].id);
+      setPickOpen(true);
+      return;
+    }
+    setSaleSessionId(myOpenCash?.id ?? null);
+    setFormOpen(true);
+  }
+
+  function confirmCashChoice() {
+    if (!pickChoice) return;
+    setSaleSessionId(pickChoice);
+    setPickOpen(false);
     setFormOpen(true);
   }
 
@@ -515,13 +548,83 @@ export default function VendasPage() {
         </form>
       </FormCadastroModal>
 
+      <FormCadastroModal
+        open={pickOpen}
+        onClose={() => setPickOpen(false)}
+        title="Escolher o caixa"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setPickOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmCashChoice} disabled={!pickChoice}>
+              Continuar
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-sm text-slate-600">
+          Há caixa aberto de dia anterior. A venda entra no caixa escolhido, com a data de abertura dele.
+          Se o caixa de hoje estiver aberto, ele continua como opção padrão.
+        </p>
+        <div className="grid gap-2">
+          {myOpenCash && sessionDayKey(myOpenCash.openedAt) === todayKey ? (
+            <label className="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <input
+                type="radio"
+                name="cash-choice"
+                className="mt-1"
+                checked={pickChoice === myOpenCash.id}
+                onChange={() => setPickChoice(myOpenCash.id)}
+              />
+              <span>
+                <span className="font-medium">Caixa de hoje {formatRecordControl(myOpenCash.controlNumber)}</span>
+                <span className="block text-slate-500">
+                  {formatCalendarDatePtBR(sessionDayKey(myOpenCash.openedAt))}
+                </span>
+              </span>
+            </label>
+          ) : null}
+          {priorOpens.map((s) => (
+            <label key={s.id} className="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+              <input
+                type="radio"
+                name="cash-choice"
+                className="mt-1"
+                checked={pickChoice === s.id}
+                onChange={() => setPickChoice(s.id)}
+              />
+              <span>
+                <span className="font-medium">
+                  Caixa {formatRecordControl(s.controlNumber)}
+                  {s.isMine ? '' : ` · ${s.user.name}`}
+                </span>
+                <span className="block text-slate-500">
+                  Aberto em {new Date(s.openedAt).toLocaleString('pt-BR', { timeZone: BUSINESS_TZ })}
+                </span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </FormCadastroModal>
+
       <MiniPdvModal
         open={formOpen}
         onClose={() => setFormOpen(false)}
         title={
-          myOpenCash
-            ? `Realizar vendas — caixa ${formatRecordControl(myOpenCash.controlNumber)}`
-            : 'Realizar vendas'
+          saleSession
+            ? `Realizar vendas — caixa ${formatRecordControl(saleSession.controlNumber)}`
+            : myOpenCash
+              ? `Realizar vendas — caixa ${formatRecordControl(myOpenCash.controlNumber)}`
+              : 'Realizar vendas'
+        }
+        cashSessionId={saleSessionId ?? myOpenCash?.id ?? null}
+        cashSaleDate={
+          saleSession
+            ? sessionDayKey(saleSession.openedAt)
+            : myOpenCash
+              ? sessionDayKey(myOpenCash.openedAt)
+              : null
         }
         onCompleted={load}
       />

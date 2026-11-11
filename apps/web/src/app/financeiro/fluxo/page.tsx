@@ -15,15 +15,25 @@ import {
 import { ResponsiveTableWrap } from '@/components/responsive-table-wrap';
 import { ErrorBox, PageCard, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
+import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { CASH_FLOW_KINDS, defaultCashFlowReportFilters } from '@/lib/cash-flow-report-query';
 import { errorMessage } from '@/lib/labels';
 import { formatBrl } from '@/lib/money';
+
+type NfDivergence = {
+  controlNumber: number;
+  partnerName: string;
+  amount: number;
+  cashDate: string;
+  authorizationDate: string;
+};
 
 type CashFlow = {
   period: { from: string; to: string };
   openingBalance: number;
   closingBalance: number;
   totals: { inflow: number; outflow: number };
+  nfDivergences?: NfDivergence[];
   rows: {
     date: string;
     kind: string;
@@ -226,6 +236,38 @@ export default function FinanceiroFluxoPage() {
                   <td className="py-2 text-right tabular-nums">{formatBrl(data.closingBalance)}</td>
                 </tr>
               </tfoot>
+            </table>
+          </ResponsiveTableWrap>
+        </PageCard>
+      ) : null}
+      {data?.nfDivergences && data.nfDivergences.length > 0 ? (
+        <PageCard title="À vista — caixa e autorização da nota" className="mt-4">
+          <p className="mb-3 text-sm text-slate-600">
+            Valor recebido à vista no caixa em um dia e nota autorizada em outro. Boleto e requisição não entram nesta
+            comparação.
+          </p>
+          <ResponsiveTableWrap>
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase text-slate-500">
+                  <th className="py-2">Venda</th>
+                  <th className="py-2">Cliente</th>
+                  <th className="py-2 text-right">Valor à vista</th>
+                  <th className="py-2">Data no caixa</th>
+                  <th className="py-2">Autorização da nota</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.nfDivergences.map((row) => (
+                  <tr key={`${row.controlNumber}-${row.cashDate}`} className="border-b border-slate-100">
+                    <td className="py-2">{row.controlNumber}</td>
+                    <td className="py-2">{row.partnerName}</td>
+                    <td className="py-2 text-right tabular-nums">{formatBrl(row.amount)}</td>
+                    <td className="py-2">{formatCalendarDatePtBR(row.cashDate)}</td>
+                    <td className="py-2">{formatCalendarDatePtBR(row.authorizationDate)}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </ResponsiveTableWrap>
         </PageCard>

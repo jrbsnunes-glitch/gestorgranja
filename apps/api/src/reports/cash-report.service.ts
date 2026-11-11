@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CashMovementType, Prisma } from '../generated/tenant-client';
 import { loadCompanyBranding } from '../cadastros/company-branding.util';
+import { loadVistaNfDivergences } from '../commercial/sale-date-notice.util';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 
 export type CashReportVariant = 'controle' | 'periodo' | 'dia';
@@ -152,6 +153,7 @@ export class CashReportService {
         query.detailProducts && sessionIds.length
           ? await this.productGroupsForSessions(prisma, sessionIds)
           : null;
+      const nfDivergences = await loadVistaNfDivergences(prisma, { sessionIds });
       return {
         variant: 'controle' as const,
         controlRange: { min, max: cMax },
@@ -159,6 +161,7 @@ export class CashReportService {
         summaryOnly: Boolean(query.summaryOnly),
         detailProducts: Boolean(query.detailProducts),
         productGroups,
+        nfDivergences,
         company: reportCompany,
       };
     }
@@ -211,6 +214,13 @@ export class CashReportService {
         ? await this.productGroupsForSessions(prisma, sessionIdsForProducts, { from, to })
         : null;
 
+    const periodFromKey = (query.variant === 'dia' ? query.date ?? query.from : query.from)?.slice(0, 10);
+    const periodToKey = (query.variant === 'dia' ? query.date ?? query.from : query.to)?.slice(0, 10);
+    const nfDivergences = await loadVistaNfDivergences(prisma, {
+      fromKey: periodFromKey,
+      toKey: periodToKey,
+    });
+
     return {
       variant: query.variant,
       period: {
@@ -229,6 +239,7 @@ export class CashReportService {
       summaryOnly: Boolean(query.summaryOnly),
       detailProducts: Boolean(query.detailProducts),
       productGroups,
+      nfDivergences,
       company: reportCompany,
     };
   }

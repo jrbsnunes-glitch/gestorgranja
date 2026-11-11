@@ -46,14 +46,9 @@ type FilterState = {
 };
 
 function defaultFilters(): FilterState {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  const today = `${y}-${m}-${d}`;
   return {
-    from: `${y}-${m}-01`,
-    to: today,
+    from: '',
+    to: '',
     abertos: true,
     fechados: true,
     conferidos: true,
@@ -307,6 +302,7 @@ function VendasCaixaListPageInner() {
           onFromChange={(from) => setDraftFilters((f) => ({ ...f, from }))}
           onToChange={(to) => setDraftFilters((f) => ({ ...f, to }))}
         />
+        <p className="mt-2 text-xs text-slate-500">Sem período, a lista mostra todos os caixas.</p>
         <fieldset className="mt-4 rounded-md border border-slate-200 p-3">
           <legend className="px-1 text-sm font-medium text-slate-700">Situação</legend>
           <div className="mt-2 flex flex-col gap-2 text-sm">

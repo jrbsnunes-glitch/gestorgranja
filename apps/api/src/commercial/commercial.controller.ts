@@ -7,6 +7,7 @@ import { CurrentUser } from '../auth/tenant.decorator';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CommercialService } from './commercial.service';
 import { CommercialRequisitionService } from './commercial-requisition.service';
+import type { BoletoSaleTerms } from '../finance/sicoob-encargos.util';
 
 @ApiTags('commercial')
 @ApiBearerAuth()
@@ -47,9 +48,15 @@ export class CommercialController {
   confirm(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
-    @Body() body: { boletoTerms?: Parameters<CommercialService['confirmOrder']>[2] },
+    @Body() body: { boletoTerms?: BoletoSaleTerms; cashSessionId?: string },
   ) {
-    return this.commercial.confirmOrder(user, id, body?.boletoTerms);
+    return this.commercial.confirmOrder(user, id, body?.boletoTerms, body?.cashSessionId);
+  }
+
+  @Get('orders/:id/date-notice')
+  @RequirePermissions('sales.read', 'sales.write', 'cash.read', '*')
+  dateNotice(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.commercial.saleDateNotice(user, id);
   }
 
   @Post('orders/:id/void')

@@ -8,7 +8,9 @@ import { PartnerLookupField } from '@/components/partner-lookup-field';
 import { ProductLookupField } from '@/components/product-lookup-field';
 import { Field, inputClass } from '@/components/ui-parts';
 import { BoletoSaleConfirmation } from '@/components/vendas/boleto-sale-confirmation';
+import { SaleDateNoticeBox, type SaleDateNotice } from '@/components/vendas/sale-date-notice';
 import { apiFetch } from '@/lib/api';
+import { businessTodayDayKey } from '@/lib/calendar-date';
 import type { BankBoletoDto } from '@/lib/boleto';
 import { navigateToReportPrint } from '@/lib/report-print-nav';
 import { formatBrl } from '@/lib/money';
@@ -29,7 +31,7 @@ type CartLine = {
   unitPrice: number;
 };
 
-type SaleStep = 'sale' | 'success' | 'boleto';
+type SaleStep = 'sale' | 'success' | 'boleto' | 'dates';
 type PayPanel = 'methods' | 'requisition' | 'cash' | 'boleto';
 
 type BoletoSaleTerms = {
@@ -577,11 +579,16 @@ export function MiniPdvModal({
   onClose,
   title,
   onCompleted,
+  cashSessionId,
+  cashSaleDate,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   onCompleted?: () => void;
+  cashSessionId?: string | null;
+  /** Dia civil do caixa (AAAA-MM-DD), quando a venda entra em caixa de outro dia. */
+  cashSaleDate?: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<SaleStep>('sale');
@@ -590,6 +597,7 @@ export function MiniPdvModal({
   const [boletoResult, setBoletoResult] = useState<BankBoletoDto[] | null>(null);
   const [boletoSaleTotal, setBoletoSaleTotal] = useState(0);
   const [lastSaleId, setLastSaleId] = useState<string | null>(null);
+  const [dateMessages, setDateMessages] = useState<string[]>([]);
   const [success, setSuccess] = useState<RequisitionSuccess | null>(null);
   const [partnerId, setPartnerId] = useState('');
   const [partnerName, setPartnerName] = useState('');
@@ -810,6 +818,7 @@ export function MiniPdvModal({
     setBoletoResult(null);
     setBoletoSaleTotal(0);
     setLastSaleId(null);
+    setDateMessages([]);
     setSuccess(null);
     setPendingRequisicaoFormId(null);
     setRequisitionDays('7');
@@ -966,9 +975,13 @@ export function MiniPdvModal({
         boleto?: BankBoletoDto & { error?: string };
         boletos?: BankBoletoDto[];
         error?: string;
+        dateNotice?: SaleDateNotice;
       }>(`/v1/commercial/orders/${created.id}/confirm`, {
         method: 'POST',
-        body: JSON.stringify(payload.boletoTerms ? { boletoTerms: payload.boletoTerms } : {}),
+        body: JSON.stringify({
+          ...(payload.boletoTerms ? { boletoTerms: payload.boletoTerms } : {}),
+          ...(cashSessionId ? { cashSessionId } : {}),
+        }),
       });
       if (emitNfce) {
         try {
@@ -983,6 +996,14 @@ export function MiniPdvModal({
           return;
         }
       }
+      let messages = confirmed.dateNotice?.messages ?? [];
+      try {
+        const notice = await apiFetch<SaleDateNotice>(`/v1/commercial/orders/${created.id}/date-notice`);
+        messages = notice.messages;
+      } catch {
+        /* o aviso da confirmação permanece */
+      }
+      setDateMessages(messages);
       const issued = (confirmed.boletos ?? []).filter((b) => b?.id);
       const boletoError = confirmed.error || confirmed.boleto?.error;
       if (issued.length > 0) {
@@ -996,6 +1017,10 @@ export function MiniPdvModal({
       }
       if (boletoError) {
         setError(`Venda confirmada, mas o boleto falhou: ${boletoError}`);
+        if (messages.length > 0) {
+          setLastSaleId(created.id);
+          setStep('dates');
+        }
         onCompleted?.();
         return;
       }
@@ -1003,6 +1028,12 @@ export function MiniPdvModal({
         setLastSaleId(created.id);
         setSuccess(payload.requisitionSuccess);
         setStep('success');
+        onCompleted?.();
+        return;
+      }
+      if (messages.length > 0) {
+        setLastSaleId(created.id);
+        setStep('dates');
         onCompleted?.();
         return;
       }
@@ -1645,13 +1676,51 @@ export function MiniPdvModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
           {step === 'boleto' && boletoResult && lastSaleId ? (
-            <BoletoSaleConfirmation
-              boletos={boletoResult}
-              saleId={lastSaleId}
-              partnerName={partnerName || 'Cliente'}
-              saleTotal={boletoSaleTotal}
-              onClose={onClose}
-            />
+            <div>
+              {dateMessages.length > 0 ? (
+                <div className="mb-4">
+                  <SaleDateNoticeBox messages={dateMessages} />
+                </div>
+              ) : null}
+              <BoletoSaleConfirmation
+                boletos={boletoResult}
+                saleId={lastSaleId}
+                partnerName={partnerName || 'Cliente'}
+                saleTotal={boletoSaleTotal}
+                onClose={onClose}
+              />
+            </div>
+          ) : step === 'dates' ? (
+            <div className="mx-auto max-w-md py-6 text-center">
+              <h3 className="text-xl font-semibold text-slate-900">Venda registrada</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                A venda entrou no caixa
+                {cashSaleDate ? ` do dia ${formatIsoPt(cashSaleDate)}` : ''}. A nota e o boleto, quando existem,
+                ficam na data real de autorização.
+              </p>
+              <div className="mt-5">
+                <SaleDateNoticeBox messages={dateMessages} />
+              </div>
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                <Button type="button" variant="secondary" onClick={startNewSale}>
+                  Nova venda
+                </Button>
+                {lastSaleId ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      navigateToReportPrint(
+                        `/vendas/impressao?id=${encodeURIComponent(lastSaleId)}`,
+                        '/vendas',
+                      );
+                    }}
+                  >
+                    Ver comprovante
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           ) : step === 'success' && success ? (
             <div className="mx-auto max-w-md py-6 text-center">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
@@ -1670,6 +1739,11 @@ export function MiniPdvModal({
               <p className="mt-2 text-sm text-slate-600">
                 A venda foi registrada e uma conta a receber foi criada para este cliente.
               </p>
+              {dateMessages.length > 0 ? (
+                <div className="mt-5 text-left">
+                  <SaleDateNoticeBox messages={dateMessages} />
+                </div>
+              ) : null}
               <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm">
                 <p>
                   Valor: <strong>{formatBrl(success.total)}</strong>
@@ -1716,7 +1790,17 @@ export function MiniPdvModal({
               </div>
             </div>
           ) : (
-            <div className={showPayment ? 'flex flex-col gap-4 lg:flex-row' : ''}>{cartBlock}{showPayment ? paymentBlock : null}</div>
+            <>
+              {cashSaleDate && cashSaleDate !== businessTodayDayKey() ? (
+                <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  Esta venda entra no caixa do dia {formatIsoPt(cashSaleDate)}.
+                </p>
+              ) : null}
+              <div className={showPayment ? 'flex flex-col gap-4 lg:flex-row' : ''}>
+                {cartBlock}
+                {showPayment ? paymentBlock : null}
+              </div>
+            </>
           )}
         </div>
 

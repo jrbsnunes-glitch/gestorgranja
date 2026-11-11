@@ -5,8 +5,17 @@ import { useSearchParams } from 'next/navigation';
 import { StandardReportHeader } from '@/components/crud/standard-report-header';
 import { ReportPrintActions } from '@/components/report-print-actions';
 import { apiFetch } from '@/lib/api';
+import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { formatBrl } from '@/lib/money';
 import { useReportAutoPrint } from '@/lib/use-report-auto-print';
+
+type NfDivergence = {
+  controlNumber: number;
+  partnerName: string;
+  amount: number;
+  cashDate: string;
+  authorizationDate: string;
+};
 
 type CashFlow = {
   period: { from: string; to: string };
@@ -14,6 +23,7 @@ type CashFlow = {
   openingBalance: number;
   closingBalance: number;
   totals: { inflow: number; outflow: number };
+  nfDivergences?: NfDivergence[];
   rows: { date: string; kind: string; description: string; inflow: number; outflow: number; balance: number; projected: boolean }[];
 };
 
@@ -83,6 +93,37 @@ function Body() {
       ) : (
         <p className="text-sm">Carregando…</p>
       )}
+      {data?.nfDivergences && data.nfDivergences.length > 0 ? (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-slate-900">À vista — caixa e autorização da nota</h2>
+          <p className="mb-2 text-xs text-slate-600">
+            Valor recebido à vista no caixa em um dia e nota autorizada em outro. Boleto e requisição não entram nesta
+            comparação.
+          </p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase text-slate-500">
+                <th className="py-2">Venda</th>
+                <th>Cliente</th>
+                <th className="text-right">Valor à vista</th>
+                <th>Data no caixa</th>
+                <th>Autorização da nota</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.nfDivergences.map((row) => (
+                <tr key={`${row.controlNumber}-${row.cashDate}`} className="border-b border-slate-100">
+                  <td className="py-1">{row.controlNumber}</td>
+                  <td>{row.partnerName}</td>
+                  <td className="text-right">{formatBrl(row.amount)}</td>
+                  <td>{formatCalendarDatePtBR(row.cashDate)}</td>
+                  <td>{formatCalendarDatePtBR(row.authorizationDate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
     </div>
   );
 }

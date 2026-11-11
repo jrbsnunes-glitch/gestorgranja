@@ -7,6 +7,7 @@ import { calendarDayKeyInTz, monthDayKeysInTz, prismaDateOnly } from '../common/
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { CommercialRequisitionService } from './commercial-requisition.service';
 import { isRequisicaoKind } from './requisition.util';
+import { buildSaleDateNotice } from './sale-date-notice.util';
 
 function isBoletoKind(kind?: string | null) {
   return (kind ?? '').toUpperCase() === 'BOLETO';
@@ -317,21 +318,30 @@ export class CommercialService {
     user: JwtPayload,
     orderId: string,
     boletoTerms?: BoletoSaleTerms,
+    cashSessionId?: string,
   ) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
     const order = await prisma.salesOrder.findUnique({ where: { id: orderId }, include: { items: true } });
     if (!order) throw new BadRequestException('Pedido não encontrado');
     if (order.status !== 'DRAFT') throw new BadRequestException('Pedido já confirmado');
 
-    const session = await prisma.cashRegisterSession.findFirst({
-      where: { userId: user.sub, status: CashSessionStatus.OPEN },
-    });
-    if (!session) throw new BadRequestException('Abra o caixa antes de confirmar vendas');
+    const session = cashSessionId
+      ? await prisma.cashRegisterSession.findUnique({ where: { id: cashSessionId } })
+      : await prisma.cashRegisterSession.findFirst({
+          where: { userId: user.sub, status: CashSessionStatus.OPEN },
+          orderBy: { openedAt: 'desc' },
+        });
+    if (!session || session.status !== CashSessionStatus.OPEN) {
+      throw new BadRequestException(
+        cashSessionId ? 'O caixa escolhido não está aberto' : 'Abra o caixa antes de confirmar vendas',
+      );
+    }
+    const orderDate = prismaDateOnly(calendarDayKeyInTz(session.openedAt));
 
     const updated = await prisma.$transaction(async (tx) => {
       const updated = await tx.salesOrder.update({
         where: { id: orderId },
-        data: { status: 'CONFIRMED', cashSessionId: session.id },
+        data: { status: 'CONFIRMED', cashSessionId: session.id, orderDate },
         include: { items: true, partner: true, paymentForm: true, secondaryPaymentForm: true },
       });
       const saleRef = `Venda ${updated.controlNumber}`;
@@ -397,7 +407,21 @@ export class CommercialService {
     });
     const boleto = await this.sicoob.afterSaleConfirmed(user, orderId, boletoTerms);
     const requisitionReceivables = await this.requisition.createReceivablesForOrder(user, orderId);
-    return { ...updated, boleto, requisitionReceivables };
+    const dateNotice = await this.saleDateNotice(user, orderId);
+    return { ...updated, ...(boleto ?? {}), requisitionReceivables, dateNotice };
+  }
+
+  async saleDateNotice(user: JwtPayload, orderId: string) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const order = await prisma.salesOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        fiscalDoc: { select: { status: true, issuedAt: true } },
+        boletos: { select: { status: true, registeredAt: true } },
+      },
+    });
+    if (!order) throw new BadRequestException('Pedido não encontrado');
+    return buildSaleDateNotice(order);
   }
 
   /** Estorna venda confirmada (estoque + caixa). Não disponível com NF autorizada ou boleto emitido. */

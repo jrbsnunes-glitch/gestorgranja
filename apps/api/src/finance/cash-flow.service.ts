@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { CashMovementType, CashSessionStatus } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
+import { loadVistaNfDivergences } from '../commercial/sale-date-notice.util';
 import { dateKeyInRange, localDateKey } from './finance-date.util';
 import {
   dec,
@@ -175,6 +176,11 @@ export class CashFlowService {
       { inflow: 0, outflow: 0 },
     );
 
+    const nfDivergences = await loadVistaNfDivergences(prisma, {
+      fromKey: query.from?.slice(0, 10) ?? localDateKey(from),
+      toKey: query.to?.slice(0, 10) ?? localDateKey(to),
+    });
+
     return {
       period: { from: localDateKey(from), to: localDateKey(to) },
       kindFilter: kindFilter || null,
@@ -182,6 +188,7 @@ export class CashFlowService {
       closingBalance: running,
       totals,
       rows: daily,
+      nfDivergences,
     };
   }
 }
