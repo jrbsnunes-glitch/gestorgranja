@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { TabBar } from '@/components/list-crud';
@@ -59,9 +60,24 @@ function ModuleSectionTabsInner() {
     setMoreOpen(false);
   };
 
+  const sessionPerms = session?.permissions ?? [];
+  const canOpenSales =
+    mod.id === 'financeiro' &&
+    (sessionPerms.includes('*') ||
+      sessionPerms.includes('sales.read') ||
+      sessionPerms.includes('sales.write'));
+  const salesShortcut = canOpenSales ? (
+    <Link
+      href="/vendas"
+      className="ml-1 inline-flex shrink-0 items-center self-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"
+    >
+      Vendas
+    </Link>
+  ) : null;
+
   const hasGroups = tabs.some((t) => t.group);
   if (!hasGroups) {
-    return <TabBar active={active} onChange={go} tabs={toBarTabs(tabs, mod.id, subscription)} />;
+    return <TabBar active={active} onChange={go} tabs={toBarTabs(tabs, mod.id, subscription)} trailing={salesShortcut} />;
   }
 
   const primary = tabs.filter((t) => t.group !== 'more');
@@ -70,7 +86,7 @@ function ModuleSectionTabsInner() {
 
   return (
     <div className="mb-2">
-      <TabBar active={active} onChange={go} tabs={toBarTabs(primary, mod.id, subscription)} />
+      <TabBar active={active} onChange={go} tabs={toBarTabs(primary, mod.id, subscription)} trailing={salesShortcut} />
       {more.length ? (
         <div className="relative -mt-3 mb-3">
           <button

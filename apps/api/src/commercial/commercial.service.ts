@@ -41,20 +41,26 @@ function cashDueForOrder(
   return { hasCash: cashDue > 0.004, cashDue: Math.round(cashDue * 100) / 100 };
 }
 
-type SalesStatsBucket = { noAto: number; requisicao: number; boleto: number };
+type SalesStatsBucket = { noAto: number; requisicao: number; boleto: number; cartao: number };
 
 function isRequisicaoPayment(kind?: string | null, name?: string | null) {
   return isRequisicaoKind(kind) || Boolean(name && /requis/i.test(name));
 }
 
+function isCardCreditPayment(kind?: string | null, name?: string | null) {
+  if ((kind ?? '').toUpperCase() === 'CARD') return true;
+  return Boolean(name && /cart[aã]o|cr[eé]dito|recebimento posterior/i.test(name));
+}
+
 function paymentBucket(kind?: string | null, name?: string | null): keyof SalesStatsBucket {
   if (isBoletoKind(kind)) return 'boleto';
   if (isRequisicaoPayment(kind, name)) return 'requisicao';
+  if (isCardCreditPayment(kind, name)) return 'cartao';
   return 'noAto';
 }
 
 function emptyBuckets(): SalesStatsBucket {
-  return { noAto: 0, requisicao: 0, boleto: 0 };
+  return { noAto: 0, requisicao: 0, boleto: 0, cartao: 0 };
 }
 
 function addToBuckets(

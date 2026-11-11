@@ -35,14 +35,13 @@ type MyOpenCash = {
   movements?: CashMovementRow[];
 };
 
-type RecentMove = {
+type ConfirmedSale = {
   id: string;
-  at: string;
-  description: string;
-  kind: string;
-  amount: number;
-  inflow: boolean;
-  counterparty: string;
+  controlNumber: number;
+  status: string;
+  totalAmount: string | number;
+  partner: { name: string };
+  fiscalDoc: { type: string; status: string; errorMessage: string | null } | null;
 };
 
 function sessionDayKey(iso: string) {
@@ -65,6 +64,7 @@ type SalesPeriodStats = {
   noAto: number;
   requisicao: number;
   boleto: number;
+  cartao: number;
 };
 
 function PaymentBreakdown({ stats }: { stats: SalesPeriodStats }) {
@@ -72,6 +72,7 @@ function PaymentBreakdown({ stats }: { stats: SalesPeriodStats }) {
     { label: 'No ato', value: stats.noAto, tone: 'text-emerald-800' },
     { label: 'Requisição', value: stats.requisicao, tone: 'text-slate-800' },
     { label: 'Boletos', value: stats.boleto, tone: 'text-amber-900' },
+    { label: 'Cartão de crédito (Recebimento posterior)', value: stats.cartao ?? 0, tone: 'text-violet-800' },
   ] as const;
 
   return (
@@ -86,43 +87,21 @@ function PaymentBreakdown({ stats }: { stats: SalesPeriodStats }) {
   );
 }
 
-function recentCashMoves(session: MyOpenCash | null): RecentMove[] {
-  if (!session) return [];
-  const rows: RecentMove[] = [
-    {
-      id: 'opening',
-      at: session.openedAt,
-      description: 'Abertura de caixa',
-      kind: 'Entrada',
-      amount: Number(session.openingBalance),
-      inflow: true,
-      counterparty: '—',
-    },
-    ...(session.movements ?? []).map((m) => {
-      const isIn = m.type === 'IN';
-      const desc =
-        m.reason?.trim() || (m.isExpense ? 'Despesa' : isIn ? 'Entrada' : 'Saída');
-      return {
-        id: m.id,
-        at: m.createdAt,
-        description: desc,
-        kind: isIn ? 'Entrada' : m.isExpense ? 'Despesa' : 'Saída',
-        amount: Number(m.amount),
-        inflow: isIn,
-        counterparty: m.isExpense ? m.chartAccount?.name?.trim() || '—' : '—',
-      };
-    }),
-  ];
-  return rows
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    .slice(0, 5);
-}
-
-function formatMoveDateTime(iso: string) {
-  const d = new Date(iso);
-  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  return `${date} ${time}`;
+function fiscalStatusLabel(status: string) {
+  switch (status) {
+    case 'AUTHORIZED':
+      return 'Autorizada';
+    case 'REJECTED':
+      return 'Rejeitada';
+    case 'PROCESSING':
+      return 'Processando';
+    case 'CANCELLED':
+      return 'Cancelada';
+    case 'DRAFT':
+      return 'Rascunho';
+    default:
+      return status;
+  }
 }
 
 function KpiMetricCard({
@@ -151,17 +130,6 @@ function KpiMetricCard({
       <p className={`mt-1 text-3xl font-bold tabular-nums tracking-tight ${valueTone}`}>{value}</p>
       {hint ? <p className="mt-1 text-xs opacity-70">{hint}</p> : null}
     </div>
-  );
-}
-
-function MoveKindBadge({ kind, inflow }: { kind: string; inflow: boolean }) {
-  const cls = inflow
-    ? 'bg-emerald-100 text-emerald-900'
-    : kind === 'Despesa'
-      ? 'bg-amber-100 text-amber-950'
-      : 'bg-red-100 text-red-900';
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${cls}`}>{kind}</span>
   );
 }
 
@@ -201,12 +169,13 @@ export default function VendasPage() {
   const [openCashModalOpen, setOpenCashModalOpen] = useState(false);
   const [openSessions, setOpenSessions] = useState<OpenSessionListItem[]>([]);
   const [salesStats, setSalesStats] = useState<{ day: SalesPeriodStats; month: SalesPeriodStats } | null>(null);
+  const [confirmedSales, setConfirmedSales] = useState<ConfirmedSale[]>([]);
+  const [emitBusy, setEmitBusy] = useState<string | null>(null);
 
   const myOpenRowToday = myOpenCash != null && myOpenCash.status === 'OPEN';
   const cashSummary = myOpenCash
     ? summarizeCashSession(myOpenCash.openingBalance, myOpenCash.movements ?? [])
     : null;
-  const recentMoves = recentCashMoves(myOpenRowToday ? myOpenCash : null);
   const todayLabel = new Date().toLocaleDateString('pt-BR', {
     weekday: 'short',
     day: '2-digit',
@@ -234,11 +203,27 @@ export default function VendasPage() {
     void apiFetch<{ day: SalesPeriodStats; month: SalesPeriodStats }>('/v1/commercial/stats')
       .then(setSalesStats)
       .catch(() => setSalesStats(null));
+    void apiFetch<ConfirmedSale[]>('/v1/commercial/orders')
+      .then((rows) => setConfirmedSales(rows.filter((o) => o.status === 'CONFIRMED').slice(0, 12)))
+      .catch(() => setConfirmedSales([]));
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  async function emitFiscal(orderId: string, type: 'NFCE' | 'NFE') {
+    setError(null);
+    setEmitBusy(`${orderId}:${type}`);
+    try {
+      await apiFetch(`/v1/fiscal/emit/${orderId}?type=${type}`, { method: 'POST', body: '{}' });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao emitir a nota');
+    } finally {
+      setEmitBusy(null);
+    }
+  }
 
   function openOpenCashModal() {
     setError(null);
@@ -338,6 +323,43 @@ export default function VendasPage() {
       <ErrorBox message={error} />
 
       <section className="mx-auto w-full max-w-7xl space-y-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" className="h-12 px-6 text-base font-semibold shadow-sm" onClick={openSaleForm}>
+            Realizar venda
+          </Button>
+          <Link
+            href="/financeiro/pagar"
+            className="inline-flex h-11 items-center justify-center rounded-md bg-rose-50 px-4 text-sm font-semibold text-rose-800 ring-1 ring-rose-200 hover:bg-rose-100"
+          >
+            Contas a pagar
+          </Link>
+          <Link
+            href="/financeiro/receber"
+            className="inline-flex h-11 items-center justify-center rounded-md bg-emerald-50 px-4 text-sm font-semibold text-emerald-900 ring-1 ring-emerald-200 hover:bg-emerald-100"
+          >
+            Contas a receber
+          </Link>
+          <Button type="button" variant="secondary" className="h-11 px-4" onClick={openExpenseForm}>
+            Despesa
+          </Button>
+        </div>
+        {!myOpenRowToday ? (
+          <p className="-mt-2 text-sm text-amber-800">
+            Caixa fechado —{' '}
+            <button
+              type="button"
+              className="font-semibold text-emerald-800 underline underline-offset-2 hover:text-emerald-950"
+              onClick={openOpenCashModal}
+            >
+              Abrir caixa
+            </button>
+          </p>
+        ) : (
+          <p className="-mt-2 text-sm text-emerald-800">
+            Caixa {formatRecordControl(myOpenCash!.controlNumber)} aberto
+          </p>
+        )}
+
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Caixa</h2>
@@ -372,91 +394,60 @@ export default function VendasPage() {
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-7">
             <div className="border-b border-slate-100 px-4 py-3">
-              <h3 className="text-base font-semibold text-slate-900">Últimas movimentações</h3>
+              <h3 className="text-base font-semibold text-slate-900">Vendas confirmadas — emitir</h3>
             </div>
-            {recentMoves.length === 0 ? (
-              <p className="px-4 py-10 text-center text-sm text-slate-500">
-                {myOpenRowToday ? 'Nenhuma movimentação neste caixa.' : 'Abra o caixa para ver as movimentações.'}
-              </p>
+            {confirmedSales.length === 0 ? (
+              <p className="px-4 py-10 text-center text-sm text-slate-500">Nenhuma venda confirmada.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
-                    <tr>
-                      <th className="px-4 py-2.5">Data/Hora</th>
-                      <th className="px-4 py-2.5">Tipo</th>
-                      <th className="px-4 py-2.5">Descrição</th>
-                      <th className="px-4 py-2.5">Cliente/Fornecedor</th>
-                      <th className="px-4 py-2.5 text-right">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentMoves.map((m) => (
-                      <tr key={m.id} className="border-t border-slate-100 hover:bg-slate-50/80">
-                        <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-600">
-                          {formatMoveDateTime(m.at)}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <MoveKindBadge kind={m.kind} inflow={m.inflow} />
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-900">{m.description}</td>
-                        <td className="px-4 py-2.5 text-slate-600">{m.counterparty}</td>
-                        <td
-                          className={`px-4 py-2.5 text-right font-semibold tabular-nums ${
-                            m.inflow ? 'text-emerald-800' : 'text-red-700'
-                          }`}
+              <ul className="max-h-[22rem] divide-y divide-slate-100 overflow-y-auto">
+                {confirmedSales.map((sale) => {
+                  const fiscal = sale.fiscalDoc;
+                  const fiscalHint = fiscal
+                    ? `${fiscal.type === 'NFCE' ? 'NFC-e' : fiscal.type === 'NFE' ? 'NF-e' : fiscal.type} · ${fiscalStatusLabel(fiscal.status)}`
+                    : 'Sem nota';
+                  return (
+                    <li key={sale.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {formatRecordControl(sale.controlNumber)} · {sale.partner.name}
+                        </p>
+                        <p className="truncate text-xs text-slate-500">
+                          {formatBrl(Number(sale.totalAmount))} · {fiscalHint}
+                          {fiscal?.errorMessage ? ` — ${fiscal.errorMessage}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button
+                          type="button"
+                          className="h-8 px-2.5 text-xs"
+                          disabled={emitBusy != null}
+                          onClick={() => void emitFiscal(sale.id, 'NFCE')}
                         >
-                          {m.inflow ? '' : '−'}
-                          {formatBrl(m.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          {emitBusy === `${sale.id}:NFCE` ? '…' : 'NFC-e'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="h-8 px-2.5 text-xs"
+                          disabled={emitBusy != null}
+                          onClick={() => void emitFiscal(sale.id, 'NFE')}
+                        >
+                          {emitBusy === `${sale.id}:NFE` ? '…' : 'NF-e'}
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {salesStats ? (
-            <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
-              <PeriodDashboard title="Este mês" stats={salesStats.month} />
-            </div>
-          ) : null}
-
-          <div className="p-4 sm:p-5">
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" className="h-12 flex-1 text-base font-semibold" onClick={openSaleForm}>
-                Realizar venda
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-12 flex-1 text-base font-semibold"
-                onClick={openExpenseForm}
-              >
-                Despesa
-              </Button>
-            </div>
-            {!myOpenRowToday ? (
-              <p className="mt-3 text-center text-sm text-amber-800">
-                Caixa fechado —{' '}
-                <button
-                  type="button"
-                  className="font-semibold text-emerald-800 underline underline-offset-2 hover:text-emerald-950"
-                  onClick={openOpenCashModal}
-                >
-                  Abrir caixa
-                </button>
-              </p>
-            ) : (
-              <p className="mt-3 text-center text-sm text-emerald-800">
-                Caixa {formatRecordControl(myOpenCash!.controlNumber)} aberto
-              </p>
-            )}
+        {salesStats ? (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+            <PeriodDashboard title="Este mês" stats={salesStats.month} />
           </div>
-        </div>
+        ) : null}
       </section>
 
       <FormCadastroModal

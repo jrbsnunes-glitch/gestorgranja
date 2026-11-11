@@ -14,10 +14,12 @@ export function TabBar({
   tabs,
   active,
   onChange,
+  trailing,
 }: {
   tabs: { id: string; label: string; icon?: string; disabled?: boolean; title?: string }[];
   active: string;
   onChange: (id: string) => void;
+  trailing?: ReactNode;
 }) {
   return (
     <div className="-mx-1 mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 px-1 pb-px md:flex-wrap md:overflow-visible">
@@ -45,6 +47,7 @@ export function TabBar({
           {t.label}
         </button>
       ))}
+      {trailing}
     </div>
   );
 }
