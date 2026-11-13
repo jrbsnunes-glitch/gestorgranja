@@ -1,7 +1,17 @@
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import * as forge from 'node-forge';
-import { getCACertificates } from 'tls';
+import * as tls from 'tls';
+
+type CaStore = 'default' | 'system';
+
+/** Node 22.15+ e 24 expõem getCACertificates. No Node 20 do VPS ela não existe. */
+function readNodeCaStore(type: CaStore): readonly string[] {
+  const reader = (tls as typeof tls & { getCACertificates?: (type?: string) => string[] }).getCACertificates;
+  if (typeof reader === 'function') return reader(type);
+  if (type === 'default') return tls.rootCertificates;
+  return [];
+}
 
 let cachedCas: string[] | null = null;
 
@@ -45,7 +55,7 @@ export function buildSefazTrustedCas(): string[] {
 
   const seen = new Set<string>();
   const out: string[] = [];
-  const addFromList = (list: string[]) => {
+  const addFromList = (list: readonly string[]) => {
     for (const pem of list) {
       const t = pem.trim();
       if (!t || seen.has(t)) continue;
@@ -55,9 +65,9 @@ export function buildSefazTrustedCas(): string[] {
   };
 
   loadBundledSefazCas(seen, out);
-  addFromList(getCACertificates('default'));
+  addFromList(readNodeCaStore('default'));
   try {
-    addFromList(getCACertificates('system'));
+    addFromList(readNodeCaStore('system'));
   } catch {
     /* repositório do SO indisponível (ex.: container mínimo) */
   }
