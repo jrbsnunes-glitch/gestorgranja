@@ -53,7 +53,7 @@ export class SefazSoapClient {
           port: parsedUrl.port || 443,
           path: `${parsedUrl.pathname}${parsedUrl.search}`,
           method: 'POST',
-          cert: cert.certificateChainPem,
+          cert: cert.certificateChainPem.join('\n'),
           key: cert.privateKeyPem,
           ca: buildSefazTrustedCas(),
           rejectUnauthorized: sefazTlsRejectUnauthorized(),

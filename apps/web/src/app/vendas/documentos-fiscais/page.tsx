@@ -8,6 +8,7 @@ import { ManualNfeModal } from '@/components/fiscal/manual-nfe-modal';
 import { Button } from '@gestor-granja/ui';
 import { AdminShell } from '@/components/admin-shell';
 import { PageIntro } from '@/components/crud';
+import { TabBar } from '@/components/list-crud';
 import { ResponsiveTableWrap } from '@/components/responsive-table-wrap';
 import { ErrorBox, PageCard } from '@/components/ui-parts';
 import { apiFetch, getApiBase, getToken } from '@/lib/api';
@@ -73,6 +74,8 @@ export default function DocumentosFiscaisPage() {
   const [danfeDocId, setDanfeDocId] = useState<string | null>(null);
   const [consultBusyId, setConsultBusyId] = useState<string | null>(null);
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [listTab, setListTab] = useState<'emitir' | 'documentos'>('emitir');
+  const [sefazEnvironment, setSefazEnvironment] = useState<'homologacao' | 'producao' | null>(null);
 
   const load = useCallback(() => {
     void apiFetch<FiscalDoc[]>('/v1/fiscal/documents').then(setDocs);
@@ -82,6 +85,12 @@ export default function DocumentosFiscaisPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    void apiFetch<{ sefazEnvironment?: 'homologacao' | 'producao' } | null>('/v1/fiscal/issuer-settings')
+      .then((s) => setSefazEnvironment(s?.sefazEnvironment === 'producao' ? 'producao' : 'homologacao'))
+      .catch(() => setSefazEnvironment(null));
+  }, []);
 
   useEffect(() => {
     if (searchParams.get('incluir') === '1') {
@@ -253,31 +262,43 @@ export default function DocumentosFiscaisPage() {
       />
       <ErrorBox message={error} />
 
-      <PageCard title="Homologação — nota de teste">
-        <p className="mb-3 text-sm text-slate-600">
-          Gera uma venda de R$ 1,00 e envia à SEFAZ AM (só com ambiente <strong>homologação</strong>, certificado A1 e
-          cadastro da empresa completo). Em homologação a NFC-e usa QR v3 e não exige CSC; em produção o CSC é obrigatório.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            disabled={testBusy !== null}
-            onClick={() => void emitHomologTest('NFCE')}
-          >
-            {testBusy === 'NFCE' ? 'Emitindo NFC-e…' : 'Emitir NFC-e de teste'}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={testBusy !== null}
-            onClick={() => void emitHomologTest('NFE')}
-          >
-            {testBusy === 'NFE' ? 'Emitindo NF-e…' : 'Emitir NF-e de teste'}
-          </Button>
-        </div>
-      </PageCard>
+      {sefazEnvironment === 'homologacao' ? (
+        <PageCard title="Homologação — nota de teste">
+          <p className="mb-3 text-sm text-slate-600">
+            Gera uma venda de R$ 1,00 e envia à SEFAZ AM (só com ambiente <strong>homologação</strong>, certificado A1 e
+            cadastro da empresa completo). Em homologação a NFC-e usa QR v3 e não exige CSC; em produção o CSC é obrigatório.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={testBusy !== null}
+              onClick={() => void emitHomologTest('NFCE')}
+            >
+              {testBusy === 'NFCE' ? 'Emitindo NFC-e…' : 'Emitir NFC-e de teste'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={testBusy !== null}
+              onClick={() => void emitHomologTest('NFE')}
+            >
+              {testBusy === 'NFE' ? 'Emitindo NF-e…' : 'Emitir NF-e de teste'}
+            </Button>
+          </div>
+        </PageCard>
+      ) : null}
 
-      <PageCard title="Vendas confirmadas — emitir" className="mt-6">
+      <TabBar
+        active={listTab}
+        onChange={(id) => setListTab(id as 'emitir' | 'documentos')}
+        tabs={[
+          { id: 'emitir', label: 'Vendas confirmadas — emitir' },
+          { id: 'documentos', label: 'Documentos' },
+        ]}
+      />
+
+      {listTab === 'emitir' ? (
+      <PageCard>
         <ResponsiveTableWrap>
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
@@ -322,8 +343,8 @@ export default function DocumentosFiscaisPage() {
           </table>
         </ResponsiveTableWrap>
       </PageCard>
-
-      <PageCard title="Documentos" className="mt-6">
+      ) : (
+      <PageCard>
         <p className="mb-4 text-sm text-slate-600">
           Em <strong>homologação</strong>, a nota só foi aceita pela SEFAZ quando o status aparece como{' '}
           <strong>Autorizada</strong> (código interno 100). Aí você verá protocolo e chave de acesso; use{' '}
@@ -482,6 +503,7 @@ export default function DocumentosFiscaisPage() {
           </table>
         </ResponsiveTableWrap>
       </PageCard>
+      )}
     </AdminShell>
   );
 }
