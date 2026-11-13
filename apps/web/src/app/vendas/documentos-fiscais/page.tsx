@@ -256,7 +256,7 @@ export default function DocumentosFiscaisPage() {
       <PageCard title="Homologação — nota de teste">
         <p className="mb-3 text-sm text-slate-600">
           Gera uma venda de R$ 1,00 e envia à SEFAZ AM (só com ambiente <strong>homologação</strong>, certificado A1 e
-          cadastro da empresa completo). NFC-e exige CSC de homologação.
+          cadastro da empresa completo). Em homologação a NFC-e usa QR v3 e não exige CSC; em produção o CSC é obrigatório.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button

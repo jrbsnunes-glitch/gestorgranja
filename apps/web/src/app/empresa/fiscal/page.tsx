@@ -86,6 +86,7 @@ export default function EmpresaFiscalPage() {
           nfceCscId: String(fd.get('nfceCscId') || '') || undefined,
           nfceCsc: String(fd.get('nfceCsc') || '') || undefined,
           series: Number(fd.get('series')),
+          nextNfeNumber: Number(fd.get('nextNfeNumber')),
           nfceSeries: Number(fd.get('nfceSeries')),
           certificatePassword: String(fd.get('certificatePassword') || '') || undefined,
           respTecCnpj: String(fd.get('respTecCnpj') || '') || undefined,
@@ -180,7 +181,12 @@ export default function EmpresaFiscalPage() {
       ) : (
         <>
           <PageCard title="Ambiente e NFC-e">
-            <form id="fiscal-issuer-form" onSubmit={saveSettings} className="max-w-lg space-y-3">
+            <form
+              id="fiscal-issuer-form"
+              key={`${settings.series}-${settings.lastNfeNumber}-${settings.nfceSeries}`}
+              onSubmit={saveSettings}
+              className="max-w-lg space-y-3"
+            >
               <Field label="Ambiente SEFAZ">
                 <select
                   name="sefazEnvironment"
@@ -192,8 +198,22 @@ export default function EmpresaFiscalPage() {
                 </select>
               </Field>
               <Field label="Série NF-e">
-                <input name="series" type="number" min={1} className={inputClass} defaultValue={settings.series} />
+                <input name="series" type="number" min={1} max={999} className={inputClass} defaultValue={settings.series} />
               </Field>
+              <Field label="Próximo número NF-e">
+                <input
+                  name="nextNfeNumber"
+                  type="number"
+                  min={1}
+                  max={999999999}
+                  className={inputClass}
+                  defaultValue={settings.lastNfeNumber + 1}
+                />
+              </Field>
+              <p className="text-xs text-slate-500">
+                A próxima NF-e sai com essa série e esse número. Depois disso o sistema continua a sequência sozinho.
+                Última NF-e já usada: {settings.lastNfeNumber}. Última NFC-e: {settings.lastNfceNumber}.
+              </p>
               <Field label="Série NFC-e">
                 <input
                   name="nfceSeries"
@@ -213,12 +233,11 @@ export default function EmpresaFiscalPage() {
                 <input name="certificatePassword" type="password" className={inputClass} autoComplete="off" />
               </Field>
               <p className="text-xs text-slate-500">
-                Última NF-e: {settings.lastNfeNumber} · Última NFC-e: {settings.lastNfceNumber}
                 {settings.certificateExpiresAt
-                  ? ` · Certificado válido até ${new Date(settings.certificateExpiresAt).toLocaleDateString('pt-BR')}`
+                  ? `Certificado válido até ${new Date(settings.certificateExpiresAt).toLocaleDateString('pt-BR')}`
                   : settings.hasCertificate
-                    ? ''
-                    : ' · Certificado não enviado'}
+                    ? 'Certificado no servidor'
+                    : 'Certificado não enviado'}
               </p>
               <SubmitButton label="Salvar" />
             </form>

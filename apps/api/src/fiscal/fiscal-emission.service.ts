@@ -15,6 +15,8 @@ import {
 import { assertFiscalRespTec, resolveFiscalRespTec } from './fiscal-resptec.util';
 import { FiscalCryptoService } from './fiscal-crypto.service';
 import { NfeXmlBuilder } from './nfe/nfe-xml.builder';
+import { salePaymentRows } from './nfe/nfe-payment.util';
+import { appendNfceSupl, nfceQrCodeUrl, nfceQrUsesCsc } from './nfe/nfce-qrcode.util';
 import { NfeXmlSignService } from './nfe/nfe-xml-sign.service';
 import { amWebservices, FiscalModel } from './sefaz/am-webservices';
 import { SefazSoapClient } from './sefaz/sefaz-soap.client';
@@ -45,6 +47,8 @@ export class FiscalEmissionService {
         salesOrder: {
           include: {
             partner: true,
+            paymentForm: true,
+            secondaryPaymentForm: true,
             items: {
               include: {
                 product: { include: { fiscalSituation: true } },
@@ -72,8 +76,8 @@ export class FiscalEmissionService {
     }
 
     const model: FiscalModel = doc.type === 'NFCE' ? '65' : '55';
-    if (model === '65' && (!settings.nfceCscId || !settings.nfceCsc)) {
-      throw new BadRequestException('NFC-e: configure CSC e ID CSC');
+    if (model === '65' && nfceQrUsesCsc(settings.sefazEnvironment) && (!settings.nfceCscId || !settings.nfceCsc)) {
+      throw new BadRequestException('NFC-e de produção: configure CSC e ID CSC');
     }
     if (model === '55') {
       const p = order.partner;
@@ -102,7 +106,8 @@ export class FiscalEmissionService {
       const profile = product ? resolveProductFiscalProfile(product) : null;
       const qty = Number(it.quantity);
       const unitPrice = Number(it.unitPrice);
-      const total = qty * unitPrice - Number(it.discount);
+      const discount = Number(it.discount);
+      const total = qty * unitPrice - discount;
       const nature = it.operationNature;
       const cfop = nature
         ? pickCfopFromNature(nature, destUf, emitUf)
@@ -118,6 +123,8 @@ export class FiscalEmissionService {
         quantity: qty,
         unitPrice,
         total,
+        discount,
+        cest: profile?.cest,
         cst: profile?.fiscalCst ?? '102',
         origin: profile?.fiscalOrigin ?? '0',
         gtin: profile?.gtin,
@@ -137,15 +144,21 @@ export class FiscalEmissionService {
       series,
       number,
       totalAmount: Number(order.totalAmount),
-      nfce:
-        model === '65'
-          ? { cscId: settings.nfceCscId!, csc: settings.nfceCsc! }
-          : undefined,
+      payments: salePaymentRows(order),
       respTec,
     });
 
     let signed = this.signer.signInfNfe(built.xml, built.infId, cert.privateKeyPem, cert.certificatePem);
     signed = signed.replace(/^<\?xml[^?]*\?>\s*/, '');
+    if (model === '65') {
+      const qr = nfceQrCodeUrl({
+        accessKey: built.accessKey,
+        environment: settings.sefazEnvironment,
+        cscId: settings.nfceCscId,
+        csc: settings.nfceCsc,
+      });
+      signed = appendNfceSupl(signed, qr);
+    }
 
     const idLote = String(Date.now()).slice(-15);
     const envi = `<enviNFe versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe"><idLote>${idLote}</idLote><indSinc>1</indSinc>${signed}</enviNFe>`;

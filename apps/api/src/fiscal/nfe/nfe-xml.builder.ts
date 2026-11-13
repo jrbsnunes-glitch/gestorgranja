@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { SefazEnvironment } from '../../generated/tenant-client';
 import { buildAccessKey, randomCNF } from './nfe-access-key.util';
-import { nfceQrCodeUrl } from './nfce-qrcode.util';
 import { sefazUfCode } from '../sefaz/am-webservices';
+import type { NfePagRow } from './nfe-payment.util';
 import { buildEnderDestXml } from '../fiscal-partner-address.util';
 import { buildInfRespTecXml, FiscalRespTec } from '../fiscal-resptec.util';
 import { formatNfeDateTime, nfeYearMonthForAccessKey } from './nfe-datetime.util';
@@ -55,6 +55,8 @@ export type EmitContext = {
     quantity: number;
     unitPrice: number;
     total: number;
+    discount?: number;
+    cest?: string | null;
     cst?: string | null;
     origin?: string | null;
     gtin?: string | null;
@@ -64,7 +66,7 @@ export type EmitContext = {
   series: number;
   number: number;
   totalAmount: number;
-  nfce?: { cscId: string; csc: string };
+  payments?: NfePagRow[];
   respTec: FiscalRespTec;
 };
 
@@ -102,6 +104,82 @@ function homologFieldText(
   if (environment === 'producao') return name.slice(0, maxLen);
   const label = maxLen <= 60 ? HOMOLOG_DEST_XNOME : HOMOLOG_FISCAL_LABEL;
   return label.slice(0, maxLen);
+}
+
+function money(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+/** NT 2026.008: homologação desde 26/10/2026, produção desde 16/11/2026. */
+function schemaIncludesValorLiquido(environment: SefazEnvironment, now = new Date()): boolean {
+  const from =
+    environment === 'producao'
+      ? Date.parse('2026-11-16T03:00:00.000Z')
+      : Date.parse('2026-10-26T03:00:00.000Z');
+  return now.getTime() >= from;
+}
+
+function gtinOrSem(gtin?: string | null): string {
+  const digits = onlyDigits(gtin ?? '');
+  if (digits.length >= 8 && digits.length <= 14 && gtin !== 'SEM GTIN') return digits;
+  return 'SEM GTIN';
+}
+
+function buildIcmsXml(crt: number, origin: string, cst: string): string {
+  const o = (origin || '0').replace(/\D/g, '').slice(0, 1) || '0';
+  if (crt === 1 || crt === 2 || crt === 4) {
+    const c = (cst || '102').replace(/\D/g, '').padStart(3, '0').slice(-3);
+    if (c === '101') {
+      return `<ICMS><ICMSSN101><orig>${o}</orig><CSOSN>101</CSOSN><pCredSN>0.00</pCredSN><vCredICMSSN>0.00</vCredICMSSN></ICMSSN101></ICMS>`;
+    }
+    if (c === '500') {
+      return (
+        `<ICMS><ICMSSN500><orig>${o}</orig><CSOSN>500</CSOSN>` +
+        `<vBCSTRet>0.00</vBCSTRet><pST>0.00</pST><vICMSSTRet>0.00</vICMSSTRet></ICMSSN500></ICMS>`
+      );
+    }
+    if (c === '900') {
+      return (
+        `<ICMS><ICMSSN900><orig>${o}</orig><CSOSN>900</CSOSN>` +
+        `<modBC>3</modBC><vBC>0.00</vBC><pRedBC>0.00</pRedBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS></ICMSSN900></ICMS>`
+      );
+    }
+    const sn = ['102', '103', '300', '400'].includes(c) ? c : '102';
+    return `<ICMS><ICMSSN102><orig>${o}</orig><CSOSN>${sn}</CSOSN></ICMSSN102></ICMS>`;
+  }
+  const c = (cst || '00').replace(/\D/g, '').padStart(2, '0').slice(-2);
+  if (['40', '41', '50'].includes(c)) {
+    return `<ICMS><ICMS${c}><orig>${o}</orig><CST>${c}</CST></ICMS${c}></ICMS>`;
+  }
+  if (c === '20') {
+    return (
+      `<ICMS><ICMS20><orig>${o}</orig><CST>20</CST><modBC>3</modBC>` +
+      `<vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS></ICMS20></ICMS>`
+    );
+  }
+  if (c === '00') {
+    return (
+      `<ICMS><ICMS00><orig>${o}</orig><CST>00</CST>` +
+      `<modBC>3</modBC><vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS></ICMS00></ICMS>`
+    );
+  }
+  if (c === '60') {
+    return (
+      `<ICMS><ICMS60><orig>${o}</orig><CST>60</CST>` +
+      `<vBCSTRet>0.00</vBCSTRet><pST>0.00</pST><vICMSSTRet>0.00</vICMSSTRet></ICMS60></ICMS>`
+    );
+  }
+  return `<ICMS><ICMS40><orig>${o}</orig><CST>40</CST></ICMS40></ICMS>`;
+}
+
+function buildPisCofins(crt: number): string {
+  if (crt === 3) {
+    return (
+      `<PIS><PISOutr><CST>49</CST><vBC>0.00</vBC><pPIS>0.00</pPIS><vPIS>0.00</vPIS></PISOutr></PIS>` +
+      `<COFINS><COFINSOutr><CST>49</CST><vBC>0.00</vBC><pCOFINS>0.00</pCOFINS><vCOFINS>0.00</vCOFINS></COFINSOutr></COFINS>`
+    );
+  }
+  return `<PIS><PISNT><CST>07</CST></PISNT></PIS><COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS>`;
 }
 
 @Injectable()
@@ -181,22 +259,39 @@ export class NfeXmlBuilder {
         (ctx.partner.email ? `<email>${esc(ctx.partner.email)}</email>` : '') +
         `</dest>`;
     } else if (ctx.model === '65') {
-      dest = `<dest><indIEDest>9</indIEDest></dest>`;
+      const doc = onlyDigits(ctx.partner?.cnpj || ctx.partner?.cpf || ctx.partner?.document || '');
+      const identified = doc.length === 11 || doc.length === 14;
+      dest = identified
+        ? `<dest>` +
+          (doc.length === 14 ? `<CNPJ>${doc}</CNPJ>` : `<CPF>${doc}</CPF>`) +
+          (ctx.partner?.name
+            ? `<xNome>${esc(homologFieldText(ctx.partner.name, ctx.environment, 60))}</xNome>`
+            : '') +
+          `<indIEDest>9</indIEDest></dest>`
+        : `<dest><indIEDest>9</indIEDest></dest>`;
       destIsNonContributor = true;
     }
 
     const indFinal =
       ctx.model === '65' || destIsNonContributor ? '1' : '0';
 
+    const includeValorLiquido = schemaIncludesValorLiquido(ctx.environment, now);
+    let vProdSum = 0;
+    let vDescSum = 0;
     const det = ctx.items
       .map((it) => {
-        const vProd = it.total.toFixed(2);
+        const gross = money(it.quantity * it.unitPrice);
+        const discount = money(Math.min(gross, Math.max(0, it.discount ?? 0)));
+        vProdSum = money(vProdSum + gross);
+        vDescSum = money(vDescSum + discount);
         const origin = it.origin ?? '0';
-        const cst = it.cst ?? '102';
+        const cst = it.cst ?? (crtNum === 3 ? '40' : '102');
+        const ean = gtinOrSem(it.gtin);
+        const cest = onlyDigits(it.cest ?? '');
         let ibscbsBlock = '';
         if (includeIbscbs) {
           const { xml, line } = buildItemIbscbsXml({
-            vProd: it.total,
+            vProd: money(gross - discount),
             cst: it.ibsCst,
             cClassTrib: it.ibsClassTrib,
             crt: crtNum,
@@ -204,27 +299,32 @@ export class NfeXmlBuilder {
           ibscbsBlock = xml;
           ibscbsNoteTotals = addIbscbsLineTotals(ibscbsNoteTotals, line);
         }
+        const vUn = it.unitPrice.toFixed(4);
+        const vProd = gross.toFixed(2);
         return (
           `<det nItem="${it.nItem}">` +
           `<prod>` +
           `<cProd>${it.nItem}</cProd>` +
-          `<cEAN>${it.gtin && it.gtin !== 'SEM GTIN' ? esc(it.gtin) : 'SEM GTIN'}</cEAN>` +
+          `<cEAN>${ean}</cEAN>` +
           `<xProd>${esc(homologFieldText(it.name, ctx.environment, 120))}</xProd>` +
           `<NCM>${onlyDigits(it.ncm || '04072100').padStart(8, '0')}</NCM>` +
+          (cest.length === 7 ? `<CEST>${cest}</CEST>` : '') +
           `<CFOP>${it.cfop}</CFOP>` +
           `<uCom>${esc(it.unit || 'UN')}</uCom>` +
           `<qCom>${it.quantity.toFixed(4)}</qCom>` +
-          `<vUnCom>${it.unitPrice.toFixed(4)}</vUnCom>` +
+          `<vUnCom>${vUn}</vUnCom>` +
           `<vProd>${vProd}</vProd>` +
-          `<cEANTrib>SEM GTIN</cEANTrib>` +
+          (includeValorLiquido ? `<vUnComLiq>${vUn}</vUnComLiq><vProdLiq>${vProd}</vProdLiq>` : '') +
+          `<cEANTrib>${ean}</cEANTrib>` +
           `<uTrib>${esc(it.unit || 'UN')}</uTrib>` +
           `<qTrib>${it.quantity.toFixed(4)}</qTrib>` +
-          `<vUnTrib>${it.unitPrice.toFixed(4)}</vUnTrib>` +
+          `<vUnTrib>${vUn}</vUnTrib>` +
+          (discount > 0 ? `<vDesc>${discount.toFixed(2)}</vDesc>` : '') +
           `<indTot>1</indTot>` +
           `</prod>` +
-          `<imposto><ICMS><ICMSSN102><orig>${origin}</orig><CSOSN>${cst}</CSOSN></ICMSSN102></ICMS>` +
-          `<PIS><PISNT><CST>07</CST></PISNT></PIS>` +
-          `<COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS>` +
+          `<imposto><vTotTrib>0.00</vTotTrib>` +
+          buildIcmsXml(crtNum, origin, cst) +
+          buildPisCofins(crtNum) +
           ibscbsBlock +
           `</imposto>` +
           `</det>`
@@ -232,19 +332,28 @@ export class NfeXmlBuilder {
       })
       .join('');
 
-    const vNF = ctx.totalAmount.toFixed(2);
-
-    let infSupl = '';
-    if (ctx.model === '65' && ctx.nfce) {
-      const qr = nfceQrCodeUrl({
-        accessKey,
-        environment: ctx.environment,
-        cscId: ctx.nfce.cscId,
-        csc: ctx.nfce.csc,
-        tpEmis,
-      });
-      infSupl = `<infNFeSupl><qrCode>${esc(qr)}</qrCode><urlChave>http://www.sefaz.am.gov.br/nfce/consulta</urlChave></infNFeSupl>`;
+    const vNF = money(vProdSum - vDescSum).toFixed(2);
+    const vProdTot = vProdSum.toFixed(2);
+    const vDescTot = vDescSum.toFixed(2);
+    const targetNf = Number(vNF);
+    const payments =
+      ctx.payments && ctx.payments.length > 0
+        ? ctx.payments.map((p) => ({ ...p }))
+        : [{ tPag: '01', vPag: targetNf, indPag: 0 as const }];
+    const paid = money(payments.reduce((s, p) => s + p.vPag, 0));
+    const payDiff = money(targetNf - paid);
+    if (payments.length > 0 && Math.abs(payDiff) >= 0.01 && Math.abs(payDiff) <= 0.05) {
+      const last = payments[payments.length - 1]!;
+      last.vPag = money(last.vPag + payDiff);
     }
+    const pagXml = payments
+      .map((p) => {
+        const xPag = p.tPag === '99' && p.xPag ? `<xPag>${esc(p.xPag)}</xPag>` : '';
+        return (
+          `<detPag><indPag>${p.indPag}</indPag><tPag>${p.tPag}</tPag>${xPag}<vPag>${p.vPag.toFixed(2)}</vPag></detPag>`
+        );
+      })
+      .join('');
 
     const ide =
       `<ide>` +
@@ -285,14 +394,15 @@ export class NfeXmlBuilder {
       `<total><ICMSTot>` +
       `<vBC>0.00</vBC><vICMS>0.00</vICMS><vICMSDeson>0.00</vICMSDeson>` +
       `<vFCP>0.00</vFCP><vBCST>0.00</vBCST><vST>0.00</vST><vFCPST>0.00</vFCPST><vFCPSTRet>0.00</vFCPSTRet>` +
-      `<vProd>${vNF}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>0.00</vDesc><vII>0.00</vII>` +
+      `<vProd>${vProdTot}</vProd><vFrete>0.00</vFrete><vSeg>0.00</vSeg><vDesc>${vDescTot}</vDesc><vII>0.00</vII>` +
       `<vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro>` +
       `<vNF>${vNF}</vNF>` +
       `</ICMSTot>` +
       (includeIbscbs ? buildIbscbsTotXml(ibscbsNoteTotals) : '') +
+      (includeValorLiquido ? `<vProdLiqTot>${vProdTot}</vProdLiqTot>` : '') +
       `</total>` +
       `<transp><modFrete>9</modFrete></transp>` +
-      `<pag><detPag><tPag>01</tPag><vPag>${vNF}</vPag></detPag></pag>` +
+      `<pag>${pagXml}</pag>` +
       buildInfRespTecXml(ctx.respTec, accessKey) +
       `</infNFe>`;
 
@@ -300,7 +410,6 @@ export class NfeXmlBuilder {
       `<?xml version="1.0" encoding="UTF-8"?>` +
       `<NFe xmlns="http://www.portalfiscal.inf.br/nfe">` +
       infNFe +
-      infSupl +
       `</NFe>`;
 
     return { xml, accessKey, infId };

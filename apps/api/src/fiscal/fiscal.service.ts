@@ -1,6 +1,4 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { FiscalDocumentStatus, SefazEnvironment } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
@@ -35,7 +33,6 @@ export class FiscalService {
     private readonly crypto: FiscalCryptoService,
     private readonly certService: FiscalCertService,
     private readonly emission: FiscalEmissionService,
-    @InjectQueue('fiscal-emission') private readonly emissionQueue: Queue,
   ) {}
 
   async getIssuerSettings(user: JwtPayload) {
@@ -81,6 +78,8 @@ export class FiscalService {
       nfceCsc?: string;
       series?: number;
       nfceSeries?: number;
+      /** Próximo número que a NF-e vai usar. Gravado como último número = esse valor − 1. */
+      nextNfeNumber?: number;
       respTecCnpj?: string;
       respTecContact?: string;
       respTecEmail?: string;
@@ -90,11 +89,44 @@ export class FiscalService {
     },
   ) {
     const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
-    const company = await prisma.company.findFirst();
+    const company = await prisma.company.findFirst({ include: { fiscalIssuerSettings: true } });
     if (!company) throw new NotFoundException('Empresa não cadastrada');
     const patch: Record<string, unknown> = { ...data };
     delete patch.certificatePassword;
     delete patch.respTecCsrt;
+    delete patch.nextNfeNumber;
+    if (data.series !== undefined) {
+      const series = Number(data.series);
+      if (!Number.isInteger(series) || series < 1 || series > 999) {
+        throw new BadRequestException('Série da NF-e inválida (1–999).');
+      }
+      patch.series = series;
+    }
+    if (data.nfceSeries !== undefined) {
+      const series = Number(data.nfceSeries);
+      if (!Number.isInteger(series) || series < 1 || series > 999) {
+        throw new BadRequestException('Série da NFC-e inválida (1–999).');
+      }
+      patch.nfceSeries = series;
+    }
+    if (data.nextNfeNumber !== undefined && data.nextNfeNumber !== null) {
+      const next = Number(data.nextNfeNumber);
+      if (!Number.isInteger(next) || next < 1 || next > 999_999_999) {
+        throw new BadRequestException('NF-e: informe o próximo número inteiro de 1 a 999999999.');
+      }
+      const series = Number(patch.series ?? company.fiscalIssuerSettings?.series ?? 1);
+      const used = await prisma.fiscalDocument.findFirst({
+        where: { type: 'NFE', series, number: { gte: next } },
+        orderBy: { number: 'desc' },
+        select: { number: true },
+      });
+      if (used?.number != null) {
+        throw new BadRequestException(
+          `NF-e: a nota ${used.number} da série ${series} já foi usada. O próximo número não pode voltar para ${next}.`,
+        );
+      }
+      patch.lastNfeNumber = next - 1;
+    }
     if (data.certificatePassword?.trim()) {
       patch.certificatePasswordEnc = this.crypto.encrypt(data.certificatePassword.trim());
       patch.certificatePassword = null;
@@ -172,13 +204,19 @@ export class FiscalService {
       });
     }
 
-    await this.emissionQueue.add(
-      'emit',
-      { tenantSlug: user.tenantSlug, fiscalDocumentId: doc.id },
-      { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
-    );
-
-    return prisma.fiscalDocument.findUnique({ where: { id: doc.id } });
+    try {
+      return await this.emission.processEmission({
+        tenantSlug: user.tenantSlug,
+        fiscalDocumentId: doc.id,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await prisma.fiscalDocument.update({
+        where: { id: doc.id },
+        data: { status: FiscalDocumentStatus.REJECTED, errorMessage: msg.slice(0, 500) },
+      });
+      throw new BadRequestException(msg);
+    }
   }
 
   listDocuments(user: JwtPayload) {
@@ -284,9 +322,6 @@ export class FiscalService {
       throw new BadRequestException('Envie o certificado A1 antes de emitir');
     }
     assertFiscalCompany(company);
-    if (type === 'NFCE' && (!settings.nfceCscId?.trim() || !settings.nfceCsc?.trim())) {
-      throw new BadRequestException('NFC-e de teste: informe ID CSC e CSC de homologação no emissor fiscal');
-    }
 
     let partner = await prisma.partner.findFirst({
       where: { cpf: HOMOLOG_TEST_PARTNER_CPF, isCustomer: true },
