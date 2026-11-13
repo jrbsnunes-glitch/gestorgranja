@@ -30,6 +30,35 @@ type ItemLine = {
   discount: string;
 };
 
+type ManualDraftPayload = {
+  partnerId?: string;
+  partner?: {
+    personType: 'PF' | 'PJ';
+    name: string;
+    cpf?: string;
+    cnpj?: string;
+    stateRegistration?: string;
+    email?: string;
+    phone?: string;
+    zipCode?: string;
+    street?: string;
+    addressNumber?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+  };
+  items: Array<{
+    productId?: string;
+    operationNatureId: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    description?: string;
+    fiscalSituationId?: string;
+    unit?: string;
+  }>;
+};
+
 type PreviewResult = {
   html: string;
   accessKey: string;
@@ -95,6 +124,7 @@ export function ManualNfeModal({
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [step, setStep] = useState<'form' | 'preview'>('form');
   const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [draftPayload, setDraftPayload] = useState<ManualDraftPayload | null>(null);
   const [destMode, setDestMode] = useState<DestMode>('registered');
   const [partnerId, setPartnerId] = useState('');
   const [lines, setLines] = useState<ItemLine[]>([newLine()]);
@@ -114,6 +144,7 @@ export function ManualNfeModal({
     setBusy(false);
     setStep('form');
     setPreview(null);
+    setDraftPayload(null);
     setDestMode(s.destMode);
     setPartnerId(s.partnerId);
     setLines(s.lines);
@@ -161,7 +192,7 @@ export function ManualNfeModal({
   const addLine = () => setLines((prev) => [...prev, newLine()]);
   const removeLine = (key: string) => setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.key !== key)));
 
-  function buildPayload(fd: FormData) {
+  function buildPayload(fd: FormData): ManualDraftPayload {
     const partnerManual =
       destMode === 'manual'
         ? {
@@ -230,11 +261,12 @@ export function ManualNfeModal({
     return true;
   }
 
-  async function runPreview(payload: ReturnType<typeof buildPayload>) {
+  async function runPreview(payload: ManualDraftPayload) {
     const result = await apiFetch<PreviewResult>('/v1/fiscal/manual-nfe/preview', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    setDraftPayload(payload);
     setPreview(result);
     setStep('preview');
   }
@@ -281,19 +313,19 @@ export function ManualNfeModal({
   }
 
   async function confirmSave() {
-    if (!preview) return;
+    if (!draftPayload) {
+      setError('Gere a pré-visualização de novo antes de gravar.');
+      return;
+    }
     setBusy(true);
     setError(null);
-    const form = document.getElementById('manual-nfe-form') as HTMLFormElement | null;
-    if (!form) return;
-    const fd = new FormData(form);
     try {
       await apiFetch('/v1/fiscal/manual-nfe', {
         method: 'POST',
-        body: JSON.stringify({ ...buildPayload(fd), emitNow: false }),
+        body: JSON.stringify({ ...draftPayload, emitNow: false }),
       });
-      onSuccess();
       onClose();
+      onSuccess();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -387,8 +419,12 @@ export function ManualNfeModal({
             srcDoc={preview.html}
           />
         </div>
-      ) : (
-        <form id="manual-nfe-form" onSubmit={(ev) => void onFormSubmit(ev)} className="space-y-6">
+      ) : null}
+      <form
+        id="manual-nfe-form"
+        onSubmit={(ev) => void onFormSubmit(ev)}
+        className={step === 'preview' ? 'hidden' : 'space-y-6'}
+      >
           <section>
             <h3 className="mb-3 text-sm font-semibold text-slate-800">Destinatário</h3>
             <div className="mb-3 flex flex-wrap gap-4 text-sm">
@@ -585,8 +621,7 @@ export function ManualNfeModal({
               + Adicionar item
             </Button>
           </section>
-        </form>
-      )}
+      </form>
     </FormCadastroModal>
   );
 }
