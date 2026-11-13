@@ -29,7 +29,7 @@ export class SefazSoapClient {
       return `${base}; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF"`;
     }
     if (url.includes('RecepcaoEvento4')) {
-      return `${base}; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"`;
+      return `${base}; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEventoNF"`;
     }
     if (url.includes('NfeInutilizacao4')) {
       return `${base}; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeInutilizacao4/nfeInutilizacaoNF"`;
@@ -430,16 +430,27 @@ export class SefazSoapClient {
   }
 
   extractEventResult(soapResponse: string): { ok: boolean; protocol?: string; message?: string } {
+    const text = soapResponse ?? '';
     try {
-      const parsed = this.parser.parse(soapResponse);
-      const body = parsed?.Envelope?.Body ?? parsed?.Body ?? parsed;
-      const ret = body?.nfeResultMsg ?? body?.retEnvEvento ?? body;
-      const inf = ret?.retEvento?.infEvento ?? ret?.infEvento;
-      const cStat = String(inf?.cStat ?? ret?.cStat ?? '');
-      if (cStat === '135' || cStat === '136' || cStat === '155') {
-        return { ok: true, protocol: String(inf?.nProt ?? ''), message: String(inf?.xMotivo ?? '') };
+      const inf = text.match(/<infEvento[\s\S]*?<\/infEvento>/i)?.[0] ?? '';
+      const scope = inf || text;
+      const cStat = scope.match(/<cStat>(\d+)<\/cStat>/i)?.[1] ?? '';
+      const xMotivo = scope.match(/<xMotivo>([^<]*)<\/xMotivo>/i)?.[1]?.trim() ?? '';
+      const nProt = scope.match(/<nProt>([^<]*)<\/nProt>/i)?.[1]?.trim() ?? '';
+      if (cStat === '102' || cStat === '135' || cStat === '136' || cStat === '155' || cStat === '573') {
+        return { ok: true, protocol: nProt, message: xMotivo };
       }
-      return { ok: false, message: String(inf?.xMotivo ?? ret?.xMotivo ?? cStat) };
+      const fault =
+        text.match(/<(?:[\w]+:)?Text[^>]*>([^<]+)<\/(?:[\w]+:)?Text>/i)?.[1]?.trim() ??
+        text.match(/<(?:[\w]+:)?faultstring[^>]*>([^<]+)<\/(?:[\w]+:)?faultstring>/i)?.[1]?.trim() ??
+        '';
+      const parts = [cStat ? `cStat ${cStat}` : '', xMotivo, fault].filter(Boolean);
+      if (parts.length) return { ok: false, message: parts.join(' — ').slice(0, 400) };
+      const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 280);
+      return {
+        ok: false,
+        message: snippet || 'A SEFAZ não retornou o resultado do evento',
+      };
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : 'Falha evento SEFAZ' };
     }

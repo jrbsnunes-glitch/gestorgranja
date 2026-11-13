@@ -316,9 +316,8 @@ export function formatApiError(raw: string): string {
     }
   }
 
-  for (const [en, pt] of Object.entries(HTTP_MESSAGES)) {
-    if (trimmed.includes(en)) return pt;
-  }
+  const http = HTTP_MESSAGES[trimmed];
+  if (http) return http;
 
   return humanizeUserText(trimmed);
 }

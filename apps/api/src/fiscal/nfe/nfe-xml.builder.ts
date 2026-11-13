@@ -428,7 +428,7 @@ export class NfeXmlBuilder {
     const id = `ID110111${params.accessKey}${String(params.seq).padStart(2, '0')}`;
     return (
       `<envEvento versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
-      `<idLote>${Date.now()}</idLote>` +
+      `<idLote>${String(Date.now()).padStart(15, '0')}</idLote>` +
       `<evento versao="1.00">` +
       `<infEvento Id="${id}">` +
       `<cOrgao>${sefazUfCode()}</cOrgao>` +
@@ -441,7 +441,7 @@ export class NfeXmlBuilder {
       `<verEvento>1.00</verEvento>` +
       `<detEvento versao="1.00">` +
       `<descEvento>Cancelamento</descEvento>` +
-      `<nProt>${params.protocol}</nProt>` +
+      `<nProt>${onlyDigits(params.protocol)}</nProt>` +
       `<xJust>${esc(params.reason.slice(0, 255))}</xJust>` +
       `</detEvento></infEvento></evento></envEvento>`
     );
@@ -459,7 +459,7 @@ export class NfeXmlBuilder {
     const id = `ID110110${params.accessKey}${String(params.seq).padStart(2, '0')}`;
     return (
       `<envEvento versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe">` +
-      `<idLote>${Date.now()}</idLote>` +
+      `<idLote>${String(Date.now()).padStart(15, '0')}</idLote>` +
       `<evento versao="1.00">` +
       `<infEvento Id="${id}">` +
       `<cOrgao>${sefazUfCode()}</cOrgao>` +

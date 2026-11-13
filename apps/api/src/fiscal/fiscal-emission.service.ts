@@ -356,6 +356,14 @@ export class FiscalEmissionService {
         'A nota não tem chave de acesso válida para cancelar. Consulte a situação na SEFAZ e tente de novo.',
       );
     }
+    const protocol = doc.protocol.replace(/\D/g, '');
+    if (protocol.length < 15) {
+      throw new BadRequestException('A nota não tem protocolo de autorização válido para cancelar.');
+    }
+    const justification = reason.trim();
+    if (justification.length < 15) {
+      throw new BadRequestException('A justificativa do cancelamento precisa ter no mínimo 15 caracteres.');
+    }
     const company = await prisma.company.findFirst({ include: { fiscalIssuerSettings: true } });
     if (!company?.fiscalIssuerSettings) throw new BadRequestException('Emissor não configurado');
     const settings = company.fiscalIssuerSettings;
@@ -367,8 +375,8 @@ export class FiscalEmissionService {
     const infId = `ID110111${accessKey}01`;
     let eventXml = this.builder.buildCancelEvent({
       accessKey,
-      protocol: doc.protocol,
-      reason,
+      protocol,
+      reason: justification,
       cnpj: company.cnpj,
       environment: settings.sefazEnvironment,
       seq: 1,
@@ -379,7 +387,9 @@ export class FiscalEmissionService {
       const ws = amWebservices(settings.sefazEnvironment, model);
       const res = await this.soap.postSoap(ws.recepcaoEvento, body, cert);
       const out = this.soap.extractEventResult(res);
-      if (!out.ok) throw new BadRequestException(out.message ?? 'Falha no cancelamento');
+      if (!out.ok) {
+        throw new BadRequestException(out.message?.trim() || 'Falha no cancelamento');
+      }
       return prisma.fiscalDocument.update({
         where: { id: docId },
         data: {
