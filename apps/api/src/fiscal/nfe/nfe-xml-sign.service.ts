@@ -12,21 +12,21 @@ const TRANSFORMS = [
 @Injectable()
 export class NfeXmlSignService {
   signInfNfe(xml: string, id: string, privateKeyPem: string, certPem: string): string {
-    if (!new RegExp(`<infNFe[^>]*Id="${id}"`).test(xml)) {
+    if (!xml.includes(`Id="${id}"`)) {
       throw new Error('infNFe não encontrado para assinatura');
     }
     return this.signElement(xml, 'infNFe', id, privateKeyPem, certPem);
   }
 
   signInfInut(inutXml: string, infId: string, privateKeyPem: string, certPem: string): string {
-    if (!new RegExp(`<infInut[^>]*Id="${infId}"`).test(inutXml)) {
+    if (!inutXml.includes(`Id="${infId}"`)) {
       throw new Error('infInut não encontrado');
     }
     return this.signElement(inutXml, 'infInut', infId, privateKeyPem, certPem);
   }
 
   signEventoXml(eventXml: string, infId: string, privateKeyPem: string, certPem: string): string {
-    if (!new RegExp(`<infEvento[^>]*Id="${infId}"`).test(eventXml)) {
+    if (!eventXml.includes(`Id="${infId}"`)) {
       throw new Error('infEvento não encontrado para assinatura');
     }
     return this.signElement(eventXml, 'infEvento', infId, privateKeyPem, certPem);

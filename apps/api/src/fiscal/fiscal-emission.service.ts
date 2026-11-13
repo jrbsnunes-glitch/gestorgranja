@@ -324,12 +324,37 @@ export class FiscalEmissionService {
     });
   }
 
+  /** A chave gravada como número vira notação científica e não serve para evento na SEFAZ. */
+  private async resolveStoredAccessKey(
+    prisma: PrismaClient,
+    doc: { id: string; accessKey: string | null; xmlStorageKey: string | null },
+  ): Promise<string | null> {
+    let chave = normalizeAccessKey(doc.accessKey);
+    if (!chave && doc.xmlStorageKey) {
+      try {
+        chave = accessKeyFromNfeXml(readFiscalFile(doc.xmlStorageKey).toString('utf8'));
+      } catch {
+        chave = null;
+      }
+    }
+    if (chave && chave !== doc.accessKey) {
+      await prisma.fiscalDocument.update({ where: { id: doc.id }, data: { accessKey: chave } });
+    }
+    return chave;
+  }
+
   async cancelDocument(tenantSlug: string, docId: string, reason: string) {
     const prisma = await this.tenantPrisma.getClient(tenantSlug);
     const doc = await prisma.fiscalDocument.findUnique({ where: { id: docId } });
     if (!doc) throw new NotFoundException('Documento não encontrado');
-    if (doc.status !== FiscalDocumentStatus.AUTHORIZED || !doc.accessKey || !doc.protocol) {
+    if (doc.status !== FiscalDocumentStatus.AUTHORIZED || !doc.protocol) {
       throw new BadRequestException('Somente NF autorizada pode ser cancelada');
+    }
+    const accessKey = await this.resolveStoredAccessKey(prisma, doc);
+    if (!accessKey) {
+      throw new BadRequestException(
+        'A nota não tem chave de acesso válida para cancelar. Consulte a situação na SEFAZ e tente de novo.',
+      );
     }
     const company = await prisma.company.findFirst({ include: { fiscalIssuerSettings: true } });
     if (!company?.fiscalIssuerSettings) throw new BadRequestException('Emissor não configurado');
@@ -339,29 +364,35 @@ export class FiscalEmissionService {
       this.certService.resolvePassword(settings),
     );
     const model = (doc.model as FiscalModel) || '55';
-    const infId = `ID110111${doc.accessKey}01`;
+    const infId = `ID110111${accessKey}01`;
     let eventXml = this.builder.buildCancelEvent({
-      accessKey: doc.accessKey,
+      accessKey,
       protocol: doc.protocol,
       reason,
       cnpj: company.cnpj,
       environment: settings.sefazEnvironment,
       seq: 1,
     });
-    eventXml = this.signer.signEventoXml(eventXml, infId, cert.privateKeyPem, cert.certificatePem);
-    const body = `<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">${eventXml}</nfeDadosMsg>`;
-    const ws = amWebservices(settings.sefazEnvironment, model);
-    const res = await this.soap.postSoap(ws.recepcaoEvento, body, cert);
-    const out = this.soap.extractEventResult(res);
-    if (!out.ok) throw new BadRequestException(out.message ?? 'Falha no cancelamento');
-    return prisma.fiscalDocument.update({
-      where: { id: docId },
-      data: {
-        status: FiscalDocumentStatus.CANCELLED,
-        cancelledAt: new Date(),
-        cancelProtocol: out.protocol,
-      },
-    });
+    try {
+      eventXml = this.signer.signEventoXml(eventXml, infId, cert.privateKeyPem, cert.certificatePem);
+      const body = `<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">${eventXml}</nfeDadosMsg>`;
+      const ws = amWebservices(settings.sefazEnvironment, model);
+      const res = await this.soap.postSoap(ws.recepcaoEvento, body, cert);
+      const out = this.soap.extractEventResult(res);
+      if (!out.ok) throw new BadRequestException(out.message ?? 'Falha no cancelamento');
+      return prisma.fiscalDocument.update({
+        where: { id: docId },
+        data: {
+          status: FiscalDocumentStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelProtocol: out.protocol,
+        },
+      });
+    } catch (e) {
+      if (e instanceof BadRequestException || e instanceof NotFoundException) throw e;
+      const msg = e instanceof Error ? e.message : 'Falha no cancelamento';
+      throw new BadRequestException(msg);
+    }
   }
 
   async correctionLetter(tenantSlug: string, docId: string, text: string) {
@@ -370,8 +401,13 @@ export class FiscalEmissionService {
       where: { id: docId },
       include: { correctionLetters: true },
     });
-    if (!doc?.accessKey || doc.status !== FiscalDocumentStatus.AUTHORIZED) {
+    if (!doc) throw new NotFoundException('Documento não encontrado');
+    if (doc.status !== FiscalDocumentStatus.AUTHORIZED) {
       throw new BadRequestException('NF autorizada necessária para CC-e');
+    }
+    const accessKey = await this.resolveStoredAccessKey(prisma, doc);
+    if (!accessKey) {
+      throw new BadRequestException('A nota não tem chave de acesso válida para a carta de correção.');
     }
     const seq = doc.correctionLetters.length + 1;
     if (seq > 20) throw new BadRequestException('Limite de 20 cartas de correção');
@@ -383,9 +419,9 @@ export class FiscalEmissionService {
       this.certService.resolvePassword(settings),
     );
     const model = (doc.model as FiscalModel) || '55';
-    const infId = `ID110110${doc.accessKey}${String(seq).padStart(2, '0')}`;
+    const infId = `ID110110${accessKey}${String(seq).padStart(2, '0')}`;
     let eventXml = this.builder.buildCceEvent({
-      accessKey: doc.accessKey,
+      accessKey,
       correction: text,
       cnpj: company.cnpj,
       environment: settings.sefazEnvironment,
@@ -617,19 +653,9 @@ export class FiscalEmissionService {
     const prisma = await this.tenantPrisma.getClient(tenantSlug);
     const doc = await prisma.fiscalDocument.findUnique({ where: { id: docId } });
     if (!doc) throw new NotFoundException('Documento não encontrado');
-    let chave = normalizeAccessKey(doc.accessKey);
-    if (!chave && doc.xmlStorageKey) {
-      try {
-        chave = accessKeyFromNfeXml(readFiscalFile(doc.xmlStorageKey).toString('utf8'));
-      } catch {
-        chave = null;
-      }
-    }
+    const chave = await this.resolveStoredAccessKey(prisma, doc);
     if (!chave) {
       throw new BadRequestException('Documento ainda não possui chave de acesso para consulta na SEFAZ');
-    }
-    if (chave !== doc.accessKey) {
-      await prisma.fiscalDocument.update({ where: { id: docId }, data: { accessKey: chave } });
     }
 
     const company = await prisma.company.findFirst({ include: { fiscalIssuerSettings: true } });
