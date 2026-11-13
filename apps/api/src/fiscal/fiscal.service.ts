@@ -5,6 +5,9 @@ import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { FiscalCryptoService } from './fiscal-crypto.service';
 import { FiscalEmissionService } from './fiscal-emission.service';
 import { writeFiscalCert, readFiscalFile } from './fiscal-storage.util';
+import { accessKeyFromNfeXml, normalizeAccessKey } from './fiscal-access-key.util';
+import { parseNfeDanfeXml } from './nfe/nfe-danfe-xml.parser';
+import { readCompanyLogoDataUrl } from '../cadastros/company-logo.util';
 import { FiscalCertService } from './fiscal-cert.service';
 import { assertFiscalPartnerAddress } from './fiscal-partner-address.util';
 import {
@@ -268,6 +271,124 @@ export class FiscalService {
       { preview: doc.status === FiscalDocumentStatus.DRAFT },
     );
     return { buf: Buffer.from(html, 'utf8'), mime: 'text/html; charset=utf-8' };
+  }
+
+  async getDanfeView(user: JwtPayload, docId: string) {
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const doc = await prisma.fiscalDocument.findUnique({
+      where: { id: docId },
+      include: {
+        salesOrder: {
+          include: {
+            partner: true,
+            items: { include: { product: true, operationNature: true } },
+          },
+        },
+      },
+    });
+    if (!doc) throw new NotFoundException('Documento não encontrado');
+    const model = doc.model ?? (doc.type === 'NFCE' ? '65' : '55');
+    if (model === '65') return { model: '65' as const };
+
+    const company = await prisma.company.findFirst({ include: { fiscalIssuerSettings: true } });
+    if (!company) throw new BadRequestException('Empresa não cadastrada');
+
+    let xml: string | null = null;
+    if (doc.xmlStorageKey) {
+      try {
+        xml = readFiscalFile(doc.xmlStorageKey).toString('utf8');
+      } catch {
+        xml = null;
+      }
+    }
+    const accessKey = normalizeAccessKey(doc.accessKey) ?? accessKeyFromNfeXml(xml);
+    if (accessKey && accessKey !== doc.accessKey) {
+      await prisma.fiscalDocument.update({ where: { id: doc.id }, data: { accessKey } });
+    }
+
+    const logoUrl = await readCompanyLogoDataUrl(user.tenantSlug);
+    const order = doc.salesOrder;
+    const partner = order?.partner;
+    const crtMatch = xml?.match(/<CRT>(\d)<\/CRT>/i);
+    const env = company.fiscalIssuerSettings?.sefazEnvironment === 'producao' ? 'PRODUCAO' : 'HOMOLOGACAO';
+
+    return {
+      model: '55' as const,
+      payload: {
+        preview: doc.status === FiscalDocumentStatus.DRAFT,
+        document: {
+          status: doc.status,
+          accessKey,
+          protocol: doc.protocol,
+          sefazEnvironment: env,
+          lastError: doc.errorMessage,
+          sale: {
+            number: order?.controlNumber ?? doc.number ?? 0,
+            total: String(order?.totalAmount ?? 0),
+            discount: '0',
+            surcharge: '0',
+            createdAt: (doc.issuedAt ?? new Date()).toISOString(),
+            customer: partner
+              ? {
+                  name: partner.name,
+                  document: partner.cnpj || partner.cpf || partner.document,
+                  ie: partner.stateRegistration,
+                  street: partner.street,
+                  number: partner.addressNumber,
+                  district: partner.district,
+                  city: partner.city,
+                  state: partner.state,
+                  zip: partner.zipCode,
+                  phone: partner.phone ?? partner.mobile,
+                  email: partner.email,
+                }
+              : null,
+            operationNature: order?.items[0]?.operationNature
+              ? {
+                  code: order.items[0].operationNature.code,
+                  description: order.items[0].operationNature.description,
+                  cfop: order.items[0].operationNature.cfopInternal ?? '',
+                }
+              : null,
+            items: (order?.items ?? []).map((it) => ({
+              quantity: String(it.quantity),
+              unitPrice: String(it.unitPrice),
+              totalLine: String(Number(it.quantity) * Number(it.unitPrice) - Number(it.discount)),
+              discount: String(it.discount),
+              variant: {
+                sku: it.product?.sku,
+                product: {
+                  name: it.product?.name ?? it.eggCategory ?? 'Item',
+                  ncm: it.product?.fiscalSituationId ? undefined : undefined,
+                  taxUnit: it.product?.unit ?? 'UN',
+                },
+              },
+            })),
+          },
+        },
+        nfe: { serie: doc.series, nNF: doc.number },
+        xmlData: xml ? parseNfeDanfeXml(xml) : null,
+        rtc: {
+          crt: crtMatch ? Number(crtMatch[1]) : (company.taxRegime ?? 1),
+          totals: { cbs: '0', ibsUf: '0', ibsMun: '0', is: '0' },
+        },
+        company: {
+          legalName: company.legalName,
+          tradeName: company.tradeName || company.legalName,
+          cnpj: company.cnpj ?? '',
+          ie: company.stateReg,
+          address: company.street || company.address,
+          addressNumber: company.addressNumber,
+          district: company.district,
+          city: company.city,
+          state: company.state,
+          zip: company.zipCode,
+          phone: company.phone,
+          email: company.email,
+          logoUrl,
+        },
+      },
+    };
   }
 
   async deleteDocument(user: JwtPayload, docId: string) {

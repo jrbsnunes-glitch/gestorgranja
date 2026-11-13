@@ -66,6 +66,7 @@ type PreviewResult = {
   number: number;
   total: number;
   partnerName: string;
+  danfe?: unknown;
 };
 
 type DraftLoad = {
@@ -267,6 +268,7 @@ export function ManualNfeModal({
       body: JSON.stringify(payload),
     });
     setDraftPayload(payload);
+    if (result.danfe) sessionStorage.setItem('gg-danfe-preview', JSON.stringify(result.danfe));
     setPreview(result);
     setStep('preview');
   }
@@ -416,7 +418,12 @@ export function ManualNfeModal({
           <iframe
             title="Pré-visualização DANFE"
             className="h-[min(60vh,520px)] w-full rounded-md border border-slate-200 bg-white"
-            srcDoc={preview.html}
+            src={
+              preview.danfe
+                ? `/vendas/documentos-fiscais/danfe/impressao?preview=1&k=${encodeURIComponent(preview.accessKey)}`
+                : undefined
+            }
+            srcDoc={preview.danfe ? undefined : preview.html}
           />
         </div>
       ) : null}

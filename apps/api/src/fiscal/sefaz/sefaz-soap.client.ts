@@ -10,7 +10,12 @@ const SEFAZ_TIMEOUT_MS = 45_000;
 @Injectable()
 export class SefazSoapClient {
   private readonly logger = new Logger(SefazSoapClient.name);
-  private readonly parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
+  private readonly parser = new XMLParser({
+    ignoreAttributes: false,
+    removeNSPrefix: true,
+    parseTagValue: false,
+    parseAttributeValue: false,
+  });
 
   private soapContentType(url: string): string {
     const base = 'application/soap+xml; charset=utf-8';

@@ -3,6 +3,7 @@ export function isPublicAppRoute(pathname: string): boolean {
   if (pathname === '/') return true;
   if (pathname.startsWith('/relatorios/')) return true;
   if (pathname.startsWith('/vendas/impressao')) return true;
+  if (pathname.startsWith('/vendas/documentos-fiscais/danfe/')) return true;
   if (pathname === '/rh/ponto/quiosque') return true;
   if (pathname.startsWith('/rh/ponto/terminal/kiosk')) return true;
   if (pathname.startsWith('/portal-licencas')) return true;

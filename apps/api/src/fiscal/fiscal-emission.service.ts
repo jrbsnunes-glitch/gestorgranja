@@ -4,7 +4,9 @@ import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { FiscalCertService, ParsedCert } from './fiscal-cert.service';
 import { buildDanfeHtml } from './fiscal-danfe.util';
 import { readCompanyLogoDataUrl } from '../cadastros/company-logo.util';
-import { writeFiscalDanfeHtml, writeFiscalXml } from './fiscal-storage.util';
+import { readFiscalFile, writeFiscalDanfeHtml, writeFiscalXml } from './fiscal-storage.util';
+import { accessKeyFromNfeXml, normalizeAccessKey } from './fiscal-access-key.util';
+import { parseNfeDanfeXml } from './nfe/nfe-danfe-xml.parser';
 import { assertFiscalPartnerAddress } from './fiscal-partner-address.util';
 import {
   assertFiscalCompany,
@@ -237,7 +239,7 @@ export class FiscalEmissionService {
         data: {
           status: FiscalDocumentStatus.AUTHORIZED,
           protocol: parsed.protocol,
-          accessKey: parsed.accessKey ?? built.accessKey,
+          accessKey: normalizeAccessKey(parsed.accessKey) ?? built.accessKey,
           issuedAt: new Date(),
           danfeStorageKey: danfePath,
           errorMessage: null,
@@ -570,6 +572,44 @@ export class FiscalEmissionService {
       number,
       total: totalAmount,
       partnerName: partner.name,
+      danfe: {
+        preview: true,
+        document: {
+          status: 'DRAFT',
+          accessKey: built.accessKey,
+          protocol: null,
+          sefazEnvironment: settings.sefazEnvironment === 'producao' ? 'PRODUCAO' : 'HOMOLOGACAO',
+          lastError: null,
+          sale: {
+            number: 0,
+            total: String(totalAmount),
+            discount: '0',
+            surcharge: '0',
+            createdAt: new Date().toISOString(),
+            customer: null,
+          },
+        },
+        nfe: { serie: series, nNF: number },
+        xmlData: parseNfeDanfeXml(built.xml),
+        rtc: {
+          crt: company.taxRegime ?? 1,
+          totals: { cbs: '0', ibsUf: '0', ibsMun: '0', is: '0' },
+        },
+        company: {
+          legalName: company.legalName,
+          tradeName: company.tradeName || company.legalName,
+          cnpj: company.cnpj ?? '',
+          ie: company.stateReg ?? null,
+          address: company.street || null,
+          addressNumber: company.addressNumber ?? null,
+          district: company.district ?? null,
+          city: company.city ?? null,
+          state: company.state ?? null,
+          zip: company.zipCode ?? null,
+          phone: company.phone ?? null,
+          logoUrl: logoDataUrl,
+        },
+      },
     };
   }
 
@@ -577,9 +617,19 @@ export class FiscalEmissionService {
     const prisma = await this.tenantPrisma.getClient(tenantSlug);
     const doc = await prisma.fiscalDocument.findUnique({ where: { id: docId } });
     if (!doc) throw new NotFoundException('Documento não encontrado');
-    const chave = doc.accessKey?.replace(/\D/g, '');
-    if (!chave || chave.length !== 44) {
+    let chave = normalizeAccessKey(doc.accessKey);
+    if (!chave && doc.xmlStorageKey) {
+      try {
+        chave = accessKeyFromNfeXml(readFiscalFile(doc.xmlStorageKey).toString('utf8'));
+      } catch {
+        chave = null;
+      }
+    }
+    if (!chave) {
       throw new BadRequestException('Documento ainda não possui chave de acesso para consulta na SEFAZ');
+    }
+    if (chave !== doc.accessKey) {
+      await prisma.fiscalDocument.update({ where: { id: docId }, data: { accessKey: chave } });
     }
 
     const company = await prisma.company.findFirst({ include: { fiscalIssuerSettings: true } });

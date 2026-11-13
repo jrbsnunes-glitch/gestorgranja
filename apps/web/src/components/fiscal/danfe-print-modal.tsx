@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@gestor-granja/ui';
 import { FormCadastroModal } from '@/components/crud/form-cadastro-modal';
 import { ErrorBox } from '@/components/ui-parts';
-import { getApiBase, getToken } from '@/lib/api';
+import { apiFetch, getApiBase, getToken } from '@/lib/api';
 import { errorMessage } from '@/lib/labels';
 
 type Props = {
@@ -16,6 +16,7 @@ type Props = {
 
 export function DanfePrintModal({ open, documentId, title, onClose }: Props) {
   const [html, setHtml] = useState<string | null>(null);
+  const [nfeLayout, setNfeLayout] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,14 +25,19 @@ export function DanfePrintModal({ open, documentId, title, onClose }: Props) {
     setLoading(true);
     setError(null);
     setHtml(null);
+    setNfeLayout(false);
     try {
+      const view = await apiFetch<{ model: string }>(`/v1/fiscal/documents/${documentId}/danfe-view`);
+      if (view.model !== '65') {
+        setNfeLayout(true);
+        return;
+      }
       const token = getToken();
       const res = await fetch(`${getApiBase()}/v1/fiscal/documents/${documentId}/danfe`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error('Não foi possível carregar a DANFE');
-      const text = await res.text();
-      setHtml(text);
+      setHtml(await res.text());
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -43,6 +49,7 @@ export function DanfePrintModal({ open, documentId, title, onClose }: Props) {
     if (open && documentId) void load();
     if (!open) {
       setHtml(null);
+      setNfeLayout(false);
       setError(null);
     }
   }, [open, documentId, load]);
@@ -63,7 +70,7 @@ export function DanfePrintModal({ open, documentId, title, onClose }: Props) {
           <Button type="button" variant="secondary" onClick={onClose}>
             Fechar
           </Button>
-          <Button type="button" disabled={!html || loading} onClick={() => printDanfe()}>
+          <Button type="button" disabled={(!html && !nfeLayout) || loading} onClick={() => printDanfe()}>
             Imprimir
           </Button>
         </div>
@@ -71,6 +78,14 @@ export function DanfePrintModal({ open, documentId, title, onClose }: Props) {
     >
       <ErrorBox message={error} />
       {loading ? <p className="text-sm text-slate-600">Gerando DANFE…</p> : null}
+      {nfeLayout && documentId ? (
+        <iframe
+          id="danfe-print-frame"
+          title="DANFE para impressão"
+          className="h-[min(75vh,720px)] w-full rounded-md border border-slate-200 bg-white"
+          src={`/vendas/documentos-fiscais/danfe/impressao?id=${encodeURIComponent(documentId)}`}
+        />
+      ) : null}
       {html ? (
         <iframe
           id="danfe-print-frame"

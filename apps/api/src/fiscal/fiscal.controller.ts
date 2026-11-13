@@ -127,6 +127,12 @@ export class FiscalController {
     res.send(buf);
   }
 
+  @Get('documents/:id/danfe-view')
+  @RequirePermissions('fiscal.read', 'fiscal.emit', 'sales.read', '*')
+  danfeView(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.fiscal.getDanfeView(user, id);
+  }
+
   @Get('documents/:id/danfe')
   @RequirePermissions('fiscal.read', 'fiscal.emit', 'sales.read', '*')
   async docDanfe(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Res() res: Response) {

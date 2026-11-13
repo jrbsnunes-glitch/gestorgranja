@@ -470,7 +470,10 @@ export default function DocumentosFiscaisPage() {
                             type="button"
                             variant="secondary"
                             onClick={() =>
-                              void downloadAuth(`/v1/fiscal/documents/${d.id}/xml`, `nfe-${d.accessKey ?? d.id}.xml`)
+                              void downloadAuth(
+                              `/v1/fiscal/documents/${d.id}/xml`,
+                              `nfe-${(d.accessKey ?? '').replace(/\D/g, '').length === 44 ? d.accessKey : (d.number ?? d.id)}.xml`,
+                            )
                             }
                           >
                             XML
