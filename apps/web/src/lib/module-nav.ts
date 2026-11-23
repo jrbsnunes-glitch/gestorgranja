@@ -157,9 +157,11 @@ export const APP_MODULES: AppModule[] = [
         '/cadastros/formas-pagamento',
         '/cadastros/situacao-fiscal',
         '/cadastros/natureza-operacao',
+        '/cadastros/veterinarios',
       ]),
     tabs: [
       { id: 'gerais', label: 'Cadastros gerais', href: '/cadastros-gerais' },
+      { id: 'veterinarios', label: 'Veterinários', href: '/cadastros/veterinarios' },
       { id: 'fiscal-sit', label: 'Situação fiscal', href: '/cadastros/situacao-fiscal' },
       { id: 'nat-op', label: 'Natureza da operação', href: '/cadastros/natureza-operacao' },
       { id: 'turnos', label: 'Turnos', href: '/cadastros/turnos' },

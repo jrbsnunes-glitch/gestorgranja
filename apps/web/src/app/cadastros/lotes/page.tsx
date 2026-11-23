@@ -154,9 +154,13 @@ export default function LotesPage() {
   const { slice, page, setPage, totalPages, total } = usePagination(list.filtered);
 
   const load = useCallback(() => {
-    void apiFetch<Lot[]>('/v1/production/lots').then(setLots);
-    void apiFetch<Barn[]>('/v1/cadastros/barns').then(setBarns);
-    void apiFetch<Lineage[]>('/v1/cadastros/breed-lineages').then(setLineages);
+    const fail = (err: unknown, fallback: string) =>
+      setError(err instanceof Error ? err.message : fallback);
+    void apiFetch<Lot[]>('/v1/production/lots').then(setLots).catch((err) => fail(err, 'Erro ao carregar lotes'));
+    void apiFetch<Barn[]>('/v1/cadastros/barns').then(setBarns).catch((err) => fail(err, 'Erro ao carregar galpões'));
+    void apiFetch<Lineage[]>('/v1/cadastros/breed-lineages')
+      .then(setLineages)
+      .catch((err) => fail(err, 'Erro ao carregar linhagens'));
   }, []);
 
   useEffect(() => {
@@ -194,14 +198,24 @@ export default function LotesPage() {
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.currentTarget);
+    const barnId = String(fd.get('barnId') ?? '').trim();
+    const breedLineageId = String(fd.get('breedLineageId') ?? '').trim();
+    if (!barnId) {
+      setError('Selecione o galpão do lote.');
+      return;
+    }
+    if (!breedLineageId) {
+      setError('Selecione a linhagem do lote.');
+      return;
+    }
     try {
       if (modal === 'edit' && selected) {
         await apiFetch(`/v1/cadastros/flock-lots/${selected.id}`, {
           method: 'PATCH',
           body: JSON.stringify({
             code: fd.get('code'),
-            barnId: fd.get('barnId'),
-            breedLineageId: fd.get('breedLineageId'),
+            barnId,
+            breedLineageId,
             housingDate: fd.get('housingDate'),
             housedQty: Number(fd.get('housedQty')),
             status: fd.get('status'),
@@ -218,8 +232,8 @@ export default function LotesPage() {
           method: 'POST',
           body: JSON.stringify({
             code: fd.get('code'),
-            barnId: fd.get('barnId'),
-            breedLineageId: fd.get('breedLineageId'),
+            barnId,
+            breedLineageId,
             housingDate: fd.get('housingDate'),
             housedQty: Number(fd.get('housedQty')),
             initialAgeWeeks: Number(fd.get('initialAgeWeeks') || 0),
@@ -331,6 +345,9 @@ export default function LotesPage() {
             key={modal === 'edit' && selected ? selected.id : 'new'}
             className="grid gap-0 md:grid-cols-2 md:gap-x-4"
           >
+            <div className="md:col-span-2">
+              <ErrorBox message={error} />
+            </div>
             {modal === 'edit' && selected?.controlNumber != null ? (
               <Field label="Controle">
                 <input

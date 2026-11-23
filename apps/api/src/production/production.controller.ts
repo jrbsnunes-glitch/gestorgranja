@@ -101,6 +101,23 @@ export class ProductionController {
     return this.production.listDailyMortality(user, flockLotId);
   }
 
+  @Post('manejo')
+  @RequirePermissions('production.write', 'nutrition.write', '*')
+  upsertManejo(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: {
+      flockLotId: string;
+      date: string;
+      waterLiters?: number | null;
+      clinicalSigns?: string | null;
+      treatmentDescription?: string | null;
+      technicalGuidance?: string | null;
+    },
+  ) {
+    return this.production.upsertManejo(user, body);
+  }
+
   @Get('environmental')
   @RequirePermissions('production.read', '*')
   listEnvironmental(@CurrentUser() user: JwtPayload) {

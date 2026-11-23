@@ -250,8 +250,25 @@ model Company {
   phone        String?
   email        String?
   logoUrl      String?
+  /// Responsável técnico que assina o registro de manejo (PL 5).
+  veterinarianName String?
+  veterinarianCrmv String?
   fiscalIssuerSettings FiscalIssuerSettings?
   sicoobCobrancaSettings SicoobCobrancaSettings?
+}
+
+/// Médicos veterinários. O marcado como responsável técnico assina a ficha PL 5.
+model Veterinarian {
+  id             String   @id @default(uuid())
+  controlNumber  Int      @unique @default(autoincrement())
+  name           String
+  crmv           String
+  phone          String?
+  email          String?
+  isResponsible  Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model HrSettings {
@@ -370,6 +387,7 @@ model FlockLot {
   feedTransfersOut FeedTransfer[]         @relation("FeedTransferFrom")
   feedTransfersIn  FeedTransfer[]         @relation("FeedTransferTo")
   movements        FlockMovement[]
+  manejoRecords    DailyManejoRecord[]
   occurrences      OperationalOccurrence[]
   supplyConsumptions SupplyConsumption[]
   losses           OperationalLoss[]
@@ -517,6 +535,22 @@ model DailyFeedConsumption {
   reviewedAt       DateTime?
   createdAt        DateTime              @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@unique([flockLotId, date])
+}
+
+/// Água e anotações sanitárias do dia (ficha PL 5 — manejo na produção).
+model DailyManejoRecord {
+  id                   String   @id @default(uuid())
+  flockLotId           String
+  flockLot             FlockLot @relation(fields: [flockLotId], references: [id], onDelete: Cascade)
+  date                 DateTime @db.Date
+  waterLiters          Decimal? @db.Decimal(12, 3)
+  clinicalSigns        String?
+  treatmentDescription String?
+  technicalGuidance    String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@unique([flockLotId, date])
 }

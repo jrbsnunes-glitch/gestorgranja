@@ -23,6 +23,7 @@ import { HrVacationsReportService } from './hr-vacations-report.service';
 import { ZootechnicalMetricsService } from './zootechnical-metrics.service';
 import { OperationProductionReportService } from './operation-production-report.service';
 import { CollectionReportService } from './collection-report.service';
+import { ManejoProducaoReportService } from './manejo-producao-report.service';
 
 @Module({
   imports: [AuthModule, ProductionModule, NutritionModule, OperationModule, AuditModule, HrModule],
@@ -45,6 +46,7 @@ import { CollectionReportService } from './collection-report.service';
     HrVacationsReportService,
     OperationProductionReportService,
     CollectionReportService,
+    ManejoProducaoReportService,
   ],
   exports: [ZootechnicalMetricsService, ProductionCostReportService, FinanceTitlesReportService],
 })

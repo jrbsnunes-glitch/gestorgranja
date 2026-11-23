@@ -198,6 +198,38 @@ export class GeneralCadastrosController {
     return this.general.updatePaymentForm(user, id, body);
   }
 
+  @Get('veterinarians')
+  @RequirePermissions('cadastros.read', 'cadastros.write', '*')
+  veterinarians(@CurrentUser() user: JwtPayload) {
+    return this.general.listVeterinarians(user);
+  }
+
+  @Post('veterinarians')
+  @RequirePermissions('cadastros.write', '*')
+  createVeterinarian(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    body: { name?: string; crmv?: string; phone?: string; email?: string; isResponsible?: boolean },
+  ) {
+    return this.general.createVeterinarian(user, body);
+  }
+
+  @Patch('veterinarians/:id')
+  @RequirePermissions('cadastros.write', '*')
+  patchVeterinarian(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.general.updateVeterinarian(user, id, body);
+  }
+
+  @Delete('veterinarians/:id')
+  @RequirePermissions('cadastros.write', '*')
+  deleteVeterinarian(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.general.deleteVeterinarian(user, id);
+  }
+
   @Get('work-shifts')
   @RequirePermissions('cadastros.read', 'hr.read', '*')
   workShifts(@CurrentUser() user: JwtPayload) {

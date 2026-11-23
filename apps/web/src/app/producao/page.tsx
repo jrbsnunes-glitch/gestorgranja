@@ -428,6 +428,17 @@ export default function ProducaoPage() {
           reason: fd.get('reason') || undefined,
         }),
       });
+      const waterRaw = String(fd.get('waterLiters') ?? '').trim();
+      if (waterRaw) {
+        await apiFetch('/v1/production/manejo', {
+          method: 'POST',
+          body: JSON.stringify({
+            flockLotId: lotId,
+            date: fd.get('date'),
+            waterLiters: Number(waterRaw.replace(',', '.')),
+          }),
+        });
+      }
       setModal(null);
       load();
     } catch (err) {
@@ -949,6 +960,16 @@ export default function ProducaoPage() {
                 className={inputClass}
                 required
                 defaultValue={editingFeed?.consumedKg ?? ''}
+              />
+            </Field>
+            <Field label="Água (litros)">
+              <input
+                name="waterLiters"
+                type="number"
+                step="0.1"
+                min={0}
+                className={inputClass}
+                placeholder="Quantidade do dia"
               />
             </Field>
             <Field label="Sobra (kg)">

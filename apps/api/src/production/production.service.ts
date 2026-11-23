@@ -4,6 +4,7 @@ import { assertBarnAccess, filterLotsByBarnScope } from '../common/barn-scope';
 import { loadUserNames, userLabel } from '../common/user-names';
 import { AuditService } from '../audit/audit.service';
 import { FlockLotStatus, FlockMovementType, OperationRecordStatus } from '../generated/tenant-client';
+import { prismaDateOnly } from '../common/calendar-date.util';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { EggProductionStockService } from './egg-production-stock.service';
 import { computeFlockBalance } from './flock-balance.util';
@@ -447,6 +448,54 @@ export class ProductionService {
       orderBy: { recordedAt: 'desc' },
       take: 500,
       include: { barn: { select: { code: true, name: true } } },
+    });
+  }
+
+  /** Água e texto sanitário do dia, usados na ficha PL 5. Campos omitidos não alteram o que já está gravado. */
+  async upsertManejo(
+    user: JwtPayload,
+    dto: {
+      flockLotId: string;
+      date: string;
+      waterLiters?: number | null;
+      clinicalSigns?: string | null;
+      treatmentDescription?: string | null;
+      technicalGuidance?: string | null;
+    },
+  ) {
+    const dayKey = dto.date?.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dayKey ?? '')) {
+      throw new BadRequestException('Informe a data do manejo.');
+    }
+    const prisma = await this.tenantPrisma.getClient(user.tenantSlug);
+    const lot = await prisma.flockLot.findUnique({ where: { id: dto.flockLotId } });
+    if (!lot) throw new NotFoundException('Lote não encontrado');
+    assertBarnAccess(user, lot.barnId);
+    const date = prismaDateOnly(dayKey);
+    const existing = await prisma.dailyManejoRecord.findUnique({
+      where: { flockLotId_date: { flockLotId: dto.flockLotId, date } },
+    });
+    const text = (value: string | null | undefined, previous: string | null | undefined) => {
+      if (value === undefined) return previous ?? null;
+      const trimmed = value?.trim() ?? '';
+      return trimmed || null;
+    };
+    const water =
+      dto.waterLiters === undefined
+        ? existing?.waterLiters ?? null
+        : dto.waterLiters == null || Number.isNaN(Number(dto.waterLiters))
+          ? null
+          : Number(dto.waterLiters);
+    const data = {
+      waterLiters: water,
+      clinicalSigns: text(dto.clinicalSigns, existing?.clinicalSigns),
+      treatmentDescription: text(dto.treatmentDescription, existing?.treatmentDescription),
+      technicalGuidance: text(dto.technicalGuidance, existing?.technicalGuidance),
+    };
+    return prisma.dailyManejoRecord.upsert({
+      where: { flockLotId_date: { flockLotId: dto.flockLotId, date } },
+      create: { flockLotId: dto.flockLotId, date, ...data },
+      update: data,
     });
   }
 

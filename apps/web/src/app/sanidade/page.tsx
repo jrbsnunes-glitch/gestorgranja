@@ -159,6 +159,22 @@ export default function SanidadePage() {
           notes: fd.get('notes') || undefined,
         }),
       });
+      const clinicalSigns = String(fd.get('clinicalSigns') ?? '').trim();
+      const treatmentDescription = String(fd.get('treatmentDescription') ?? '').trim();
+      const technicalGuidance = String(fd.get('technicalGuidance') ?? '').trim();
+      if (clinicalSigns || treatmentDescription || technicalGuidance) {
+        const applied = String(fd.get('appliedAt') ?? '');
+        await apiFetch('/v1/production/manejo', {
+          method: 'POST',
+          body: JSON.stringify({
+            flockLotId: lotId,
+            date: applied.slice(0, 10),
+            clinicalSigns: clinicalSigns || null,
+            treatmentDescription: treatmentDescription || null,
+            technicalGuidance: technicalGuidance || null,
+          }),
+        });
+      }
       setModal(null);
       setProductName('');
       setProductQuery('');
@@ -355,6 +371,15 @@ export default function SanidadePage() {
             </Field>
             <Field label="Observações">
               <input name="notes" className={inputClass} />
+            </Field>
+            <Field label="Sinais clínicos (ficha de manejo)">
+              <input name="clinicalSigns" className={inputClass} placeholder="Lote e o que foi observado" />
+            </Field>
+            <Field label="Descrição do tratamento realizado">
+              <input name="treatmentDescription" className={inputClass} />
+            </Field>
+            <Field label="Orientações técnicas repassadas">
+              <input name="technicalGuidance" className={inputClass} />
             </Field>
           </form>
         ) : (

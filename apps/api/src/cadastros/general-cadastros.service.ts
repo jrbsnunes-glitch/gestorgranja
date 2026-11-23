@@ -180,11 +180,132 @@ export class GeneralCadastrosService {
     return loadCompanyBranding(p, user.tenantSlug);
   }
 
-  updateCompany(user: JwtPayload, data: Record<string, unknown>) {
+  async updateCompany(user: JwtPayload, data: Record<string, unknown>) {
     const { logoUrl: _drop, ...rest } = data;
-    return this.getCompany(user).then((c) =>
-      this.db(user).then((p) => p.company.update({ where: { id: c.id }, data: rest as never })),
-    );
+    const p = await this.db(user);
+    const c = await this.getCompany(user);
+    const updated = await p.company.update({ where: { id: c.id }, data: rest as never });
+    if ('veterinarianName' in data || 'veterinarianCrmv' in data) {
+      await this.mirrorCompanyVeterinarian(p, updated);
+    }
+    return updated;
+  }
+
+  private async mirrorCompanyVeterinarian(
+    p: Awaited<ReturnType<GeneralCadastrosService['db']>>,
+    company: { veterinarianName: string | null; veterinarianCrmv: string | null },
+  ) {
+    const name = company.veterinarianName?.trim() || '';
+    const crmv = company.veterinarianCrmv?.trim() || '';
+    if (!name && !crmv) return;
+    const current = await p.veterinarian.findFirst({ where: { isResponsible: true } });
+    if (current) {
+      await p.veterinarian.update({
+        where: { id: current.id },
+        data: { name: name || current.name, crmv: crmv || current.crmv },
+      });
+      return;
+    }
+    if (!name || !crmv) return;
+    await p.veterinarian.create({ data: { name, crmv, isResponsible: true, isActive: true } });
+  }
+
+  private async syncCompanyVeterinarian(p: Awaited<ReturnType<GeneralCadastrosService['db']>>) {
+    const vet = await p.veterinarian.findFirst({
+      where: { isResponsible: true, isActive: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const company = await p.company.findFirst();
+    if (!company) return;
+    await p.company.update({
+      where: { id: company.id },
+      data: {
+        veterinarianName: vet?.name ?? null,
+        veterinarianCrmv: vet?.crmv ?? null,
+      },
+    });
+  }
+
+  async listVeterinarians(user: JwtPayload) {
+    const p = await this.db(user);
+    const rows = await p.veterinarian.findMany({
+      orderBy: [{ isResponsible: 'desc' }, { name: 'asc' }],
+    });
+    if (rows.length > 0) return rows;
+    const company = await p.company.findFirst();
+    const name = company?.veterinarianName?.trim();
+    const crmv = company?.veterinarianCrmv?.trim();
+    if (!name || !crmv) return rows;
+    const created = await p.veterinarian.create({
+      data: { name, crmv, isResponsible: true, isActive: true },
+    });
+    return [created];
+  }
+
+  async createVeterinarian(
+    user: JwtPayload,
+    data: { name?: string; crmv?: string; phone?: string; email?: string; isResponsible?: boolean },
+  ) {
+    const name = data.name?.trim() ?? '';
+    const crmv = data.crmv?.trim() ?? '';
+    if (!name) throw new BadRequestException('Informe o nome do veterinário.');
+    if (!crmv) throw new BadRequestException('Informe o CRMV.');
+    const p = await this.db(user);
+    const count = await p.veterinarian.count();
+    const responsible = data.isResponsible === true || count === 0;
+    const row = await p.$transaction(async (tx) => {
+      if (responsible) await tx.veterinarian.updateMany({ data: { isResponsible: false } });
+      return tx.veterinarian.create({
+        data: {
+          name,
+          crmv,
+          phone: data.phone?.trim() || null,
+          email: data.email?.trim() || null,
+          isResponsible: responsible,
+        },
+      });
+    });
+    if (responsible) await this.syncCompanyVeterinarian(p);
+    return row;
+  }
+
+  async updateVeterinarian(user: JwtPayload, id: string, data: Record<string, unknown>) {
+    const p = await this.db(user);
+    const current = await p.veterinarian.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Veterinário não encontrado.');
+    const name = data.name != null ? String(data.name).trim() : current.name;
+    const crmv = data.crmv != null ? String(data.crmv).trim() : current.crmv;
+    if (!name) throw new BadRequestException('Informe o nome do veterinário.');
+    if (!crmv) throw new BadRequestException('Informe o CRMV.');
+    const responsible = data.isResponsible === true || (data.isResponsible == null && current.isResponsible);
+    const active = data.isActive == null ? current.isActive : Boolean(data.isActive);
+    const row = await p.$transaction(async (tx) => {
+      if (responsible) {
+        await tx.veterinarian.updateMany({ where: { id: { not: id } }, data: { isResponsible: false } });
+      }
+      return tx.veterinarian.update({
+        where: { id },
+        data: {
+          name,
+          crmv,
+          phone: data.phone != null ? String(data.phone).trim() || null : current.phone,
+          email: data.email != null ? String(data.email).trim() || null : current.email,
+          isResponsible: responsible && active,
+          isActive: active,
+        },
+      });
+    });
+    await this.syncCompanyVeterinarian(p);
+    return row;
+  }
+
+  async deleteVeterinarian(user: JwtPayload, id: string) {
+    const p = await this.db(user);
+    const current = await p.veterinarian.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Veterinário não encontrado.');
+    await p.veterinarian.delete({ where: { id } });
+    await this.syncCompanyVeterinarian(p);
+    return { ok: true };
   }
 
   async uploadCompanyLogo(user: JwtPayload, file: Express.Multer.File | undefined) {

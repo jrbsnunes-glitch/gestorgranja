@@ -30,6 +30,7 @@ import { HrVacationsReportService } from './hr-vacations-report.service';
 import { OperationProductionReportService } from './operation-production-report.service';
 import { ZootechnicalMetricsService } from './zootechnical-metrics.service';
 import { CollectionReportService } from './collection-report.service';
+import { ManejoProducaoReportService } from './manejo-producao-report.service';
 
 @ApiTags('reports')
 @ApiBearerAuth()
@@ -55,6 +56,7 @@ export class ReportsController {
     private readonly hrVacationsReportSvc: HrVacationsReportService,
     private readonly operationProductionReport: OperationProductionReportService,
     private readonly collectionReportSvc: CollectionReportService,
+    private readonly manejoProducao: ManejoProducaoReportService,
   ) {}
 
   @Get('collection')
@@ -65,6 +67,12 @@ export class ReportsController {
       .map((s) => s.trim())
       .filter(Boolean);
     return this.collectionReportSvc.report(user, ids);
+  }
+
+  @Get('manejo-producao')
+  @RequirePermissions('reports.read', 'production.read', '*')
+  manejoProducaoReport(@CurrentUser() user: JwtPayload, @Query('date') date?: string) {
+    return this.manejoProducao.report(user, date);
   }
 
   @Get('operation-barn-comparison')

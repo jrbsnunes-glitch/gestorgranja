@@ -30,6 +30,8 @@ type Company = {
   street: string | null;
   addressNumber: string | null;
   district: string | null;
+  veterinarianName: string | null;
+  veterinarianCrmv: string | null;
 };
 
 export default function EmpresaPage() {
@@ -85,6 +87,8 @@ export default function EmpresaPage() {
       street: String(fd.get('street') ?? '').trim() || null,
       addressNumber: String(fd.get('addressNumber') ?? '').trim() || null,
       district: String(fd.get('district') ?? '').trim() || null,
+      veterinarianName: String(fd.get('veterinarianName') ?? '').trim() || null,
+      veterinarianCrmv: String(fd.get('veterinarianCrmv') ?? '').trim() || null,
     };
     try {
       const updated = await apiFetch<Company>('/v1/cadastros/company', {
@@ -271,6 +275,12 @@ export default function EmpresaPage() {
             </Field>
             <Field label="E-mail">
               <input name="email" type="email" className={inputClass} defaultValue={company.email ?? ''} />
+            </Field>
+            <Field label="Médico veterinário responsável">
+              <input name="veterinarianName" className={inputClass} defaultValue={company.veterinarianName ?? ''} />
+            </Field>
+            <Field label="CRMV">
+              <input name="veterinarianCrmv" className={inputClass} defaultValue={company.veterinarianCrmv ?? ''} />
             </Field>
           </div>
         </PageCard>

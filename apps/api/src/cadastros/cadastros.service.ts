@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtPayload } from '../auth/jwt.strategy';
 import { loadUserNames, userLabel } from '../common/user-names';
-import { BarnSituation, FlockLotStatus } from '../generated/tenant-client';
+import { BarnSituation, FlockLotStatus, Prisma } from '../generated/tenant-client';
 import { TenantPrismaService } from '../prisma/tenant-prisma.service';
 import { normalizePartnerPayload, type PartnerPayload } from './partner-payload';
 
@@ -156,32 +156,50 @@ export class CadastrosService {
     );
   }
 
-  createFlockLot(
+  async createFlockLot(
     user: JwtPayload,
     data: {
-      code: string;
-      barnId: string;
-      breedLineageId: string;
-      housingDate: string;
-      housedQty: number;
+      code?: string;
+      barnId?: string;
+      breedLineageId?: string;
+      housingDate?: string;
+      housedQty?: number;
       initialAgeWeeks?: number;
     },
   ) {
-    const initialAgeWeeks = Math.max(0, Math.floor(Number(data.initialAgeWeeks ?? 0)));
-    return this.client(user).then((p) =>
-      p.flockLot.create({
+    const code = data.code?.trim() ?? '';
+    const barnId = data.barnId?.trim() ?? '';
+    const breedLineageId = data.breedLineageId?.trim() ?? '';
+    const housingDate = data.housingDate ? new Date(data.housingDate) : null;
+    const housedQty = Number(data.housedQty);
+    if (!code) throw new BadRequestException('Informe o código do lote.');
+    if (!barnId) throw new BadRequestException('Selecione o galpão do lote.');
+    if (!breedLineageId) throw new BadRequestException('Selecione a linhagem do lote.');
+    if (!housingDate || Number.isNaN(housingDate.getTime())) {
+      throw new BadRequestException('Informe a data de alojamento.');
+    }
+    if (!Number.isFinite(housedQty) || housedQty < 1) {
+      throw new BadRequestException('Informe a quantidade de aves alojadas.');
+    }
+    const age = Number(data.initialAgeWeeks ?? 0);
+    const initialAgeWeeks = Number.isFinite(age) ? Math.max(0, Math.floor(age)) : 0;
+    const p = await this.client(user);
+    try {
+      return await p.flockLot.create({
         data: {
-          code: data.code.trim(),
-          barnId: data.barnId,
-          breedLineageId: data.breedLineageId,
-          housingDate: new Date(data.housingDate),
-          housedQty: data.housedQty,
+          code,
+          barnId,
+          breedLineageId,
+          housingDate,
+          housedQty,
           initialAgeWeeks,
           status: FlockLotStatus.ACTIVE,
         },
         include: { barn: true, breedLineage: true },
-      }),
-    );
+      });
+    } catch (e) {
+      throw flockLotWriteError(e);
+    }
   }
 
   updateFlockLot(user: JwtPayload, id: string, data: Record<string, unknown>) {
@@ -217,7 +235,24 @@ export class CadastrosService {
         where: { id },
         data: patch,
         include: { barn: true, breedLineage: true },
+      }).catch((e) => {
+        throw flockLotWriteError(e);
       });
     });
   }
+}
+
+function flockLotWriteError(e: unknown): Error {
+  if (e instanceof Prisma.PrismaClientKnownRequestError) {
+    if (e.code === 'P2002') return new BadRequestException('Já existe um lote com esse código.');
+    if (e.code === 'P2003') {
+      return new BadRequestException('Selecione um galpão e uma linhagem que já estejam cadastrados.');
+    }
+    if (e.code === 'P2022') {
+      return new BadRequestException(
+        'O banco desta granja está desatualizado. No servidor, rode cd /var/www/gestorgranja && bash atgranja.sh e tente de novo.',
+      );
+    }
+  }
+  return e instanceof Error ? e : new BadRequestException('Não foi possível gravar o lote.');
 }
