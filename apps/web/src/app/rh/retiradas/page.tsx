@@ -17,6 +17,7 @@ import { ProductLookupField } from '@/components/product-lookup-field';
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR, yearMonthFromIso } from '@/lib/calendar-date';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 
 type Employee = {
@@ -432,10 +433,8 @@ export default function RetiradasPage() {
               />
             </Field>
             <Field label="Preço unit. (R$)">
-              <input
+              <BrlMoneyInput
                 name="unitPrice"
-                type="number"
-                step="0.01"
                 min={0}
                 className={inputClass}
                 required

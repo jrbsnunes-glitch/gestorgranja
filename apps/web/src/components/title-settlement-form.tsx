@@ -5,7 +5,8 @@ import { Field, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
 import { ExpenseTypeField } from '@/components/finance/expense-type-field';
 import { apiFetch } from '@/lib/api';
-import { formatBrl } from '@/lib/money';
+import { BrlMoneyInput } from '@/components/brl-money-input';
+import { formatBrl, parseBrlMoney } from '@/lib/money';
 
 type PaymentChoice = { id: string; name: string; kind: string };
 
@@ -59,7 +60,7 @@ export function TitleSettlementForm({
   }, [receiveLayout]);
 
   const payAmount = useMemo(() => {
-    const n = Number(amountStr.replace(',', '.'));
+    const n = parseBrlMoney(amountStr);
     return Number.isFinite(n) ? n : 0;
   }, [amountStr]);
 
@@ -126,16 +127,13 @@ export function TitleSettlementForm({
         </p>
       )}
       <Field label={receiveLayout ? 'Valor a receber agora' : 'Valor desta baixa (R$)'}>
-        <input
+        <BrlMoneyInput
           name="amount"
-          type="number"
-          step="0.01"
           min={0.01}
-          max={remaining}
           className={inputClass}
           required
-          value={amountStr}
-          onChange={(e) => setAmountStr(e.target.value)}
+          value={amountStr.trim() ? parseBrlMoney(amountStr) : null}
+          onValueChange={(n) => setAmountStr(n == null ? '' : String(n))}
         />
       </Field>
       {payAmount > 0 && payAmount < remaining - 0.004 ? (

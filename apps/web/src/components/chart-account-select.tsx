@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { inputClass } from '@/components/ui-parts';
 
@@ -40,6 +40,8 @@ function copyFor(flow: Flow | undefined) {
       empty:
         'Nenhuma conta de receita disponível. No plano de contas, a conta precisa estar ativa, analítica e ser de receita (grupo 6).',
       placeholder: '— Selecione a conta contábil —',
+      search: 'Buscar por código ou nome',
+      none: 'Nenhuma conta encontrada.',
     };
   }
   if (flow === 'stock') {
@@ -49,16 +51,20 @@ function copyFor(flow: Flow | undefined) {
       fail: 'Não foi possível carregar as contas de estoque.',
       empty: 'Nenhuma conta de estoque disponível no plano de contas.',
       placeholder: '— Selecione a conta —',
+      search: 'Buscar por código ou nome',
+      none: 'Nenhuma conta encontrada.',
     };
   }
   return {
     loading: 'Carregando centros de custo…',
     invalid: 'A lista de centros de custo veio em formato inesperado.',
     fail: 'Não foi possível carregar os centros de custo.',
-    empty:
-      'Nenhum centro de custo disponível. No plano de contas, a conta precisa estar ativa, analítica e ser de despesa ou custo (grupos 4 e 5).',
-    placeholder: '— Selecione o centro de custo —',
-  };
+      empty:
+        'Nenhum centro de custo disponível. No plano de contas, a conta precisa estar ativa, analítica e ser de despesa ou custo (grupos 4 e 5).',
+      placeholder: '— Selecione o centro de custo —',
+      search: 'Buscar por código ou nome',
+      none: 'Nenhum centro de custo encontrado.',
+    };
 }
 
 export function ChartAccountSelect({
@@ -73,6 +79,9 @@ export function ChartAccountSelect({
   const [accounts, setAccounts] = useState<ChartAccountOption[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [value, setValue] = useState(defaultValue ?? '');
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
   const copy = copyFor(flow);
 
   useEffect(() => {
@@ -112,6 +121,27 @@ export function ChartAccountSelect({
     }
   }, [accounts, defaultValue]);
 
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const list = accounts ?? [];
+    const q = query
+      .trim()
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase();
+    if (!q) return list;
+    return list.filter((a) =>
+      `${a.code} ${a.name}`
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [accounts, query]);
+
   if (accounts === null) {
     return <p className={`${className ?? inputClass} text-slate-500`}>{copy.loading}</p>;
   }
@@ -127,44 +157,91 @@ export function ChartAccountSelect({
   }
 
   const placeholder = flow === 'payable' || flow === 'receivable' || flow === 'stock' ? copy.placeholder : emptyLabel;
+  const selected = accounts.find((a) => a.id === value);
+  const label = flow === 'receivable' ? 'Conta contábil' : 'Centro de custo';
+
+  function choose(id: string) {
+    setValue(id);
+    setOpen(false);
+    setQuery('');
+  }
 
   return (
     <div>
       <input type="hidden" name={name} value={value} required={required && !value ? true : undefined} />
-      <div
-        className={`max-h-48 overflow-y-auto rounded-md border border-slate-300 bg-white ${className ?? ''}`}
-        role="listbox"
-        aria-label={flow === 'receivable' ? 'Conta contábil' : 'Centro de custo'}
+      <button
+        type="button"
+        className={`${inputClass} flex items-center justify-between gap-2 text-left ${className ?? ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen((current) => !current)}
       >
-        {allowEmpty || !value ? (
-          <button
-            type="button"
-            className={`block w-full px-3 py-2 text-left text-sm ${
-              value ? 'text-slate-500 hover:bg-slate-50' : 'bg-slate-50 font-medium text-slate-700'
-            }`}
-            onClick={() => setValue('')}
-          >
-            {placeholder}
-          </button>
-        ) : null}
-        {accounts.map((a) => {
-          const active = value === a.id;
-          return (
-            <button
-              key={a.id}
-              type="button"
-              role="option"
-              aria-selected={active}
-              className={`block w-full px-3 py-2 text-left text-sm ${
-                active ? 'bg-emerald-50 font-medium text-emerald-950' : 'text-slate-800 hover:bg-slate-50'
-              }`}
-              onClick={() => setValue(a.id)}
-            >
-              {a.code} — {a.name}
-            </button>
-          );
-        })}
-      </div>
+        <span className={`min-w-0 truncate ${selected ? 'text-slate-900' : 'text-slate-500'}`}>
+          {selected ? `${selected.code} — ${selected.name}` : placeholder}
+        </span>
+        <span className="shrink-0 text-xs text-slate-400" aria-hidden>
+          {open ? '▴' : '▾'}
+        </span>
+      </button>
+      {open ? (
+        <div className="mt-1 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-2">
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className={inputClass}
+              placeholder={copy.search}
+              aria-label={copy.search}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setOpen(false);
+                  setQuery('');
+                }
+                if (e.key === 'Enter' && filtered.length === 1) {
+                  e.preventDefault();
+                  choose(filtered[0].id);
+                }
+              }}
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto" role="listbox" aria-label={label}>
+            {allowEmpty ? (
+              <button
+                type="button"
+                className={`block w-full px-3 py-2 text-left text-sm ${
+                  value ? 'text-slate-500 hover:bg-slate-50' : 'bg-slate-50 font-medium text-slate-700'
+                }`}
+                onClick={() => choose('')}
+              >
+                {emptyLabel}
+              </button>
+            ) : null}
+            {filtered.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-slate-500">{copy.none}</p>
+            ) : (
+              filtered.map((a) => {
+                const active = value === a.id;
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    className={`block w-full px-3 py-2 text-left text-sm ${
+                      active ? 'bg-emerald-50 font-medium text-emerald-950' : 'text-slate-800 hover:bg-slate-50'
+                    }`}
+                    onClick={() => choose(a.id)}
+                  >
+                    {a.code} — {a.name}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

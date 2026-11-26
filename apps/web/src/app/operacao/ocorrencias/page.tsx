@@ -21,6 +21,7 @@ import {
   useBarnOptions,
   useLotOptions,
 } from '@/lib/operation-options';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import { readSession, sessionHasPermission } from '@/lib/session';
 
@@ -378,7 +379,7 @@ export default function OcorrenciasPage() {
             <input name="description" className={inputClass} defaultValue={selected?.description ?? ''} />
           </Field>
           <Field label="Custo estimado (R$)">
-            <input name="cost" type="number" step="0.01" min={0} className={inputClass} />
+            <BrlMoneyInput name="cost" min={0} className={inputClass} />
           </Field>
         </form>
       </FormCadastroModal>

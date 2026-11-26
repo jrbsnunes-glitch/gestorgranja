@@ -317,6 +317,21 @@ export class CashService {
     });
   }
 
+  private assertMovementMutable(status: CashSessionStatus, isExpense: boolean) {
+    if (status === CashSessionStatus.OPEN) {
+      if (!isExpense) {
+        throw new BadRequestException(
+          'Só a despesa pode ser editada ou excluída, e apenas enquanto o caixa estiver aberto.',
+        );
+      }
+      return;
+    }
+    if (status === CashSessionStatus.PENDING_RECONCILIATION) return;
+    throw new BadRequestException(
+      'A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto.',
+    );
+  }
+
   async updateMovement(
     user: JwtPayload,
     sessionId: string,
@@ -332,13 +347,11 @@ export class CashService {
   ) {
     const prisma = await this.db(user);
     const session = await prisma.cashRegisterSession.findUnique({ where: { id: sessionId } });
-    if (!session || session.status !== CashSessionStatus.PENDING_RECONCILIATION) {
-      throw new BadRequestException('Ajustes só são permitidos durante a conferência.');
-    }
     const existing = await prisma.cashMovement.findFirst({
       where: { id: movementId, sessionId },
     });
-    if (!existing) throw new NotFoundException();
+    if (!session || !existing) throw new NotFoundException();
+    this.assertMovementMutable(session.status, existing.isExpense);
     const type = (data.type ?? existing.type) as CashMovementType;
     const isExpense = data.isExpense !== undefined ? Boolean(data.isExpense) : existing.isExpense;
     if (type === CashMovementType.OUT && !isExpense) {
@@ -372,13 +385,11 @@ export class CashService {
   async deleteMovement(user: JwtPayload, sessionId: string, movementId: string) {
     const prisma = await this.db(user);
     const session = await prisma.cashRegisterSession.findUnique({ where: { id: sessionId } });
-    if (!session || session.status !== CashSessionStatus.PENDING_RECONCILIATION) {
-      throw new BadRequestException('Ajustes só são permitidos durante a conferência.');
-    }
     const existing = await prisma.cashMovement.findFirst({
       where: { id: movementId, sessionId },
     });
-    if (!existing) throw new NotFoundException();
+    if (!session || !existing) throw new NotFoundException();
+    this.assertMovementMutable(session.status, existing.isExpense);
     await prisma.cashMovement.delete({ where: { id: movementId } });
     return { ok: true };
   }

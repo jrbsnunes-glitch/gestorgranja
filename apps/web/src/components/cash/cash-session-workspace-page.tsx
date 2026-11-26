@@ -17,6 +17,8 @@ import {
   summarizeCashSessionByPaymentMethod,
 } from '@/lib/cash-session-summary';
 import { errorMessage, labelEnum } from '@/lib/labels';
+import { ExpenseCashLegend } from '@/components/cash/expense-cash-legend';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 
 function parseApiError(err: unknown) {
@@ -70,6 +72,7 @@ type SessionRow = {
 type PendingReconcileSession = {
   id: string;
   controlNumber: number;
+  status?: string;
   openedAt: string;
   closedAt: string | null;
   openingBalance: string;
@@ -546,7 +549,7 @@ export function CashSessionWorkspacePage({
           ) : null}
           <form onSubmit={openSession} className="max-w-sm">
             <Field label="Saldo inicial (R$)">
-              <input name="openingBalance" type="number" step="0.01" min={0} className={inputClass} required />
+              <BrlMoneyInput name="openingBalance" min={0} className={inputClass} required />
             </Field>
             <SubmitButton label="Abrir sessão" disabled={myStaleOpens.length > 0} />
           </form>
@@ -665,16 +668,17 @@ export function CashSessionWorkspacePage({
               <div className="mb-3 grid gap-3 sm:grid-cols-2">
                 {closeByPayment?.methods.map((method) => (
                   <Field key={method} label={`${labelEnum(method)} (R$)`}>
-                    <input
-                      name={`presented_${method}`}
-                      type="number"
-                      step="0.01"
-                      min={0}
+                    <BrlMoneyInput
                       className={inputClass}
                       required
-                      value={presentedByMethod[method] ?? ''}
-                      onChange={(e) =>
-                        setPresentedByMethod((prev) => ({ ...prev, [method]: e.target.value }))
+                      min={0}
+                      value={
+                        presentedByMethod[method] == null || presentedByMethod[method] === ''
+                          ? null
+                          : Number(presentedByMethod[method])
+                      }
+                      onValueChange={(n) =>
+                        setPresentedByMethod((prev) => ({ ...prev, [method]: n == null ? '' : String(n) }))
                       }
                     />
                   </Field>
@@ -931,7 +935,7 @@ export function CashSessionWorkspacePage({
                   </select>
                 </Field>
                 <Field label="Valor (R$)">
-                  <input name="amount" type="number" step="0.01" min={0} className={inputClass} required />
+                  <BrlMoneyInput name="amount" min={0} className={inputClass} required />
                 </Field>
                 {reconcileMovementKind === 'EXPENSE' ? (
                   <input type="hidden" name="paymentMethod" value="CASH" />
@@ -967,6 +971,23 @@ export function CashSessionWorkspacePage({
             {!reconcileReadOnly && reconcileEditing ? (
               <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
                 <p className="mb-2 text-sm font-medium text-amber-950">Editar lançamento</p>
+                {reconcileEditing.isExpense || reconcileEditKind === 'EXPENSE' ? (
+                  <div className="mb-3">
+                    <ExpenseCashLegend
+                      cash={
+                        reconcileDetail
+                          ? {
+                              controlNumber: reconcileDetail.controlNumber,
+                              openedAt: reconcileDetail.openedAt,
+                              closedAt: reconcileDetail.closedAt,
+                              status: reconcileDetail.status ?? 'PENDING_RECONCILIATION',
+                              operator: reconcileDetail.user?.name ?? null,
+                            }
+                          : null
+                      }
+                    />
+                  </div>
+                ) : null}
                 <form onSubmit={saveReconcileMovementEdit} className="grid gap-3 sm:grid-cols-2">
                   <input type="hidden" name="editMovementKind" value={reconcileEditKind} />
                   <Field label="Tipo">
@@ -980,14 +1001,12 @@ export function CashSessionWorkspacePage({
                     </select>
                   </Field>
                   <Field label="Valor (R$)">
-                    <input
+                    <BrlMoneyInput
                       name="amount"
-                      type="number"
-                      step="0.01"
                       min={0}
                       className={inputClass}
                       required
-                      defaultValue={reconcileEditing.amount}
+                      defaultValue={Number(reconcileEditing.amount)}
                     />
                   </Field>
                   {reconcileEditKind === 'EXPENSE' ? (

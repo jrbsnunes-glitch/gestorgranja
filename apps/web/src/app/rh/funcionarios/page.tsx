@@ -16,6 +16,7 @@ import {
 import { ErrorBox, Field, SubmitButton, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import { labelEnum } from '@/lib/labels';
 
@@ -180,10 +181,8 @@ export default function FuncionariosPage() {
         />
       </Field>
       <Field label="Salário base (R$)">
-        <input
+        <BrlMoneyInput
           name="baseSalary"
-          type="number"
-          step="0.01"
           min={0}
           className={inputClass}
           required
@@ -245,21 +244,17 @@ export default function FuncionariosPage() {
             </select>
           </Field>
           <Field label="Valor hora (R$)">
-            <input
+            <BrlMoneyInput
               name="hourlyRate"
-              type="number"
               min={0}
-              step="0.01"
               className={inputClass}
               defaultValue={selected?.hourlyRate != null ? Number(selected.hourlyRate) : ''}
             />
           </Field>
           <Field label="Valor dia (R$)">
-            <input
+            <BrlMoneyInput
               name="dailyRate"
-              type="number"
               min={0}
-              step="0.01"
               className={inputClass}
               defaultValue={selected?.dailyRate != null ? Number(selected.dailyRate) : ''}
             />

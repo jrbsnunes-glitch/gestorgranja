@@ -83,7 +83,9 @@ export class HomeDashboardService {
     const dash = await this.financeDashboard.dashboard(user);
     return {
       payables: {
+        dueToday: dash.payables.dueToday,
         dueNext3: dash.payables.dueNext3,
+        dueNext7: dash.payables.dueNext7,
         overdue: dash.payables.overdue,
       },
       receivables: {

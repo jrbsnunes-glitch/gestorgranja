@@ -7,7 +7,9 @@ import { PartnerLookupField } from '@/components/partner-lookup-field';
 import { ProductLookupField, type ProductRow } from '@/components/product-lookup-field';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { SaleDateNoticeBox, type SaleDateNotice } from '@/components/vendas/sale-date-notice';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { apiFetch } from '@/lib/api';
+import { parseBrlMoney } from '@/lib/money';
 import { errorMessage } from '@/lib/labels';
 
 type PaymentForm = { id: string; name: string; kind: string; active?: boolean };
@@ -63,7 +65,7 @@ export function CashDirectSaleModal({
   async function submit(e: FormEvent) {
     e.preventDefault();
     const quantity = Number(qty.replace(',', '.'));
-    const unitPrice = Number(price.replace(',', '.'));
+    const unitPrice = parseBrlMoney(price);
     if (!partnerId || !productId) {
       setError('Informe cliente e produto.');
       return;
@@ -146,12 +148,12 @@ export function CashDirectSaleModal({
               />
             </Field>
             <Field label="Preço unitário (R$)">
-              <input
+              <BrlMoneyInput
                 className={inputClass}
-                inputMode="decimal"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
                 required
+                min={0}
+                value={price.trim() ? parseBrlMoney(price) : null}
+                onValueChange={(n) => setPrice(n == null ? '' : String(n))}
               />
             </Field>
           </div>

@@ -11,6 +11,7 @@ import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/component
 import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
 import { currentYearMonthLocal } from '@/lib/calendar-date';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import { isAdminSession, readSession } from '@/lib/session';
 
@@ -385,21 +386,17 @@ function FolhaPageContent() {
                 />
               </Field>
               <Field label="Comissão (R$)">
-                <input
+                <BrlMoneyInput
                   name="commissionAmount"
-                  type="number"
                   min={0}
-                  step="0.01"
                   className={inputClass}
                   defaultValue={Number(editLine.commissionAmount ?? 0)}
                 />
               </Field>
               <Field label="Ajuda de custo (R$)">
-                <input
+                <BrlMoneyInput
                   name="ajudaCustoAmount"
-                  type="number"
                   min={0}
-                  step="0.01"
                   className={inputClass}
                   defaultValue={Number(editLine.ajudaCustoAmount ?? 0)}
                 />

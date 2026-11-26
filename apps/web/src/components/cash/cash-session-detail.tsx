@@ -16,7 +16,9 @@ import {
   summarizeCashSessionByPaymentMethod,
 } from '@/lib/cash-session-summary';
 import { errorMessage, labelEnum } from '@/lib/labels';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
+import { ExpenseCashLegend } from '@/components/cash/expense-cash-legend';
 import { formatRecordControl } from '@/lib/record-control';
 import { sessionHasPermission, readSession } from '@/lib/session';
 
@@ -87,6 +89,7 @@ export function CashSessionDetail({
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Movement | null>(null);
   const [presentedByMethod, setPresentedByMethod] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -122,6 +125,7 @@ export function CashSessionDetail({
         sessionHasPermission(readSession(), 'cash.write')
       : Boolean(load?.isOwner && session.status === 'OPEN'));
   const canClose = load?.mode === 'operate' && session?.status === 'OPEN' && load.isOwner;
+  const canEditExpense = session?.status === 'OPEN' && Boolean(load?.isOwner);
 
   const summary = useMemo(() => {
     if (!session) return null;
@@ -222,19 +226,45 @@ export function CashSessionDetail({
     setError(null);
     const fd = new FormData(e.currentTarget);
     try {
-      await apiFetch(`/v1/cash/sessions/${session.id}/movements`, {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'OUT',
-          isExpense: true,
-          amount: Number(fd.get('amount')),
-          reason: fd.get('reason') || undefined,
-          paymentMethod: 'CASH',
-          chartAccountId: fd.get('chartAccountId') || undefined,
-        }),
-      });
+      const body = {
+        type: 'OUT' as const,
+        isExpense: true,
+        amount: Number(fd.get('amount')),
+        reason: fd.get('reason') || undefined,
+        paymentMethod: 'CASH',
+        chartAccountId: fd.get('chartAccountId') || undefined,
+      };
+      if (editingExpense) {
+        await apiFetch(`/v1/cash/sessions/${session.id}/movements/${editingExpense.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+      } else {
+        await apiFetch(`/v1/cash/sessions/${session.id}/movements`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+      }
       setExpenseOpen(false);
-      setSuccess('Despesa registrada.');
+      setEditingExpense(null);
+      setSuccess(editingExpense ? 'Despesa atualizada.' : 'Despesa registrada.');
+      reload();
+      notifyList();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function deleteExpense(movementId: string) {
+    if (!session || !canEditExpense) {
+      setError('A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto.');
+      return;
+    }
+    if (!confirm('Excluir esta despesa do caixa aberto?')) return;
+    setError(null);
+    try {
+      await apiFetch(`/v1/cash/sessions/${session.id}/movements/${movementId}`, { method: 'DELETE' });
+      setSuccess('Despesa excluída.');
       reload();
       notifyList();
     } catch (err) {
@@ -350,7 +380,14 @@ export function CashSessionDetail({
           </Button>
         ) : null}
         {canExpense ? (
-          <Button type="button" variant="secondary" onClick={() => setExpenseOpen(true)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setEditingExpense(null);
+              setExpenseOpen(true);
+            }}
+          >
             Adicionar despesa
           </Button>
         ) : null}
@@ -409,6 +446,9 @@ export function CashSessionDetail({
       ) : null}
 
       <PageCard title="Movimentações" className="mt-4">
+        <p className="mb-3 text-sm text-amber-800">
+          A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto.
+        </p>
         <ResponsiveTableWrap>
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
@@ -418,12 +458,13 @@ export function CashSessionDetail({
                 <th className="px-3 py-2 text-right">Valor</th>
                 <th className="px-3 py-2">Centro de custo</th>
                 <th className="px-3 py-2">Observação</th>
+                <th className="px-3 py-2">Ações</th>
               </tr>
             </thead>
             <tbody>
               {session.movements.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
                     Nenhum lançamento.
                   </td>
                 </tr>
@@ -439,6 +480,35 @@ export function CashSessionDetail({
                       {m.chartAccount ? `${m.chartAccount.code} — ${m.chartAccount.name}` : '—'}
                     </td>
                     <td className="px-3 py-2">{m.reason ?? '—'}</td>
+                    <td className="px-3 py-2">
+                      {m.isExpense && canEditExpense ? (
+                        <span className="flex flex-wrap gap-1">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => {
+                              setEditingExpense(m);
+                              setExpenseOpen(true);
+                            }}
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="px-2 py-1 text-xs"
+                            onClick={() => void deleteExpense(m.id)}
+                          >
+                            Excluir
+                          </Button>
+                        </span>
+                      ) : m.isExpense ? (
+                        <span className="text-xs text-slate-500">Caixa fechado</span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -461,27 +531,66 @@ export function CashSessionDetail({
         open={expenseOpen}
         onClose={() => setExpenseOpen(false)}
         backdropClassName="z-[110]"
-        title="Adicionar despesa"
+        title={editingExpense ? 'Editar despesa' : 'Adicionar despesa'}
+        hint="A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto."
         footer={
           <>
-            <Button type="button" variant="secondary" onClick={() => setExpenseOpen(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setExpenseOpen(false);
+                setEditingExpense(null);
+              }}
+            >
               Cancelar
             </Button>
             <Button type="submit" form="cash-expense-form">
-              Incluir despesa
+              {editingExpense ? 'Salvar despesa' : 'Incluir despesa'}
             </Button>
           </>
         }
       >
-        <form id="cash-expense-form" onSubmit={addExpense} className="grid gap-3">
+        <form id="cash-expense-form" onSubmit={addExpense} className="grid gap-3" key={editingExpense?.id ?? 'new'}>
+          {editingExpense ? (
+            <ExpenseCashLegend
+              cash={
+                session
+                  ? {
+                      controlNumber: session.controlNumber,
+                      openedAt: session.openedAt,
+                      closedAt: session.closedAt,
+                      status: session.status,
+                      operator: session.user?.name ?? null,
+                    }
+                  : null
+              }
+            />
+          ) : null}
           <Field label="Valor (R$)">
-            <input name="amount" type="number" step="0.01" min={0} className={inputClass} required />
+            <BrlMoneyInput
+              name="amount"
+              className={inputClass}
+              required
+              min={0.01}
+              defaultValue={editingExpense ? Number(editingExpense.amount) : undefined}
+            />
           </Field>
           <Field label="Centro de custo">
-            <ChartAccountSelect flow="payable" allowEmpty emptyLabel="Selecione…" />
+            <ChartAccountSelect
+              flow="payable"
+              allowEmpty
+              emptyLabel="Selecione…"
+              defaultValue={editingExpense?.chartAccountId ?? ''}
+            />
           </Field>
           <Field label="Observação">
-            <input name="reason" className={inputClass} placeholder="Descrição da despesa" />
+            <input
+              name="reason"
+              className={inputClass}
+              placeholder="Descrição da despesa"
+              defaultValue={editingExpense?.reason ?? ''}
+            />
           </Field>
         </form>
       </FormCadastroModal>
@@ -507,15 +616,17 @@ export function CashSessionDetail({
           <div className="mb-3 grid gap-3 sm:grid-cols-2">
             {closeByPayment?.methods.map((method) => (
               <Field key={method} label={`${labelEnum(method)} (R$)`}>
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
+                <BrlMoneyInput
                   className={inputClass}
                   required
-                  value={presentedByMethod[method] ?? ''}
-                  onChange={(e) =>
-                    setPresentedByMethod((prev) => ({ ...prev, [method]: e.target.value }))
+                  min={0}
+                  value={
+                    presentedByMethod[method] == null || presentedByMethod[method] === ''
+                      ? null
+                      : Number(presentedByMethod[method])
+                  }
+                  onValueChange={(n) =>
+                    setPresentedByMethod((prev) => ({ ...prev, [method]: n == null ? '' : String(n) }))
                   }
                 />
               </Field>

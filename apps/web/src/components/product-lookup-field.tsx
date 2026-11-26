@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@gestor-granja/ui';
 import { FormCadastroModal } from '@/components/crud';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { labelEnum, PRODUCT_TYPES } from '@/lib/labels';
@@ -343,11 +344,9 @@ export function ProductLookupField({
               <input name="unit" className={inputClass} defaultValue={editing.unit ?? 'UN'} />
             </Field>
             <Field label="Preço de venda (R$)">
-              <input
+              <BrlMoneyInput
                 name="salePrice"
-                type="number"
                 min={0}
-                step="0.01"
                 className={inputClass}
                 defaultValue={editing.salePrice ?? ''}
               />

@@ -41,26 +41,54 @@ function cashDueForOrder(
   return { hasCash: cashDue > 0.004, cashDue: Math.round(cashDue * 100) / 100 };
 }
 
-type SalesStatsBucket = { noAto: number; requisicao: number; boleto: number; cartao: number };
+type SalesStatsBucket = {
+  dinheiro: number;
+  pix: number;
+  credito: number;
+  debito: number;
+  boleto: number;
+  transferencia: number;
+  requisicao: number;
+  outros: number;
+};
 
 function isRequisicaoPayment(kind?: string | null, name?: string | null) {
   return isRequisicaoKind(kind) || Boolean(name && /requis/i.test(name));
 }
 
-function isCardCreditPayment(kind?: string | null, name?: string | null) {
+function isDebitPayment(kind?: string | null, name?: string | null) {
+  if ((kind ?? '').toUpperCase() === 'DEBIT') return true;
+  return Boolean(name && /d[eé]bito/i.test(name));
+}
+
+function isCreditCardPayment(kind?: string | null, name?: string | null) {
   if ((kind ?? '').toUpperCase() === 'CARD') return true;
-  return Boolean(name && /cart[aã]o|cr[eé]dito|recebimento posterior/i.test(name));
+  return Boolean(name && /cart[aã]o|cr[eé]dito/i.test(name));
 }
 
 function paymentBucket(kind?: string | null, name?: string | null): keyof SalesStatsBucket {
-  if (isBoletoKind(kind)) return 'boleto';
-  if (isRequisicaoPayment(kind, name)) return 'requisicao';
-  if (isCardCreditPayment(kind, name)) return 'cartao';
-  return 'noAto';
+  const k = (kind ?? '').toUpperCase();
+  if (isBoletoKind(k) || Boolean(name && /boleto/i.test(name))) return 'boleto';
+  if (isRequisicaoPayment(k, name)) return 'requisicao';
+  if (k === 'PIX' || Boolean(name && /\bpix\b/i.test(name))) return 'pix';
+  if (k === 'CASH' || Boolean(name && /dinheiro/i.test(name))) return 'dinheiro';
+  if (k === 'TRANSFER' || Boolean(name && /transfer/i.test(name))) return 'transferencia';
+  if (isDebitPayment(k, name)) return 'debito';
+  if (isCreditCardPayment(k, name)) return 'credito';
+  return 'outros';
 }
 
 function emptyBuckets(): SalesStatsBucket {
-  return { noAto: 0, requisicao: 0, boleto: 0, cartao: 0 };
+  return {
+    dinheiro: 0,
+    pix: 0,
+    credito: 0,
+    debito: 0,
+    boleto: 0,
+    transferencia: 0,
+    requisicao: 0,
+    outros: 0,
+  };
 }
 
 function addToBuckets(

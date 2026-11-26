@@ -94,6 +94,7 @@ export class FinanceDashboardService {
 
     let cpOpen = 0;
     let cpOverdue = 0;
+    let cpDueToday = 0;
     let cpDue3 = 0;
     let cpDue7 = 0;
     let cpDue30 = 0;
@@ -103,6 +104,7 @@ export class FinanceDashboardService {
       const bal = titleBalance(p.amount, p.amountPaid);
       cpOpen += bal;
       if (daysOverdue(p.dueDate, today) > 0) cpOverdue += bal;
+      else if (localDateKey(p.dueDate) === localDateKey(today)) cpDueToday += bal;
       if (p.dueDate <= in3) cpDue3 += bal;
       if (p.dueDate <= in7) cpDue7 += bal;
       if (p.dueDate <= in30) cpDue30 += bal;
@@ -151,7 +153,14 @@ export class FinanceDashboardService {
     const budgetProgress = await this.budget.listWithProgress(user, ym);
 
     return {
-      payables: { open: cpOpen, overdue: cpOverdue, dueNext3: cpDue3, dueNext7: cpDue7, dueNext30: cpDue30 },
+      payables: {
+        open: cpOpen,
+        overdue: cpOverdue,
+        dueToday: cpDueToday,
+        dueNext3: cpDue3,
+        dueNext7: cpDue7,
+        dueNext30: cpDue30,
+      },
       receivables: {
         open: crOpen,
         overdue: crOverdue,

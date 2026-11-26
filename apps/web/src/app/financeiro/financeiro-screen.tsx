@@ -31,6 +31,7 @@ import type { BankBoletoDto } from '@/lib/boleto';
 import { labelEnum } from '@/lib/labels';
 import { formatCalendarDatePtBR, prismaDateDayKey } from '@/lib/calendar-date';
 import { titleDueDayOffset, titleDueRowClass, titleDueUrgency } from '@/lib/finance-title-due';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import {
   dateInInclusiveRange,
@@ -119,7 +120,7 @@ function TitleScheduleFields({
       {isFixed ? (
         <div className="mb-2 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
           <Field label="Valor mensal (R$)">
-            <input name="amount" type="number" step="0.01" min={0} className={inputClass} required />
+            <BrlMoneyInput name="amount" min={0} className={inputClass} required />
           </Field>
           <Field label="Dia do vencimento (1–28)">
             <input name="dayOfMonth" type="number" min={1} max={28} defaultValue={10} className={inputClass} required />
@@ -137,7 +138,7 @@ function TitleScheduleFields({
       ) : (
         <>
           <Field label="Valor total (R$)">
-            <input name="amount" type="number" step="0.01" min={0} className={inputClass} required />
+            <BrlMoneyInput name="amount" min={0} className={inputClass} required />
           </Field>
           <Field label="Quantidade de parcelas">
             <input name="installments" type="number" min={1} max={120} defaultValue={1} className={inputClass} required />
@@ -1165,10 +1166,8 @@ export function FinanceiroScreen({
               <input name="description" className={inputClass} required defaultValue={editPay.description} />
             </Field>
             <Field label="Valor (R$)">
-              <input
+              <BrlMoneyInput
                 name="amount"
-                type="number"
-                step="0.01"
                 min={0}
                 className={inputClass}
                 required
@@ -1225,10 +1224,8 @@ export function FinanceiroScreen({
               <input name="description" className={inputClass} required defaultValue={editRec.description} />
             </Field>
             <Field label="Valor (R$)">
-              <input
+              <BrlMoneyInput
                 name="amount"
-                type="number"
-                step="0.01"
                 min={0}
                 className={inputClass}
                 required

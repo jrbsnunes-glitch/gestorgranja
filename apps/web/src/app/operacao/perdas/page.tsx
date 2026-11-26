@@ -11,6 +11,7 @@ import { apiFetch } from '@/lib/api';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { OPERATIONAL_LOSS_TYPES, labelEnum } from '@/lib/labels';
 import { lotLabel, todayIso, useBarnOptions, useLotOptions, useProductOptions } from '@/lib/operation-options';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import { readSession, sessionHasPermission } from '@/lib/session';
 
@@ -225,7 +226,7 @@ export default function PerdasPage() {
             </Field>
           </div>
           <Field label="Custo estimado (R$)">
-            <input name="estimatedCost" type="number" step="0.01" min={0} className={inputClass} defaultValue={editing?.estimatedCost ?? ''} />
+            <BrlMoneyInput name="estimatedCost" min={0} className={inputClass} defaultValue={editing?.estimatedCost ?? ''} />
           </Field>
           <Field label="Observações">
             <input name="notes" className={inputClass} defaultValue={editing?.notes ?? ''} />

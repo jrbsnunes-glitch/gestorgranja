@@ -9,6 +9,7 @@ import { ResponsiveTableWrap } from '@/components/responsive-table-wrap';
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { ChartAccountSelect } from '@/components/chart-account-select';
 import { apiFetch } from '@/lib/api';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import { navigateToReportPrint } from '@/lib/report-print-nav';
 
@@ -119,7 +120,7 @@ export default function FinanceiroBancosPage() {
             <input name="account" className={inputClass} required />
           </Field>
           <Field label="Saldo (R$)">
-            <input name="balance" type="number" step="0.01" className={inputClass} defaultValue={0} />
+            <BrlMoneyInput name="balance" className={inputClass} defaultValue={0} />
           </Field>
           <div className="sm:col-span-2">
             <SubmitButton label="Incluir conta" />
@@ -151,7 +152,7 @@ export default function FinanceiroBancosPage() {
             <ChartAccountSelect flow="payable" name="chartAccountId" required />
           </Field>
           <Field label="Valor planejado (R$)">
-            <input name="amountPlanned" type="number" step="0.01" min={0} className={inputClass} required />
+            <BrlMoneyInput name="amountPlanned" min={0} className={inputClass} required />
           </Field>
           <div className="sm:col-span-2">
             <SubmitButton label="Salvar linha de orçamento" />

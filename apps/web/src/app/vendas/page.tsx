@@ -9,11 +9,14 @@ import { MiniPdvModal } from '@/components/vendas/mini-pdv-modal';
 import { ChartAccountSelect } from '@/components/chart-account-select';
 import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
+import { BrlMoneyInput } from '@/components/brl-money-input';
+import { ClickableKpi } from '@/components/dashboard/kpi-card';
 import { formatBrl } from '@/lib/money';
 import { useRouter } from 'next/navigation';
 import { cashSessionListHref } from '@/lib/cash-session-nav';
 import { BUSINESS_TZ, businessTodayDayKey, formatCalendarDatePtBR } from '@/lib/calendar-date';
 import { formatRecordControl } from '@/lib/record-control';
+import { ExpenseCashLegend, expenseCashCaption } from '@/components/cash/expense-cash-legend';
 import { summarizeCashSession } from '@/lib/cash-session-summary';
 
 type CashMovementRow = {
@@ -23,6 +26,7 @@ type CashMovementRow = {
   amount: string;
   reason?: string | null;
   createdAt: string;
+  chartAccountId?: string | null;
   chartAccount?: { code: string; name: string } | null;
 };
 
@@ -61,29 +65,70 @@ type OpenSessionListItem = {
 type SalesPeriodStats = {
   count: number;
   totalAmount: number;
-  noAto: number;
-  requisicao: number;
+  dinheiro: number;
+  pix: number;
+  credito: number;
+  debito: number;
   boleto: number;
-  cartao: number;
+  transferencia: number;
+  requisicao: number;
+  outros: number;
 };
 
-function PaymentBreakdown({ stats }: { stats: SalesPeriodStats }) {
-  const rows = [
-    { label: 'No ato', value: stats.noAto, tone: 'text-emerald-800' },
-    { label: 'Requisição', value: stats.requisicao, tone: 'text-slate-800' },
-    { label: 'Boletos', value: stats.boleto, tone: 'text-amber-900' },
-    { label: 'Cartão de crédito (Recebimento posterior)', value: stats.cartao ?? 0, tone: 'text-violet-800' },
-  ] as const;
+type DeskFinance = {
+  payables: { dueToday?: number; dueNext7?: number; overdue: number };
+  receivables: { dueToday?: number; overdue: number };
+};
 
+function dueWithinDays(throughWindow: number, overdue: number) {
+  return Math.max(0, Math.round((throughWindow - overdue) * 100) / 100);
+}
+
+function PaymentBreakdown({ stats, light }: { stats: SalesPeriodStats; light?: boolean }) {
+  const laterNote = 'Recebimento posterior';
+  const rows = [
+    { label: 'Dinheiro', value: stats.dinheiro ?? 0, later: false, always: true },
+    { label: 'Pix', value: stats.pix ?? 0, later: false, always: true },
+    { label: 'Cartão de crédito', value: stats.credito ?? 0, later: true, always: true },
+    { label: 'Débito', value: stats.debito ?? 0, later: false, always: true },
+    { label: 'Boleto', value: stats.boleto ?? 0, later: true, always: true },
+    { label: 'Transferência', value: stats.transferencia ?? 0, later: false, always: false },
+    { label: 'Requisição', value: stats.requisicao ?? 0, later: true, always: false },
+    { label: 'Outros', value: stats.outros ?? 0, later: false, always: false },
+  ].filter((row) => row.always || row.value > 0);
+  const sumOf = (later: boolean) =>
+    Math.round(rows.filter((row) => row.later === later).reduce((sum, row) => sum + row.value, 0) * 100) / 100;
+  const onSpot = sumOf(false);
+  const later = sumOf(true);
+  const label = light ? 'text-emerald-100' : 'text-sky-800';
+  const amount = light ? 'text-white' : 'text-sky-950';
+  const chip = light ? 'bg-emerald-900/40' : 'bg-white/80';
+  const note = light ? 'text-emerald-200' : 'text-amber-800';
+  const subChip = light ? 'border-emerald-600/50 bg-emerald-900/30' : 'border-sky-200 bg-white';
   return (
-    <ul className="mt-3 space-y-1.5 border-t border-emerald-200/60 pt-3 text-sm">
-      {rows.map((r) => (
-        <li key={r.label} className="flex items-baseline justify-between gap-4">
-          <span className="text-slate-600">{r.label}</span>
-          <span className={`tabular-nums font-medium ${r.tone}`}>{formatBrl(r.value)}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="mt-4 space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {rows.map((row) => (
+          <div key={row.label} className={`rounded-lg px-3 py-2 ${chip}`}>
+            <p className={`text-[11px] font-semibold uppercase tracking-wide ${label}`}>{row.label}</p>
+            <p className={`text-base font-bold tabular-nums ${amount}`}>{formatBrl(row.value)}</p>
+            {row.later ? <p className={`mt-0.5 text-[11px] leading-tight ${note}`}>{laterNote}</p> : null}
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className={`rounded-lg border px-3 py-2 ${subChip}`}>
+          <p className={`text-[11px] font-semibold uppercase tracking-wide ${label}`}>No ato</p>
+          <p className={`text-lg font-bold tabular-nums ${amount}`}>{formatBrl(onSpot)}</p>
+          <p className={`text-[11px] ${label}`}>Dinheiro, Pix, débito e transferência</p>
+        </div>
+        <div className={`rounded-lg border px-3 py-2 ${subChip}`}>
+          <p className={`text-[11px] font-semibold uppercase tracking-wide ${label}`}>Recebido depois</p>
+          <p className={`text-lg font-bold tabular-nums ${amount}`}>{formatBrl(later)}</p>
+          <p className={`text-[11px] ${label}`}>Crédito, boleto e requisição</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -104,58 +149,6 @@ function fiscalStatusLabel(status: string) {
   }
 }
 
-function KpiMetricCard({
-  label,
-  value,
-  tone,
-  hint,
-}: {
-  label: string;
-  value: string;
-  tone: 'emerald' | 'sky' | 'rose';
-  hint?: string;
-}) {
-  const styles =
-    tone === 'sky'
-      ? 'border-sky-200 bg-sky-50 text-sky-950'
-      : tone === 'rose'
-        ? 'border-red-200 bg-red-50 text-red-900'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-950';
-  const valueTone =
-    tone === 'sky' ? 'text-sky-900' : tone === 'rose' ? 'text-red-800' : 'text-emerald-900';
-
-  return (
-    <div className={`rounded-xl border px-4 py-4 shadow-sm ${styles}`}>
-      <p className="text-sm font-medium opacity-80">{label}</p>
-      <p className={`mt-1 text-3xl font-bold tabular-nums tracking-tight ${valueTone}`}>{value}</p>
-      {hint ? <p className="mt-1 text-xs opacity-70">{hint}</p> : null}
-    </div>
-  );
-}
-
-function PeriodDashboard({
-  title,
-  stats,
-  tone,
-}: {
-  title: string;
-  stats: SalesPeriodStats;
-  tone?: 'good' | 'default';
-}) {
-  return (
-    <div
-      className={`rounded-xl border px-4 py-4 ${
-        tone === 'good' ? 'border-emerald-200 bg-emerald-50/80' : 'border-slate-200 bg-white'
-      }`}
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{formatBrl(stats.totalAmount)}</p>
-      <p className="text-xs text-slate-500">{stats.count} venda(s) confirmada(s) no caixa</p>
-      <PaymentBreakdown stats={stats} />
-    </div>
-  );
-}
-
 export default function VendasPage() {
   const router = useRouter();
   const [myOpenCash, setMyOpenCash] = useState<MyOpenCash | null>(null);
@@ -166,6 +159,8 @@ export default function VendasPage() {
   const [saleSessionId, setSaleSessionId] = useState<string | null>(null);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [expenseBusy, setExpenseBusy] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<CashMovementRow | null>(null);
+  const [deskFinance, setDeskFinance] = useState<DeskFinance | null>(null);
   const [openCashModalOpen, setOpenCashModalOpen] = useState(false);
   const [openSessions, setOpenSessions] = useState<OpenSessionListItem[]>([]);
   const [salesStats, setSalesStats] = useState<{ day: SalesPeriodStats; month: SalesPeriodStats } | null>(null);
@@ -176,6 +171,19 @@ export default function VendasPage() {
   const cashSummary = myOpenCash
     ? summarizeCashSession(myOpenCash.openingBalance, myOpenCash.movements ?? [])
     : null;
+  const openExpenses = (myOpenCash?.movements ?? []).filter((m) => m.isExpense);
+  const expenseCash = myOpenCash
+    ? {
+        controlNumber: myOpenCash.controlNumber,
+        openedAt: myOpenCash.openedAt,
+        status: myOpenCash.status,
+        operator: openSessions.find((s) => s.id === myOpenCash.id)?.user.name ?? null,
+      }
+    : null;
+  const payDueToday = deskFinance?.payables.dueToday ?? 0;
+  const payAhead7 = deskFinance
+    ? dueWithinDays(deskFinance.payables.dueNext7 ?? 0, deskFinance.payables.overdue)
+    : 0;
   const todayLabel = new Date().toLocaleDateString('pt-BR', {
     weekday: 'short',
     day: '2-digit',
@@ -203,6 +211,9 @@ export default function VendasPage() {
     void apiFetch<{ day: SalesPeriodStats; month: SalesPeriodStats }>('/v1/commercial/stats')
       .then(setSalesStats)
       .catch(() => setSalesStats(null));
+    void apiFetch<{ finance?: DeskFinance }>('/v1/home/dashboard')
+      .then((home) => setDeskFinance(home.finance ?? null))
+      .catch(() => setDeskFinance(null));
     void apiFetch<ConfirmedSale[]>('/v1/commercial/orders')
       .then((rows) => setConfirmedSales(rows.filter((o) => o.status === 'CONFIRMED').slice(0, 12)))
       .catch(() => setConfirmedSales([]));
@@ -279,6 +290,17 @@ export default function VendasPage() {
       return;
     }
     setError(null);
+    setEditingExpense(null);
+    setExpenseOpen(true);
+  }
+
+  function openEditExpense(row: CashMovementRow) {
+    if (!myOpenRowToday) {
+      setError('A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto.');
+      return;
+    }
+    setError(null);
+    setEditingExpense(row);
     setExpenseOpen(true);
   }
 
@@ -292,18 +314,26 @@ export default function VendasPage() {
     setError(null);
     const fd = new FormData(e.currentTarget);
     try {
-      await apiFetch(`/v1/cash/sessions/${myOpenCash.id}/movements`, {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'OUT',
-          isExpense: true,
-          amount: Number(fd.get('amount')),
-          chartAccountId: fd.get('chartAccountId'),
-          reason: String(fd.get('reason') || '').trim() || undefined,
-          paymentMethod: 'CASH',
-        }),
-      });
-      (e.target as HTMLFormElement).reset();
+      const body = {
+        type: 'OUT' as const,
+        isExpense: true,
+        amount: Number(fd.get('amount')),
+        chartAccountId: fd.get('chartAccountId'),
+        reason: String(fd.get('reason') || '').trim() || undefined,
+        paymentMethod: 'CASH',
+      };
+      if (editingExpense) {
+        await apiFetch(`/v1/cash/sessions/${myOpenCash.id}/movements/${editingExpense.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+      } else {
+        await apiFetch(`/v1/cash/sessions/${myOpenCash.id}/movements`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+      }
+      setEditingExpense(null);
       setExpenseOpen(false);
       load();
     } catch (err) {
@@ -313,11 +343,26 @@ export default function VendasPage() {
     }
   }
 
+  async function deleteExpense(row: CashMovementRow) {
+    if (!myOpenCash || !myOpenRowToday) {
+      setError('A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto.');
+      return;
+    }
+    if (!confirm('Excluir esta despesa do caixa aberto?')) return;
+    setError(null);
+    try {
+      await apiFetch(`/v1/cash/sessions/${myOpenCash.id}/movements/${row.id}`, { method: 'DELETE' });
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao excluir despesa');
+    }
+  }
+
   return (
     <AdminShell title="Venda">
       <PageIntro
         title="Venda"
-        description="Resumo das vendas confirmadas no caixa e acesso rápido ao PDV."
+        description="Comece por aqui: vendas do mês e do dia, o que entrou e saiu do caixa, e as contas que pedem ação."
         showModuleTabs={false}
       />
       <ErrorBox message={error} />
@@ -362,7 +407,7 @@ export default function VendasPage() {
 
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Caixa</h2>
+            <h2 className="text-xl font-semibold text-slate-900">O que fazer agora</h2>
             <p className="mt-0.5 text-sm capitalize text-slate-500">{todayLabel}</p>
           </div>
           {myOpenCash ? (
@@ -375,23 +420,110 @@ export default function VendasPage() {
           ) : null}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-12">
-          <div className="grid gap-3 sm:grid-cols-2 xl:col-span-5">
-            <KpiMetricCard
-              label="Saldo em caixa"
-              value={formatBrl(cashSummary?.expectedBalance ?? 0)}
-              tone="emerald"
-            />
-            <KpiMetricCard
-              label="Vendas de hoje"
-              value={formatBrl(salesStats?.day.totalAmount ?? 0)}
-              tone="sky"
-              hint={`${salesStats?.day.count ?? 0} venda(s) confirmada(s)`}
-            />
-            <KpiMetricCard label="Entradas" value={formatBrl(cashSummary?.inflow ?? 0)} tone="emerald" />
-            <KpiMetricCard label="Saídas" value={formatBrl(cashSummary?.outflow ?? 0)} tone="rose" />
-          </div>
+        {salesStats ? (
+          <article className="rounded-2xl bg-emerald-800 px-5 py-5 text-white shadow-sm sm:px-6">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-100">Vendas do mês</p>
+            <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight sm:text-5xl">
+              {formatBrl(salesStats.month.totalAmount)}
+            </p>
+            <p className="mt-1 text-sm text-emerald-100">
+              {salesStats.month.count} venda(s) confirmada(s) neste mês
+            </p>
+            <PaymentBreakdown stats={salesStats.month} light />
+          </article>
+        ) : null}
 
+        <article className="rounded-2xl border border-sky-200 bg-sky-50 px-5 py-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">Vendas de hoje</p>
+          <p className="mt-1 text-4xl font-bold tabular-nums tracking-tight text-sky-950">
+            {formatBrl(salesStats?.day.totalAmount ?? 0)}
+          </p>
+          <p className="mt-1 max-w-3xl text-sm text-sky-900">
+            {salesStats?.day.count ?? 0} pedido(s) confirmado(s) hoje. Este total é a venda do dia, mesmo quando
+            o dinheiro ainda não entrou no caixa — crédito e boleto ficam para receber depois.
+          </p>
+          {salesStats ? <PaymentBreakdown stats={salesStats.day} /> : null}
+        </article>
+
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Movimento deste caixa</h3>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+            Entradas são o dinheiro que entrou nesta sessão. Vendas do dia são os pedidos confirmados, com ou sem
+            recebimento imediato. O saldo é o que fica depois das saídas.
+          </p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-emerald-200 bg-white px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">1 · Entradas</p>
+              <p className="mt-1 text-3xl font-bold tabular-nums text-emerald-950">
+                {formatBrl(cashSummary?.inflow ?? 0)}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                Dinheiro que entrou neste caixa: vendas à vista e outros recebimentos lançados. Boleto e crédito a
+                receber depois não entram aqui.
+              </p>
+            </div>
+            <div className="rounded-xl border border-rose-200 bg-white px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-800">2 · Saídas</p>
+              <p className="mt-1 text-3xl font-bold tabular-nums text-rose-900">
+                {formatBrl(cashSummary?.outflow ?? 0)}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                {cashSummary && cashSummary.expenses > 0
+                  ? `Despesas e retiradas deste caixa, das quais ${formatBrl(cashSummary.expenses)} são despesas.`
+                  : 'Despesas e retiradas lançadas neste caixa.'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-300 bg-slate-900 px-4 py-4 text-white">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">3 · Saldo em caixa</p>
+              <p className="mt-1 text-3xl font-bold tabular-nums">
+                {formatBrl(cashSummary?.expectedBalance ?? 0)}
+              </p>
+              <p className="mt-2 text-sm text-slate-300">
+                O que fica: saldo inicial {formatBrl(cashSummary?.opening ?? 0)} + entradas − saídas.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {deskFinance ? (
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Contas para olhar hoje</h3>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <ClickableKpi
+                href="/financeiro/pagar?dueDays=7"
+                label="A pagar em 7 dias"
+                value={formatBrl(payAhead7)}
+                tone={payAhead7 > 0 ? 'warn' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/pagar?dueDays=0"
+                label="A pagar hoje"
+                value={formatBrl(payDueToday)}
+                tone={payDueToday > 0 ? 'warn' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/pagar?overdue=1"
+                label="Contas a pagar atrasadas"
+                value={formatBrl(deskFinance.payables.overdue)}
+                tone={deskFinance.payables.overdue > 0 ? 'bad' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/receber?dueDays=0"
+                label="A receber hoje"
+                value={formatBrl(deskFinance.receivables.dueToday ?? 0)}
+                tone={(deskFinance.receivables.dueToday ?? 0) > 0 ? 'good' : 'default'}
+              />
+              <ClickableKpi
+                href="/financeiro/receber?overdue=1"
+                label="Contas a receber atrasadas"
+                value={formatBrl(deskFinance.receivables.overdue)}
+                tone={deskFinance.receivables.overdue > 0 ? 'bad' : 'default'}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 xl:grid-cols-12">
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-7">
             <div className="border-b border-slate-100 px-4 py-3">
               <h3 className="text-base font-semibold text-slate-900">Vendas confirmadas — emitir</h3>
@@ -441,13 +573,45 @@ export default function VendasPage() {
               </ul>
             )}
           </div>
-        </div>
-
-        {salesStats ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
-            <PeriodDashboard title="Este mês" stats={salesStats.month} />
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-5">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <h3 className="text-base font-semibold text-slate-900">Despesas deste caixa</h3>
+              <p className="mt-1 text-xs text-amber-800">
+                A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto.
+              </p>
+            </div>
+            {openExpenses.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-slate-500">Nenhuma despesa neste caixa.</p>
+            ) : (
+              <ul className="max-h-[22rem] divide-y divide-slate-100 overflow-y-auto">
+                {openExpenses.map((row) => (
+                  <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        {formatBrl(Number(row.amount))}
+                        {row.reason ? ` · ${row.reason}` : ''}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {row.chartAccount ? `${row.chartAccount.code} — ${row.chartAccount.name}` : 'Sem centro de custo'}
+                      </p>
+                      <p className={`truncate text-xs ${expenseCash ? 'text-slate-500' : 'font-medium text-amber-800'}`}>
+                        {expenseCashCaption(expenseCash)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button type="button" variant="secondary" className="h-8 px-2.5 text-xs" onClick={() => openEditExpense(row)}>
+                        Editar
+                      </Button>
+                      <Button type="button" variant="secondary" className="h-8 px-2.5 text-xs" onClick={() => void deleteExpense(row)}>
+                        Excluir
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        ) : null}
+        </div>
       </section>
 
       <FormCadastroModal
@@ -488,15 +652,13 @@ export default function VendasPage() {
         )}
         <form id="open-cash-form" onSubmit={openCashSession}>
           <Field label="Saldo inicial (R$)">
-            <input
+            <BrlMoneyInput
               name="openingBalance"
-              type="number"
-              step="0.01"
-              min={0}
               className={inputClass}
               required
               disabled={myStaleOpens.length > 0}
               defaultValue={0}
+              min={0}
             />
           </Field>
         </form>
@@ -505,35 +667,39 @@ export default function VendasPage() {
       <FormCadastroModal
         open={expenseOpen}
         onClose={() => setExpenseOpen(false)}
-        title="Despesa"
-        hint={
-          myOpenCash
-            ? `Lançamento no caixa ${formatRecordControl(myOpenCash.controlNumber)} (sessão aberta).`
-            : undefined
-        }
+        title={editingExpense ? 'Editar despesa' : 'Despesa'}
+        hint="A despesa só pode ser editada ou excluída enquanto o caixa estiver aberto."
         footer={
           <>
             <Button type="button" variant="secondary" onClick={() => setExpenseOpen(false)}>
               Cancelar
             </Button>
             <Button type="submit" form="vendas-cash-expense-form" disabled={expenseBusy}>
-              Lançar despesa
+              {editingExpense ? 'Salvar despesa' : 'Lançar despesa'}
             </Button>
           </>
         }
       >
-        <form id="vendas-cash-expense-form" onSubmit={submitExpense} className="grid gap-3">
+        <form id="vendas-cash-expense-form" onSubmit={submitExpense} className="grid gap-3" key={editingExpense?.id ?? 'new'}>
+          {editingExpense ? <ExpenseCashLegend cash={expenseCash} /> : null}
           <Field label="Valor (R$)">
-            <input name="amount" type="number" step="0.01" min={0.01} className={inputClass} required />
+            <BrlMoneyInput
+              name="amount"
+              className={inputClass}
+              required
+              min={0.01}
+              defaultValue={editingExpense ? Number(editingExpense.amount) : undefined}
+            />
           </Field>
           <Field label="Centro de custo">
-            <ChartAccountSelect flow="payable" required />
+            <ChartAccountSelect flow="payable" required defaultValue={editingExpense?.chartAccountId ?? ''} />
           </Field>
           <Field label="Observação">
             <input
               name="reason"
               className={inputClass}
               placeholder="Ex.: combustível, material de limpeza…"
+              defaultValue={editingExpense?.reason ?? ''}
             />
           </Field>
         </form>

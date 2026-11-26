@@ -13,7 +13,8 @@ import { apiFetch } from '@/lib/api';
 import { businessTodayDayKey } from '@/lib/calendar-date';
 import type { BankBoletoDto } from '@/lib/boleto';
 import { navigateToReportPrint } from '@/lib/report-print-nav';
-import { formatBrl } from '@/lib/money';
+import { BrlMoneyInput } from '@/components/brl-money-input';
+import { formatBrl, parseBrlMoney } from '@/lib/money';
 import { parseSaleQuantityInput, SaleQtyDraftInput, SaleQtyInput } from '@/components/vendas/sale-qty-input';
 
 type PaymentForm = {
@@ -156,8 +157,7 @@ function splitBoletoAmounts(total: number, count: number) {
 }
 
 function parseMoneyInput(raw: string) {
-  const n = Number(String(raw).trim().replace(',', '.'));
-  return Number.isFinite(n) ? n : NaN;
+  return parseBrlMoney(raw);
 }
 
 function cashChange(tendered: number, due: number) {
@@ -203,13 +203,11 @@ function CashTenderFields({
         Total em dinheiro: <strong className="tabular-nums">{formatBrl(due)}</strong>
       </p>
       <Field label={label}>
-        <input
+        <BrlMoneyInput
           className={inputClass}
-          type="number"
           min={0}
-          step="0.01"
-          value={tendered}
-          onChange={(e) => onTenderedChange(e.target.value)}
+          value={tendered.trim() ? parseMoneyInput(tendered) : null}
+          onValueChange={(n) => onTenderedChange(n == null ? '' : String(n))}
           placeholder="0,00"
           autoFocus
         />
@@ -437,14 +435,23 @@ function BoletoTermsFields({
           </select>
         </Field>
         <Field label="Valor da multa">
-          <input
-            className={inputClass}
-            inputMode="decimal"
-            value={valorMulta}
-            disabled={tipoMulta === '0'}
-            placeholder={tipoMulta === '2' ? 'Ex.: 2' : 'Ex.: 10,00'}
-            onChange={(e) => onValorMulta(e.target.value)}
-          />
+          {tipoMulta === '1' ? (
+            <BrlMoneyInput
+              className={inputClass}
+              value={valorMulta.trim() ? parseMoneyInput(valorMulta) : null}
+              onValueChange={(n) => onValorMulta(n == null ? '' : String(n))}
+              placeholder="0,00"
+            />
+          ) : (
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={valorMulta}
+              disabled={tipoMulta === '0'}
+              placeholder={tipoMulta === '2' ? 'Ex.: 2' : 'Ex.: 10,00'}
+              onChange={(e) => onValorMulta(e.target.value)}
+            />
+          )}
         </Field>
         <Field label="Juros de mora">
           <select className={inputClass} value={tipoJuros} onChange={(e) => onTipoJuros(e.target.value)}>
@@ -454,14 +461,23 @@ function BoletoTermsFields({
           </select>
         </Field>
         <Field label="Valor dos juros">
-          <input
-            className={inputClass}
-            inputMode="decimal"
-            value={valorJuros}
-            disabled={tipoJuros === '3'}
-            placeholder={tipoJuros === '2' ? 'Ex.: 1' : 'Ex.: 0,33'}
-            onChange={(e) => onValorJuros(e.target.value)}
-          />
+          {tipoJuros === '1' ? (
+            <BrlMoneyInput
+              className={inputClass}
+              value={valorJuros.trim() ? parseMoneyInput(valorJuros) : null}
+              onValueChange={(n) => onValorJuros(n == null ? '' : String(n))}
+              placeholder="0,00"
+            />
+          ) : (
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={valorJuros}
+              disabled={tipoJuros === '3'}
+              placeholder={tipoJuros === '2' ? 'Ex.: 1' : 'Ex.: 0,33'}
+              onChange={(e) => onValorJuros(e.target.value)}
+            />
+          )}
         </Field>
         <Field label="Multa a partir de (dias após venc.)">
           <input
@@ -1341,13 +1357,11 @@ export function MiniPdvModal({
                     />
                   </td>
                   <td className="px-3 py-2">
-                    <input
-                      className="w-24 rounded border border-slate-200 px-2 py-1 text-sm"
-                      type="number"
+                    <BrlMoneyInput
+                      className="w-28 rounded border border-slate-200 px-2 py-1 text-sm"
                       min={0}
-                      step="0.01"
                       value={l.unitPrice}
-                      onChange={(e) => updateLine(l.key, { unitPrice: Number(e.target.value) })}
+                      onValueChange={(n) => updateLine(l.key, { unitPrice: n ?? 0 })}
                     />
                   </td>
                   <td className="px-3 py-2 tabular-nums">{formatBrl(lineGross(l))}</td>
@@ -1379,14 +1393,12 @@ export function MiniPdvModal({
             </div>
             <div className="flex items-center justify-between gap-6 text-slate-600">
               <label htmlFor="sale-discount">Desconto</label>
-              <input
+              <BrlMoneyInput
                 id="sale-discount"
-                className="w-28 rounded border border-slate-200 px-2 py-1 text-right text-sm"
-                type="number"
+                className="w-32 rounded border border-slate-200 px-2 py-1 text-right text-sm"
                 min={0}
-                step="0.01"
-                value={saleDiscount}
-                onChange={(e) => setSaleDiscount(e.target.value)}
+                value={saleDiscount.trim() ? parseMoneyInput(saleDiscount) : 0}
+                onValueChange={(n) => setSaleDiscount(n == null ? '0' : String(n))}
               />
             </div>
             <div className="flex items-center justify-between gap-6 border-t border-slate-200 pt-1.5 text-base font-semibold text-slate-900">
@@ -1558,14 +1570,12 @@ export function MiniPdvModal({
       {splitPay ? (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
           <Field label="Valor pago na 1ª forma (R$)">
-            <input
+            <BrlMoneyInput
               className={inputClass}
-              type="number"
               min={0.01}
-              step="0.01"
-              value={splitPrimaryAmount}
-              onChange={(e) => setSplitPrimaryAmount(e.target.value)}
-              placeholder={subtotal.toFixed(2)}
+              value={splitPrimaryAmount.trim() ? parseMoneyInput(splitPrimaryAmount) : null}
+              onValueChange={(n) => setSplitPrimaryAmount(n == null ? '' : String(n))}
+              placeholder={subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             />
           </Field>
           {splitRemainder != null && splitRemainder >= 0.01 ? (

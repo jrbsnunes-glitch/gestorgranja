@@ -4,7 +4,8 @@ import { FormEvent, useMemo, useState } from 'react';
 import { Field, inputClass } from '@/components/ui-parts';
 import { PersonalBillDescription } from '@/components/agenda/personal-bill-kind';
 import { formatCalendarDatePtBR } from '@/lib/calendar-date';
-import { formatBrl } from '@/lib/money';
+import { BrlMoneyInput } from '@/components/brl-money-input';
+import { formatBrl, parseBrlMoney } from '@/lib/money';
 
 const PAYMENT_LABELS = ['Dinheiro', 'Pix', 'Cartão', 'Transferência'] as const;
 
@@ -36,7 +37,7 @@ export function PersonalBillPayForm({
   const [paymentLabel, setPaymentLabel] = useState<string>(PAYMENT_LABELS[0]);
 
   const payAmount = useMemo(() => {
-    const n = Number(amountStr.replace(',', '.'));
+    const n = parseBrlMoney(amountStr);
     return Number.isFinite(n) ? n : 0;
   }, [amountStr]);
 
@@ -85,16 +86,13 @@ export function PersonalBillPayForm({
       </div>
 
       <Field label="Valor a pagar agora">
-        <input
+        <BrlMoneyInput
           name="amount"
-          type="number"
-          step="0.01"
           min={0.01}
-          max={remaining}
           className={inputClass}
           required
-          value={amountStr}
-          onChange={(e) => setAmountStr(e.target.value)}
+          value={amountStr.trim() ? parseBrlMoney(amountStr) : null}
+          onValueChange={(n) => setAmountStr(n == null ? '' : String(n))}
         />
       </Field>
       {payAmount > 0 && payAmount < remaining - 0.004 ? (

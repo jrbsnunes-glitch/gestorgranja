@@ -9,6 +9,7 @@ import { ErrorBox, Field, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { businessTodayDayKey, formatCalendarDatePtBR, prismaDateDayKey } from '@/lib/calendar-date';
 import { titleDueDayOffset } from '@/lib/finance-title-due';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import { PERSONAL_BILL_KINDS, PersonalBillDescription } from '@/components/agenda/personal-bill-kind';
 import { PersonalBillPayForm } from '@/components/agenda/personal-bill-pay-form';
@@ -423,7 +424,7 @@ export default function AgendaPessoalPage() {
             <input name="description" className={inputClass} required placeholder="Ex.: Conta de luz (apto)" />
           </Field>
           <Field label="Valor (R$)">
-            <input name="amount" type="number" step="0.01" min={0.01} className={inputClass} required />
+            <BrlMoneyInput name="amount" min={0.01} className={inputClass} required />
           </Field>
           <Field label="1º vencimento">
             <input name="dueDate" type="date" className={inputClass} required />
@@ -467,10 +468,8 @@ export default function AgendaPessoalPage() {
               <input name="description" className={inputClass} required defaultValue={edit.description} />
             </Field>
             <Field label="Valor (R$)">
-              <input
+              <BrlMoneyInput
                 name="amount"
-                type="number"
-                step="0.01"
                 min={0.01}
                 className={inputClass}
                 required

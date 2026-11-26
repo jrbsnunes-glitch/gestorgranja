@@ -10,6 +10,7 @@ import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { humanizeUserText } from '@/lib/humanize-user-text';
 import { errorMessage } from '@/lib/labels';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 import {
   Bar,
@@ -354,10 +355,8 @@ export default function FinanceiroVisaoPage() {
         {settings ? (
           <form id="alert-settings-form" onSubmit={saveSettings} className="space-y-3">
             <Field label="Limite mínimo caixa projetado (R$)">
-              <input
+              <BrlMoneyInput
                 name="minCashBalance"
-                type="number"
-                step="0.01"
                 className={inputClass}
                 defaultValue={Number(settings.minCashBalance)}
               />

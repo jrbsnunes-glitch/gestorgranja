@@ -23,7 +23,8 @@ import { EggStockReconciliationPanel } from '@/components/inventory/egg-stock-re
 import { ErrorBox, Field, PageCard, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { labelEnum, PRODUCT_TYPES } from '@/lib/labels';
-import { formatBrl, formatPct } from '@/lib/money';
+import { BrlMoneyInput } from '@/components/brl-money-input';
+import { formatBrl, formatPct, parseBrlMoney } from '@/lib/money';
 
 type Fiscal = {
   id: string;
@@ -93,7 +94,7 @@ function matchesProductFilters(p: Product, f: ProductListFilters) {
 }
 
 function profitPreview(salePrice: string, averageCost: number) {
-  const sale = salePrice.trim() === '' ? null : Number(salePrice.replace(',', '.'));
+  const sale = salePrice.trim() === '' ? null : parseBrlMoney(salePrice);
   if (sale == null || !Number.isFinite(sale)) return { profit: null as number | null, pct: null as number | null };
   const profit = sale - averageCost;
   const pct = sale > 0 ? (profit / sale) * 100 : null;
@@ -191,7 +192,7 @@ export default function ProdutosPage() {
     const fd = new FormData(e.currentTarget);
     const fiscalSituationId = String(fd.get('fiscalSituationId') || '');
     const saleRaw = String(fd.get('salePrice') ?? '').trim();
-    const salePrice = saleRaw === '' ? null : Number(saleRaw.replace(',', '.'));
+    const salePrice = saleRaw === '' ? null : parseBrlMoney(saleRaw);
 
     const payload = {
       name: fd.get('name'),
@@ -404,14 +405,12 @@ export default function ProdutosPage() {
           </Field>
 
           <Field label="Preço de venda (R$)">
-            <input
+            <BrlMoneyInput
               name="salePrice"
-              type="number"
               min={0}
-              step="0.01"
               className={inputClass}
-              value={salePriceInput}
-              onChange={(e) => setSalePriceInput(e.target.value)}
+              value={salePriceInput.trim() ? parseBrlMoney(salePriceInput) : null}
+              onValueChange={(n) => setSalePriceInput(n == null ? '' : String(n))}
               placeholder="0,00"
             />
           </Field>

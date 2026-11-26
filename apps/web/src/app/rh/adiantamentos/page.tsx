@@ -16,6 +16,7 @@ import {
 import { ErrorBox, Field, PageCard, SubmitButton, inputClass } from '@/components/ui-parts';
 import { apiFetch } from '@/lib/api';
 import { currentYearMonthLocal } from '@/lib/calendar-date';
+import { BrlMoneyInput } from '@/components/brl-money-input';
 import { formatBrl } from '@/lib/money';
 
 type Employee = { id: string; name: string; baseSalary: string };
@@ -230,10 +231,8 @@ export default function AdiantamentosPage() {
               </select>
             </Field>
             <Field label="Valor pago (R$)">
-              <input
+              <BrlMoneyInput
                 name="amount"
-                type="number"
-                step="0.01"
                 min={0.01}
                 className={inputClass}
                 required

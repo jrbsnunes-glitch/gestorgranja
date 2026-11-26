@@ -26,7 +26,8 @@ import { ProductLookupField } from '@/components/product-lookup-field';
 import { PurchaseOrdersReportLauncher } from '@/components/purchase-orders-report-launcher';
 import { apiFetch } from '@/lib/api';
 import { labelEnum } from '@/lib/labels';
-import { formatBrl } from '@/lib/money';
+import { BrlMoneyInput } from '@/components/brl-money-input';
+import { formatBrl, parseBrlMoney } from '@/lib/money';
 
 type Product = { id: string; sku: string; name: string; unit: string };
 type StockLocation = { id: string; code: string; name: string };
@@ -132,7 +133,7 @@ export default function ComprasPage() {
     if (!selected?.items.length) return 0;
     let sum = 0;
     for (const i of selected.items) {
-      const price = Number(quotePrices[i.productId] ?? 0);
+      const price = parseBrlMoney(String(quotePrices[i.productId] ?? '')) || 0;
       sum += Number(i.quantity) * price;
     }
     return Math.round(sum * 100) / 100;
@@ -247,7 +248,7 @@ export default function ComprasPage() {
     const total = quoteTotalPreview;
     const quoteItems = selected.items.map((i) => ({
       productId: i.productId,
-      unitPrice: Number(quotePrices[i.productId] ?? 0),
+      unitPrice: parseBrlMoney(String(quotePrices[i.productId] ?? '')) || 0,
     }));
     const dueDate = String(fd.get('dueDate') || new Date().toISOString().slice(0, 10));
     const installments = Math.max(1, Number(fd.get('installments') || 1));
@@ -702,17 +703,19 @@ export default function ComprasPage() {
                         <span>
                           {i.product.sku} — {Number(i.quantity).toFixed(3)} {i.product.unit}
                         </span>
-                        <input
-                          type="number"
-                          step="0.0001"
+                        <BrlMoneyInput
+                          className={`${inputClass} w-36`}
                           min={0}
-                          className={`${inputClass} w-32`}
-                          placeholder="R$ unit."
-                          value={quotePrices[i.productId] ?? ''}
-                          onChange={(ev) =>
-                            setQuotePrices((prev) => ({ ...prev, [i.productId]: ev.target.value }))
-                          }
                           required
+                          placeholder="0,00"
+                          value={
+                            quotePrices[i.productId]
+                              ? parseBrlMoney(String(quotePrices[i.productId]))
+                              : null
+                          }
+                          onValueChange={(n) =>
+                            setQuotePrices((prev) => ({ ...prev, [i.productId]: n == null ? '' : String(n) }))
+                          }
                         />
                       </div>
                     ))}
