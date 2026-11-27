@@ -1,6 +1,6 @@
 {
   "name": "gestor-granja",
-  "version": "1.2.31",
+  "version": "1.2.32",
   "private": true,
   "scripts": {
     "dev": "turbo dev",
