@@ -41,111 +41,103 @@ function cashDueForOrder(
   return { hasCash: cashDue > 0.004, cashDue: Math.round(cashDue * 100) / 100 };
 }
 
-type SalesStatsBucket = {
-  dinheiro: number;
-  pix: number;
-  credito: number;
-  debito: number;
-  boleto: number;
-  transferencia: number;
-  requisicao: number;
-  outros: number;
+/** Ordem do dashboard de Vendas. Dinheiro e cartão ficam de fora desta tela. */
+const DASHBOARD_PAYMENT_KINDS = ['PIX', 'REQUISICAO', 'BOLETO'] as const;
+
+type DashboardPaymentForm = { id: string; name: string; kind: string; sortOrder: number };
+
+type SalesStatOrder = {
+  totalAmount: { toString(): string };
+  paymentMethod: string | null;
+  paymentFormId: string | null;
+  paymentForm: { id: string; kind: string; name: string } | null;
+  secondaryPaymentForm: { id: string; kind: string; name: string } | null;
+  primaryPaymentAmount: { toString(): string } | null;
+  secondaryPaymentFormId: string | null;
 };
 
-function isRequisicaoPayment(kind?: string | null, name?: string | null) {
-  return isRequisicaoKind(kind) || Boolean(name && /requis/i.test(name));
+function dashboardKindRank(kind: string) {
+  const index = DASHBOARD_PAYMENT_KINDS.indexOf(kind.toUpperCase() as (typeof DASHBOARD_PAYMENT_KINDS)[number]);
+  return index < 0 ? 99 : index;
 }
 
-function isDebitPayment(kind?: string | null, name?: string | null) {
-  if ((kind ?? '').toUpperCase() === 'DEBIT') return true;
-  return Boolean(name && /d[eé]bito/i.test(name));
+function orderDashboardForms(forms: DashboardPaymentForm[]) {
+  return [...forms]
+    .filter((form) => dashboardKindRank(form.kind) < 99)
+    .sort(
+      (a, b) =>
+        dashboardKindRank(a.kind) - dashboardKindRank(b.kind) ||
+        a.sortOrder - b.sortOrder ||
+        a.name.localeCompare(b.name, 'pt-BR'),
+    );
 }
 
-function isCreditCardPayment(kind?: string | null, name?: string | null) {
-  if ((kind ?? '').toUpperCase() === 'CARD') return true;
-  return Boolean(name && /cart[aã]o|cr[eé]dito/i.test(name));
-}
-
-function paymentBucket(kind?: string | null, name?: string | null): keyof SalesStatsBucket {
-  const k = (kind ?? '').toUpperCase();
-  if (isBoletoKind(k) || Boolean(name && /boleto/i.test(name))) return 'boleto';
-  if (isRequisicaoPayment(k, name)) return 'requisicao';
-  if (k === 'PIX' || Boolean(name && /\bpix\b/i.test(name))) return 'pix';
-  if (k === 'CASH' || Boolean(name && /dinheiro/i.test(name))) return 'dinheiro';
-  if (k === 'TRANSFER' || Boolean(name && /transfer/i.test(name))) return 'transferencia';
-  if (isDebitPayment(k, name)) return 'debito';
-  if (isCreditCardPayment(k, name)) return 'credito';
-  return 'outros';
-}
-
-function emptyBuckets(): SalesStatsBucket {
-  return {
-    dinheiro: 0,
-    pix: 0,
-    credito: 0,
-    debito: 0,
-    boleto: 0,
-    transferencia: 0,
-    requisicao: 0,
-    outros: 0,
-  };
-}
-
-function addToBuckets(
-  buckets: SalesStatsBucket,
-  order: {
-    totalAmount: { toString(): string };
-    paymentMethod: string | null;
-    paymentForm: { kind: string; name: string } | null;
-    secondaryPaymentForm: { kind: string; name: string } | null;
-    primaryPaymentAmount: { toString(): string } | null;
-    secondaryPaymentFormId: string | null;
-  },
-) {
+function paymentSlices(order: SalesStatOrder) {
   const total = Number(order.totalAmount);
-  const slices: { kind: string | null; name: string | null; amount: number }[] =
-    order.secondaryPaymentFormId && order.primaryPaymentAmount != null
-      ? [
-          {
-            kind: order.paymentMethod ?? order.paymentForm?.kind ?? null,
-            name: order.paymentForm?.name ?? null,
-            amount: Number(order.primaryPaymentAmount),
-          },
-          {
-            kind: order.secondaryPaymentForm?.kind ?? null,
-            name: order.secondaryPaymentForm?.name ?? null,
-            amount: Math.round((total - Number(order.primaryPaymentAmount)) * 100) / 100,
-          },
-        ]
-      : [
-          {
-            kind: order.paymentMethod ?? order.paymentForm?.kind ?? null,
-            name: order.paymentForm?.name ?? null,
-            amount: total,
-          },
-        ];
-
-  for (const s of slices) {
-    const key = paymentBucket(s.kind, s.name);
-    buckets[key] = Math.round((buckets[key] + s.amount) * 100) / 100;
+  if (order.secondaryPaymentFormId && order.primaryPaymentAmount != null) {
+    return [
+      {
+        formId: order.paymentForm?.id ?? order.paymentFormId,
+        kind: order.paymentForm?.kind ?? order.paymentMethod,
+        name: order.paymentForm?.name ?? null,
+        amount: Number(order.primaryPaymentAmount),
+      },
+      {
+        formId: order.secondaryPaymentForm?.id ?? order.secondaryPaymentFormId,
+        kind: order.secondaryPaymentForm?.kind ?? null,
+        name: order.secondaryPaymentForm?.name ?? null,
+        amount: Math.round((total - Number(order.primaryPaymentAmount)) * 100) / 100,
+      },
+    ];
   }
+  return [
+    {
+      formId: order.paymentForm?.id ?? order.paymentFormId,
+      kind: order.paymentForm?.kind ?? order.paymentMethod,
+      name: order.paymentForm?.name ?? null,
+      amount: total,
+    },
+  ];
 }
 
-function aggregateSalesStats(
-  rows: {
-    totalAmount: { toString(): string };
-    paymentMethod: string | null;
-    paymentForm: { kind: string; name: string } | null;
-    secondaryPaymentForm: { kind: string; name: string } | null;
-    primaryPaymentAmount: { toString(): string } | null;
-    secondaryPaymentFormId: string | null;
-  }[],
+function formForSlice(
+  forms: DashboardPaymentForm[],
+  slice: { formId: string | null; kind: string | null; name: string | null },
 ) {
-  const buckets = emptyBuckets();
-  for (const row of rows) addToBuckets(buckets, row);
-  const sum = (r: typeof rows) =>
-    Math.round(r.reduce((s, x) => s + Number(x.totalAmount), 0) * 100) / 100;
-  return { count: rows.length, totalAmount: sum(rows), ...buckets };
+  if (slice.formId) {
+    const byId = forms.find((form) => form.id === slice.formId);
+    if (byId) return byId;
+  }
+  const kind = (slice.kind ?? '').toUpperCase();
+  if (dashboardKindRank(kind) >= 99) return null;
+  const named = slice.name?.trim().toLowerCase();
+  if (named) {
+    const byName = forms.find((form) => form.kind.toUpperCase() === kind && form.name.trim().toLowerCase() === named);
+    if (byName) return byName;
+  }
+  return forms.find((form) => form.kind.toUpperCase() === kind) ?? null;
+}
+
+function aggregateSalesStats(rows: SalesStatOrder[], forms: DashboardPaymentForm[]) {
+  const amounts = new Map<string, number>();
+  for (const row of rows) {
+    for (const slice of paymentSlices(row)) {
+      const form = formForSlice(forms, slice);
+      if (!form) continue;
+      amounts.set(form.id, Math.round(((amounts.get(form.id) ?? 0) + slice.amount) * 100) / 100);
+    }
+  }
+  const totalAmount = Math.round(rows.reduce((sum, row) => sum + Number(row.totalAmount), 0) * 100) / 100;
+  return {
+    count: rows.length,
+    totalAmount,
+    forms: forms.map((form) => ({
+      id: form.id,
+      name: form.name,
+      kind: form.kind.toUpperCase(),
+      amount: amounts.get(form.id) ?? 0,
+    })),
+  };
 }
 
 @Injectable()
@@ -188,13 +180,14 @@ export class CommercialService {
     const orderSelect = {
       totalAmount: true,
       paymentMethod: true,
+      paymentFormId: true,
       primaryPaymentAmount: true,
       secondaryPaymentFormId: true,
-      paymentForm: { select: { kind: true, name: true } },
-      secondaryPaymentForm: { select: { kind: true, name: true } },
+      paymentForm: { select: { id: true, kind: true, name: true } },
+      secondaryPaymentForm: { select: { id: true, kind: true, name: true } },
     } as const;
 
-    const [dayOrders, monthOrders] = await Promise.all([
+    const [dayOrders, monthOrders, paymentForms] = await Promise.all([
       prisma.salesOrder.findMany({
         where: { status: 'CONFIRMED', orderDate: dayDate, cashSessionId: { not: null } },
         select: orderSelect,
@@ -207,11 +200,17 @@ export class CommercialService {
         },
         select: orderSelect,
       }),
+      prisma.paymentForm.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, name: true, kind: true, sortOrder: true },
+      }),
     ]);
 
+    const forms = orderDashboardForms(paymentForms);
     return {
-      day: aggregateSalesStats(dayOrders),
-      month: aggregateSalesStats(monthOrders),
+      day: aggregateSalesStats(dayOrders, forms),
+      month: aggregateSalesStats(monthOrders, forms),
     };
   }
 

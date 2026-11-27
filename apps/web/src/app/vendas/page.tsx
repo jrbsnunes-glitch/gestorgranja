@@ -62,17 +62,17 @@ type OpenSessionListItem = {
   user: { name: string; username: string };
 };
 
+type SalesPaymentFormStat = {
+  id: string;
+  name: string;
+  kind: string;
+  amount: number;
+};
+
 type SalesPeriodStats = {
   count: number;
   totalAmount: number;
-  dinheiro: number;
-  pix: number;
-  credito: number;
-  debito: number;
-  boleto: number;
-  transferencia: number;
-  requisicao: number;
-  outros: number;
+  forms?: SalesPaymentFormStat[];
 };
 
 type DeskFinance = {
@@ -84,32 +84,42 @@ function dueWithinDays(throughWindow: number, overdue: number) {
   return Math.max(0, Math.round((throughWindow - overdue) * 100) / 100);
 }
 
+function isLaterPaymentKind(kind: string) {
+  const normalized = kind.toUpperCase();
+  return normalized === 'BOLETO' || normalized === 'REQUISICAO';
+}
+
 function PaymentBreakdown({ stats, light }: { stats: SalesPeriodStats; light?: boolean }) {
   const laterNote = 'Recebimento posterior';
-  const rows = [
-    { label: 'Dinheiro', value: stats.dinheiro ?? 0, later: false, always: true },
-    { label: 'Pix', value: stats.pix ?? 0, later: false, always: true },
-    { label: 'Cartão de crédito', value: stats.credito ?? 0, later: true, always: true },
-    { label: 'Débito', value: stats.debito ?? 0, later: false, always: true },
-    { label: 'Boleto', value: stats.boleto ?? 0, later: true, always: true },
-    { label: 'Transferência', value: stats.transferencia ?? 0, later: false, always: false },
-    { label: 'Requisição', value: stats.requisicao ?? 0, later: true, always: false },
-    { label: 'Outros', value: stats.outros ?? 0, later: false, always: false },
-  ].filter((row) => row.always || row.value > 0);
+  const rows = (stats.forms ?? []).map((form) => ({
+    id: form.id,
+    label: form.name,
+    value: form.amount ?? 0,
+    later: isLaterPaymentKind(form.kind),
+  }));
   const sumOf = (later: boolean) =>
     Math.round(rows.filter((row) => row.later === later).reduce((sum, row) => sum + row.value, 0) * 100) / 100;
   const onSpot = sumOf(false);
   const later = sumOf(true);
+  const onSpotNames = rows.filter((row) => !row.later).map((row) => row.label).join(', ');
+  const laterNames = rows.filter((row) => row.later).map((row) => row.label).join(', ');
   const label = light ? 'text-emerald-100' : 'text-sky-800';
   const amount = light ? 'text-white' : 'text-sky-950';
   const chip = light ? 'bg-emerald-900/40' : 'bg-white/80';
   const note = light ? 'text-emerald-200' : 'text-amber-800';
   const subChip = light ? 'border-emerald-600/50 bg-emerald-900/30' : 'border-sky-200 bg-white';
+  if (rows.length === 0) {
+    return (
+      <p className={`mt-3 text-sm ${label}`}>
+        Nenhuma forma Pix, Requisição ou Boleto ativa em Formas de pagamento.
+      </p>
+    );
+  }
   return (
     <div className="mt-4 space-y-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {rows.map((row) => (
-          <div key={row.label} className={`rounded-lg px-3 py-2 ${chip}`}>
+          <div key={row.id} className={`rounded-lg px-3 py-2 ${chip}`}>
             <p className={`text-[11px] font-semibold uppercase tracking-wide ${label}`}>{row.label}</p>
             <p className={`text-base font-bold tabular-nums ${amount}`}>{formatBrl(row.value)}</p>
             {row.later ? <p className={`mt-0.5 text-[11px] leading-tight ${note}`}>{laterNote}</p> : null}
@@ -120,12 +130,12 @@ function PaymentBreakdown({ stats, light }: { stats: SalesPeriodStats; light?: b
         <div className={`rounded-lg border px-3 py-2 ${subChip}`}>
           <p className={`text-[11px] font-semibold uppercase tracking-wide ${label}`}>No ato</p>
           <p className={`text-lg font-bold tabular-nums ${amount}`}>{formatBrl(onSpot)}</p>
-          <p className={`text-[11px] ${label}`}>Dinheiro, Pix, débito e transferência</p>
+          {onSpotNames ? <p className={`text-[11px] ${label}`}>{onSpotNames}</p> : null}
         </div>
         <div className={`rounded-lg border px-3 py-2 ${subChip}`}>
           <p className={`text-[11px] font-semibold uppercase tracking-wide ${label}`}>Recebido depois</p>
           <p className={`text-lg font-bold tabular-nums ${amount}`}>{formatBrl(later)}</p>
-          <p className={`text-[11px] ${label}`}>Crédito, boleto e requisição</p>
+          {laterNames ? <p className={`text-[11px] ${label}`}>{laterNames}</p> : null}
         </div>
       </div>
     </div>
@@ -439,8 +449,8 @@ export default function VendasPage() {
             {formatBrl(salesStats?.day.totalAmount ?? 0)}
           </p>
           <p className="mt-1 max-w-3xl text-sm text-sky-900">
-            {salesStats?.day.count ?? 0} pedido(s) confirmado(s) hoje. Este total é a venda do dia, mesmo quando
-            o dinheiro ainda não entrou no caixa — crédito e boleto ficam para receber depois.
+            {salesStats?.day.count ?? 0} pedido(s) confirmado(s) hoje. O detalhe abaixo segue as formas ativas do
+            cadastro, na ordem Pix, Requisição e Boleto. Requisição e boleto ficam para receber depois.
           </p>
           {salesStats ? <PaymentBreakdown stats={salesStats.day} /> : null}
         </article>
